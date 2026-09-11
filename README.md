@@ -17,7 +17,7 @@
 - 课程维护
 - 选课与成绩维护
 - 学生全局模糊搜索与结构化字段过滤
-- 筛选结果直接输出为 CSV
+- 筛选结果支持 table / CSV 输出
 - 班级人数、主元素分布、课程成绩统计
 - 学生 CSV 导入与导出
 - CLI / TUI / Basic UI 三种终端交互方式
@@ -100,21 +100,16 @@ xy stu ls --element 风 --element 雷 --status 在读
 
 表示“主元素包含风或雷，并且状态包含在读”。
 
-筛选结果默认以终端表格显示。指定 `-o / --output` 时会直接写入 CSV 文件：
+输出格式和输出位置彼此独立。`--format` 指定表示格式，默认使用适合命令行阅读的 `table`；`-o / --output` 指定输出文件，省略时写到 stdout：
 
 ```bash
-xy stu ls --major 元素 -o students.csv
-xy stu ls --major 元素 --year 2026 --status 在读 -o element_2026.csv
+xy stu ls --major 元素
+xy stu ls --major 元素 --format csv
+xy stu ls --major 元素 -o students.txt
+xy stu ls --major 元素 --format csv -o students.csv
 ```
 
-需要把 CSV 输出到 stdout 时使用 `--csv`：
-
-```bash
-xy stu ls --major 元素 --csv
-xy stu ls --major 元素 --csv > students.csv
-```
-
-文件输出使用 UTF-8 with BOM，并沿用 `xy data export` 的学生字段格式，因此可以继续交给 `xy data import` 使用。
+`--format csv` 沿用 `xy data export` 的学生字段格式，因此可以继续交给 `xy data import` 使用。CSV 文件输出使用 UTF-8 with BOM；table 文件使用 UTF-8。
 
 不带完整参数执行 `xy stu add`、`xy course add`、`xy grade add` 等命令时，会进入逐项输入模式。
 
