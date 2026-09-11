@@ -51,7 +51,7 @@ def _read_key_posix() -> str:
     fd = sys.stdin.fileno()
     previous = termios.tcgetattr(fd)
     try:
-        tty.setraw(fd)
+        tty.setcbreak(fd)
         char = sys.stdin.read(1)
         if char == "\x1b":
             sequence = ""
