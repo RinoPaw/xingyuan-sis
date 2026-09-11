@@ -212,7 +212,11 @@ def _run_menu(argv: Sequence[str], *, basic: bool) -> int:
     if basic:
         from .basic_ui import run
     else:
-        from .menu import run
+        from . import menu
+        from .terminal_theme import install
+
+        install(menu)
+        run = menu.run
 
     run(db_path)
     return 0
