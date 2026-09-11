@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import math
 import os
 from pathlib import Path
+import random
 import re
 import select
 import shutil
@@ -506,46 +507,97 @@ def _home_frame(
     return _starlight(ScreenFrame([_clip_cells(line, width) for line in [*top, *body, footer]], regions + controls), width, angle)
 
 
+@dataclass
+class _StarGlint:
+    x: int
+    row: int
+    born: float
+    lifetime: float
+    pulse: float
+
+
+_STAR_RNG = random.Random()
+_STAR_GLINTS: list[_StarGlint] = []
+_STAR_LAST_PHASE: float | None = None
+
+
+def _starlight_positions(frame: ScreenFrame, width: int) -> list[tuple[int, int]]:
+    """Return safe blank cells where a glint may be drawn."""
+    positions: list[tuple[int, int]] = []
+    for row in range(3, len(frame.lines) - 1):
+        plain = _ANSI_RE.sub("", frame.lines[row])
+        cell = 0
+        run_start: int | None = None
+        for char in plain + "x":
+            if char == " " and run_start is None:
+                run_start = cell
+            elif char != " " and run_start is not None:
+                start = run_start + 3
+                stop = min(cell - 3, width)
+                for x in range(start, stop):
+                    if _hit_action(MouseClick(x + 1, row + 1), frame.regions) is None:
+                        positions.append((row, x))
+                run_start = None
+            cell += _cell_width(char)
+    return positions
+
 
 def _starlight(frame: ScreenFrame, width: int, phase: float) -> ScreenFrame:
-    """Sparse glints in empty space, with navigation and text kept clear."""
-    for row in range(3, len(frame.lines) - 1):
+    """Random, short-lived glints that fade in and out across safe empty space."""
+    global _STAR_LAST_PHASE
+
+    allowed = _starlight_positions(frame, width)
+    allowed_set = set(allowed)
+
+    # Tests and previews may render older phases out of order. Treat a
+    # backwards clock as a fresh sky instead of keeping future stars alive.
+    if _STAR_LAST_PHASE is not None and phase < _STAR_LAST_PHASE:
+        _STAR_GLINTS.clear()
+    _STAR_LAST_PHASE = phase
+
+    _STAR_GLINTS[:] = [
+        star for star in _STAR_GLINTS
+        if (star.row, star.x) in allowed_set and phase < star.born + star.lifetime
+    ]
+
+    desired = min(14, max(2, len(allowed) // 80)) if allowed else 0
+    attempts = 0
+    while len(_STAR_GLINTS) < desired and allowed and attempts < desired * 24:
+        attempts += 1
+        row, x = _STAR_RNG.choice(allowed)
+        if any(abs(row - star.row) <= 1 and abs(x - star.x) < 7 for star in _STAR_GLINTS):
+            continue
+        lifetime = _STAR_RNG.uniform(1.8, 4.5)
+        _STAR_GLINTS.append(_StarGlint(
+            x=x,
+            row=row,
+            born=phase - _STAR_RNG.uniform(0.0, min(0.55, lifetime * 0.25)),
+            lifetime=lifetime,
+            pulse=_STAR_RNG.uniform(0.0, math.tau),
+        ))
+
+    by_row: dict[int, dict[int, str]] = {}
+    for star in _STAR_GLINTS:
+        progress = min(1.0, max(0.0, (phase - star.born) / star.lifetime))
+        envelope = math.sin(math.pi * progress) ** 0.7
+        twinkle = 0.72 + 0.28 * (math.sin(phase * 3.2 + star.pulse) + 1.0) / 2.0
+        glow = min(1.0, max(0.0, envelope * twinkle))
+        glyph = "✦" if glow > 0.82 else "·"
+        color = 238 + round(glow * 9)
+        by_row.setdefault(star.row, {})[star.x] = _ansi(glyph, f"\x1b[38;5;{color}m")
+
+    for row, targets in by_row.items():
         original = frame.lines[row]
-        plain = _ANSI_RE.sub("", original)
-        targets = {}
-        for sector in range(max(1, width // 16)):
-            seed = row * 173 + sector * 997
-            if seed % 5 != 0:
+        parts: list[str] = []
+        cell = 0
+        for token in re.split(f"({_ANSI_RE.pattern})", original):
+            if _ANSI_RE.fullmatch(token):
+                parts.append(token)
                 continue
-            x = sector * 16 + 3 + seed % 9
-            if x >= width or _hit_action(MouseClick(x + 1, row + 1), frame.regions):
-                continue
-            # Require a generous blank run; a glint must never split a label.
-            cell = 0
-            run_start = None
-            allowed = False
-            for char in plain + "x":
-                if char == " " and run_start is None:
-                    run_start = cell
-                if char != " " and run_start is not None:
-                    if run_start + 3 <= x < cell - 3:
-                        allowed = True
-                    run_start = None
+            for char in token:
+                parts.append(targets.get(cell, char) if char == " " else char)
                 cell += _cell_width(char)
-            if allowed:
-                glow = (math.sin(phase * 1.4 + seed) + 1) / 2
-                glyph = "✦" if glow > 0.94 else "·"
-                targets[x] = _ansi(glyph, f"\x1b[38;5;{238 + round(glow * 9)}m")
-        if targets:
-            parts, cell = [], 0
-            for token in re.split(f"({_ANSI_RE.pattern})", original):
-                if _ANSI_RE.fullmatch(token):
-                    parts.append(token)
-                    continue
-                for char in token:
-                    parts.append(targets.get(cell, char) if char == " " else char)
-                    cell += _cell_width(char)
-            frame.lines[row] = "".join(parts)
+        frame.lines[row] = "".join(parts)
     return frame
 
 
