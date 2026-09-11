@@ -62,15 +62,14 @@ def _student_list_parser() -> argparse.ArgumentParser:
     parser.add_argument("--element", dest="elements", action="append", metavar="元素", help="主元素包含，可重复")
     parser.add_argument("--affinity", dest="affinities", action="append", metavar="等级", help="亲和等级包含，可重复")
     parser.add_argument(
-        "--format",
-        choices=("table", "csv"),
-        default="table",
-        help="输出格式，默认 table",
+        "--csv",
+        action="store_true",
+        help="以 CSV 输出；未指定 -o 时写到 stdout",
     )
     parser.add_argument(
         "-o", "--output",
         type=Path,
-        help="CSV 输出文件；省略时输出到 stdout",
+        help="将筛选结果直接写入 CSV 文件",
     )
     return parser
 
@@ -113,8 +112,6 @@ def _write_student_csv(rows: Sequence[StudentListRecord], output: Path | None) -
 def _run_student_list(argv: Sequence[str]) -> int:
     parser = _student_list_parser()
     args = parser.parse_args(argv)
-    if args.output is not None and args.format != "csv":
-        parser.error("-o/--output 仅用于 --format csv")
 
     initialize_database(args.db)
     service = XingyuanService(args.db)
@@ -134,7 +131,7 @@ def _run_student_list(argv: Sequence[str]) -> int:
         affinities=args.affinities,
     )
 
-    if args.format == "csv":
+    if args.csv or args.output is not None:
         _write_student_csv(rows, args.output)
         return 0
 
