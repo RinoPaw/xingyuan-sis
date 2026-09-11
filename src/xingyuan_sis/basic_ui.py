@@ -28,7 +28,10 @@ def _command(db_path: Path | str | None, argv: list[str]) -> None:
     from .cli import main as cli_main
 
     _clear()
-    code = cli_main([*_db_args(db_path), *argv])
+    try:
+        code = cli_main([*_db_args(db_path), *argv])
+    except SystemExit as error:
+        code = int(error.code or 0)
     if code:
         print(f"\n命令返回状态 {code}")
     _pause()
@@ -85,15 +88,25 @@ def _academic_entity(db_path: Path | str | None, entity: str, title: str) -> Non
         code = _read("编号")
         if not code:
             return
-        if entity == "college":
-            name = _read("新名称（留空不改）")
-            argv = ["acad", entity, "edit", code]
-            if name:
-                argv += ["--name", name]
-            _command(db_path, argv)
-            return
-        print("基础界面中复杂关联字段建议使用 CLI 或 TUI 编辑。")
-        _pause()
+        argv = ["acad", entity, "edit", code]
+        new_code = _read("新编号（留空不改）")
+        name = _read("新名称（留空不改）")
+        if new_code:
+            argv += ["--new-code", new_code]
+        if name:
+            argv += ["--name", name]
+        if entity == "major":
+            college = _read("新学院编号（留空不改）")
+            if college:
+                argv += ["--college", college]
+        elif entity == "class":
+            major = _read("新专业编号（留空不改）")
+            year = _read("新入学年份（留空不改）")
+            if major:
+                argv += ["--major", major]
+            if year:
+                argv += ["--year", year]
+        _command(db_path, argv)
 
     def remove() -> None:
         code = _read("编号")
@@ -132,8 +145,23 @@ def _courses(db_path: Path | str | None) -> None:
         code = _read("课程编号")
         if not code:
             return
-        print("基础界面保留浏览与新建；复杂编辑建议使用 CLI 或 TUI。")
-        _pause()
+        argv = ["course", "edit", code]
+        new_code = _read("新课程编号（留空不改）")
+        name = _read("新名称（留空不改）")
+        department = _read("新学院编号（留空不改）")
+        credits = _read("新学分（留空不改）")
+        hours = _read("新课时（留空不改）")
+        if new_code:
+            argv += ["--new-code", new_code]
+        if name:
+            argv += ["--name", name]
+        if department:
+            argv += ["--department", department]
+        if credits:
+            argv += ["--credits", credits]
+        if hours:
+            argv += ["--hours", hours]
+        _command(db_path, argv)
 
     def remove() -> None:
         code = _read("课程编号")
@@ -159,7 +187,7 @@ def _grades(db_path: Path | str | None) -> None:
         semester = _read("学期")
         if not all((student, course, semester)):
             return
-        score = _read("新成绩（输入 - 清空）")
+        score = _read("新成绩（输入 - 清空，留空保持）")
         argv = ["grade", "edit", student, course, semester]
         if score == "-":
             argv.append("--clear-score")
