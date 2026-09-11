@@ -3,7 +3,8 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, ContentSwitcher, Footer, Header, Static
 
 from .repository import Repository
-from .views import AcademicsPage, CoursePage, GradePage, ReportsPage, StudentPage
+from .reports_view import ReportsPage
+from .views import AcademicsPage, CoursePage, GradePage, StudentPage
 
 
 class XingyuanSIS(App[None]):
