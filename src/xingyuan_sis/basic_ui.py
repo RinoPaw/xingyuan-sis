@@ -2,54 +2,54 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import sys
 from typing import Callable
+
+from .terminal_ui import read_number, run_action, run_command, search_grades, search_students
 
 
 def _clear() -> None:
-    command = "cls" if os.name == "nt" else "clear"
-    result = os.system(command)
-    if result != 0:
-        print("\n" * 40)
-
-
-def _pause() -> None:
-    input("\n按 Enter 继续…")
+    if os.name == "nt":
+        os.system("cls")
+    elif sys.stdout.isatty():
+        print("\x1b[2J\x1b[H", end="", flush=True)
 
 
 def _read(label: str) -> str:
     return input(f"{label}: ").strip()
 
 
-def _db_args(db_path: Path | str | None) -> list[str]:
-    return [] if db_path is None else ["--db", str(db_path)]
-
-
 def _command(db_path: Path | str | None, argv: list[str]) -> None:
-    from .cli import main as cli_main
-
-    _clear()
-    try:
-        code = cli_main([*_db_args(db_path), *argv])
-    except SystemExit as error:
-        code = int(error.code or 0)
-    if code:
-        print(f"\n命令返回状态 {code}")
-    _pause()
+    run_command(db_path, argv, _clear)
 
 
-def _menu(title: str, items: list[tuple[str, str, Callable[[], None]]]) -> None:
+def _menu(
+    title: str,
+    items: list[tuple[str, str, Callable[[], None]]],
+    *,
+    back_label: str = "返回",
+) -> None:
+    notice = ""
     while True:
         _clear()
-        print(f"星原 SIS / {title}\n")
+        print(f"✦ 星原 / 教务台\n首页 / {title}\n")
         for key, label, _ in items:
             print(f"{key}. {label}")
-        print("0. 返回")
-        choice = input("\n> ").strip()
-        if choice == "0":
+        print(f"0. {back_label}")
+        if notice:
+            print(f"\n{notice}")
+        try:
+            choice = input(f"\n输入编号 · q {back_label} > ").strip().lower()
+        except KeyboardInterrupt:
+            return
+        if choice in {"0", "q"}:
             return
         action = next((action for key, _, action in items if key == choice), None)
         if action is not None:
-            action()
+            notice = ""
+            run_action(action, _clear)
+        else:
+            notice = "没有这个选项，请输入菜单中的编号。"
 
 
 def _students(db_path: Path | str | None) -> None:
@@ -76,6 +76,7 @@ def _students(db_path: Path | str | None) -> None:
             ("3", "新建学生", lambda: _command(db_path, ["stu", "add"])),
             ("4", "编辑学生", edit),
             ("5", "删除学生", remove),
+            ("6", "搜索学生", lambda: search_students(lambda argv: _command(db_path, argv))),
         ],
     )
 
@@ -101,7 +102,7 @@ def _academic_entity(db_path: Path | str | None, entity: str, title: str) -> Non
                 argv += ["--college", college]
         elif entity == "class":
             major = _read("新专业编号（留空不改）")
-            year = _read("新入学年份（留空不改）")
+            year = read_number("新入学年份（留空不改）", integer=True, minimum=1900)
             if major:
                 argv += ["--major", major]
             if year:
@@ -149,8 +150,8 @@ def _courses(db_path: Path | str | None) -> None:
         new_code = _read("新课程编号（留空不改）")
         name = _read("新名称（留空不改）")
         department = _read("新学院编号（留空不改）")
-        credits = _read("新学分（留空不改）")
-        hours = _read("新课时（留空不改）")
+        credits = read_number("新学分（留空不改）")
+        hours = read_number("新课时（留空不改）", integer=True)
         if new_code:
             argv += ["--new-code", new_code]
         if name:
@@ -187,7 +188,7 @@ def _grades(db_path: Path | str | None) -> None:
         semester = _read("学期")
         if not all((student, course, semester)):
             return
-        score = _read("新成绩（输入 - 清空，留空保持）")
+        score = read_number("新成绩（输入 - 清空，留空保持）", maximum=100, clearable=True)
         argv = ["grade", "edit", student, course, semester]
         if score == "-":
             argv.append("--clear-score")
@@ -209,6 +210,7 @@ def _grades(db_path: Path | str | None) -> None:
             ("2", "添加选课 / 成绩", lambda: _command(db_path, ["grade", "add"])),
             ("3", "编辑成绩", edit),
             ("4", "删除选课", remove),
+            ("5", "搜索成绩", lambda: search_grades(lambda argv: _command(db_path, argv))),
         ],
     )
 
@@ -228,30 +230,19 @@ def _data(db_path: Path | str | None) -> None:
             ("1", "统计摘要", lambda: _command(db_path, ["data", "stats"])),
             ("2", "导出学生 CSV", export),
             ("3", "导入学生 CSV", import_),
+            ("4", "写入演示数据", lambda: _command(db_path, ["data", "seed"])),
         ],
     )
 
 
 def run(db_path: Path | str | None = None) -> None:
-    while True:
-        _clear()
-        print("星原 SIS\n")
-        print("1. 学生")
-        print("2. 教务")
-        print("3. 课程")
-        print("4. 成绩")
-        print("5. 数据")
-        print("0. 退出")
-        choice = input("\n> ").strip()
-        if choice == "0":
-            return
-        actions = {
-            "1": lambda: _students(db_path),
-            "2": lambda: _academics(db_path),
-            "3": lambda: _courses(db_path),
-            "4": lambda: _grades(db_path),
-            "5": lambda: _data(db_path),
-        }
-        action = actions.get(choice)
-        if action is not None:
-            action()
+    try:
+        _menu("工作区", [
+            ("1", "学生", lambda: _students(db_path)),
+            ("2", "教务", lambda: _academics(db_path)),
+            ("3", "课程", lambda: _courses(db_path)),
+            ("4", "成绩", lambda: _grades(db_path)),
+            ("5", "数据", lambda: _data(db_path)),
+        ], back_label="退出")
+    except EOFError:
+        print("\n已退出星原 SIS。")

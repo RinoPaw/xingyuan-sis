@@ -4,6 +4,7 @@ import argparse
 from contextlib import redirect_stdout
 import csv
 from pathlib import Path
+import sqlite3
 import sys
 from typing import Sequence
 
@@ -219,16 +220,26 @@ def _run_menu(argv: Sequence[str], *, basic: bool) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    if _student_list_requested(args):
-        return _run_student_list(args)
+    try:
+        if _student_list_requested(args):
+            return _run_student_list(args)
 
-    tail = _menu_tail(args)
-    if not tail:
-        return _run_menu(args, basic=False)
-    if tail == ["--basic"]:
-        return _run_menu(args, basic=True)
+        tail = _menu_tail(args)
+        if not tail:
+            return _run_menu(args, basic=False)
+        if tail == ["--basic"]:
+            return _run_menu(args, basic=True)
 
-    return cli_main(args)
+        return cli_main(args)
+    except KeyboardInterrupt:
+        print("\n已取消。", file=sys.stderr)
+        return 130
+    except EOFError:
+        print("\n输入已结束，操作已取消。", file=sys.stderr)
+        return 1
+    except (ValueError, sqlite3.Error, OSError) as error:
+        print(f"操作失败：{error}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

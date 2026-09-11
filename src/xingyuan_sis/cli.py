@@ -746,10 +746,9 @@ def _run_basic(db_path: Path | str | None) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    initialize_database(args.db)
-    service = XingyuanService(args.db)
-
     try:
+        initialize_database(args.db)
+        service = XingyuanService(args.db)
         if args.group is None:
             if args.basic:
                 return _run_basic(args.db)
@@ -771,8 +770,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("\n已取消。", file=sys.stderr)
         return 130
+    except EOFError:
+        print("\n输入已结束，操作已取消。", file=sys.stderr)
+        return 1
     except (ValueError, sqlite3.Error, OSError) as error:
-        print(f"error: {error}", file=sys.stderr)
+        print(f"操作失败：{error}", file=sys.stderr)
         return 1
 
     parser.print_help()

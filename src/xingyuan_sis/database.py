@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
 import sqlite3
+from typing import Iterator
 
 DATA_DIR = Path.cwd() / "data"
 DB_PATH = DATA_DIR / "xingyuan.db"
@@ -86,13 +88,19 @@ CREATE INDEX IF NOT EXISTS idx_enrollments_course_id ON enrollments(course_id);
 """
 
 
-def connect(db_path: Path | str | None = None) -> sqlite3.Connection:
+@contextmanager
+def connect(db_path: Path | str | None = None) -> Iterator[sqlite3.Connection]:
+    """Commit or roll back a transaction, then always close its connection."""
     path = Path(db_path) if db_path is not None else DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+    try:
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+        with connection:
+            yield connection
+    finally:
+        connection.close()
 
 
 def initialize_database(db_path: Path | str | None = None) -> None:
