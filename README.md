@@ -16,7 +16,7 @@
 - 学院、专业、班级维护
 - 课程维护
 - 选课与成绩维护
-- 学号、姓名、班级、专业、元素亲和等学生信息搜索
+- 学生全局模糊搜索与结构化字段过滤
 - 班级人数、主元素分布、课程成绩统计
 - 学生 CSV 导入与导出
 - CLI / TUI / Basic UI 三种终端交互方式
@@ -77,6 +77,28 @@ xy data export data/students.csv
 xy data import data/students.csv
 ```
 
+`xy stu ls` 保留 `-s / --search` 作为全字段模糊搜索，同时支持结构化过滤：
+
+```bash
+xy stu ls --branch 石虎
+xy stu ls --class ELS2601
+xy stu ls --major ELS --year 2026 --status 在读
+xy stu ls --college SCI --element 风
+xy stu ls --affinity A
+xy stu ls --name 林
+xy stu ls --major ELS -s 岚
+```
+
+可用字段包括 `--no`、`--name`、`--family`、`--branch`、`--class`、`--major`、`--college`（也可写 `--department`）、`--year`、`--status`、`--element` 和 `--affinity`。
+
+不同字段之间按 AND 组合；同一个字段可以重复，此时按 OR 组合。例如：
+
+```bash
+xy stu ls --element 风 --element 雷 --status 在读
+```
+
+表示“主元素为风或雷，并且状态为在读”。`--name` 使用包含匹配，其余结构化字段使用精确匹配；班级、专业和学院使用业务编号。
+
 不带完整参数执行 `xy stu add`、`xy course add`、`xy grade add` 等命令时，会进入逐项输入模式。
 
 需要临时使用其他数据库时：
@@ -111,7 +133,7 @@ TUI ───────┼── XingyuanService ── Repository ── SQLi
 Basic UI ──┘
 ```
 
-TUI 和 Basic UI 都不会通过子进程执行数据库操作。业务编号解析和跨界面共享的操作集中在 `XingyuanService`；Repository 只负责 SQLite 数据访问。
+TUI 和 Basic UI 都不会通过子进程执行数据库操作。业务编号解析和跨界面共享的操作集中在 `XingyuanService`；Repository 只负责 SQLite 数据访问。学生结构化查询由独立的 `student_filters` 查询层处理，便于 CLI 和未来的 TUI 筛选器共享。
 
 ## 测试
 
@@ -125,7 +147,9 @@ python -m unittest discover -s tests
 xingyuan-sis/
 ├── src/xingyuan_sis/
 │   ├── __main__.py       # python -m 入口
-│   ├── cli.py            # xy 命令与界面分流
+│   ├── entry.py          # 统一命令入口与结构化查询分流
+│   ├── cli.py            # CLI 命令实现与界面分流
+│   ├── student_filters.py# 学生结构化过滤
 │   ├── basic_ui.py       # while True + 清屏的备用界面
 │   ├── app.py            # Textual 主界面
 │   ├── workspace.py      # 总览、学生与学生详情
