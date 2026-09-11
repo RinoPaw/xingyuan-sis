@@ -12,6 +12,8 @@ class StudentListRecord:
     name: str
     family: str
     branch: str
+    gender: str | None
+    birth_date: str | None
     enrollment_year: int
     class_code: str | None
     class_name: str | None
@@ -22,6 +24,9 @@ class StudentListRecord:
     status: str
     primary_element: str | None
     primary_affinity: str | None
+    contact: str | None
+    dormitory: str | None
+    notes: str | None
     search_text: str
 
 
@@ -43,12 +48,18 @@ def _contains(value: object | None, choices: Iterable[object] | None) -> bool:
     return any(_norm(choice) in actual for choice in choices)
 
 
-def _contains_any(values: Iterable[object | None], choices: Iterable[object] | None) -> bool:
+def _contains_pair(
+    first: object | None,
+    second: object | None,
+    choices: Iterable[object] | None,
+) -> bool:
     if not choices:
         return True
-    actuals = tuple(_norm(value) for value in values)
-    needles = tuple(_norm(choice) for choice in choices)
-    return any(needle in actual for needle in needles for actual in actuals)
+    values = (_norm(first), _norm(second))
+    return any(
+        any(_norm(choice) in value for value in values)
+        for choice in choices
+    )
 
 
 def query_students(
@@ -113,11 +124,11 @@ def query_students(
             continue
         if not _contains(row["branch"], branches):
             continue
-        if not _contains_any((class_code, class_name), class_codes):
+        if not _contains_pair(class_code, class_name, class_codes):
             continue
-        if not _contains_any((major_code, major_name), major_codes):
+        if not _contains_pair(major_code, major_name, major_codes):
             continue
-        if not _contains_any((college_code, college_name), college_codes):
+        if not _contains_pair(college_code, college_name, college_codes):
             continue
         if not _exact(row["enrollment_year"], years):
             continue
@@ -134,6 +145,8 @@ def query_students(
                 name=str(row["name"]),
                 family=str(row["family"]),
                 branch=str(row["branch"]),
+                gender=None if row["gender"] is None else str(row["gender"]),
+                birth_date=None if row["birth_date"] is None else str(row["birth_date"]),
                 enrollment_year=int(row["enrollment_year"]),
                 class_code=class_code,
                 class_name=class_name,
@@ -144,6 +157,9 @@ def query_students(
                 status=str(row["status"]),
                 primary_element=None if row["primary_element"] is None else str(row["primary_element"]),
                 primary_affinity=None if row["primary_affinity"] is None else str(row["primary_affinity"]),
+                contact=None if row["contact"] is None else str(row["contact"]),
+                dormitory=None if row["dormitory"] is None else str(row["dormitory"]),
+                notes=None if row["notes"] is None else str(row["notes"]),
                 search_text=search_text,
             )
         )
