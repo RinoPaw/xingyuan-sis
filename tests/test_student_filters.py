@@ -101,7 +101,7 @@ class StudentFilterCliTests(unittest.TestCase):
         self.assertNotIn("20250001", output)
 
     def test_filtered_csv_can_be_written_to_stdout(self) -> None:
-        output = self.run_xy("stu", "ls", "--major", "元素", "--format", "csv")
+        output = self.run_xy("stu", "ls", "--major", "元素", "--csv")
         reader = csv.DictReader(StringIO(output))
         self.assertEqual(reader.fieldnames, STUDENT_FIELDS)
         rows = list(reader)
@@ -114,12 +114,11 @@ class StudentFilterCliTests(unittest.TestCase):
             {"ELS2601", "ELE2501", "ELS2501"},
         )
 
-    def test_filtered_csv_can_be_written_to_file(self) -> None:
+    def test_output_option_implies_csv(self) -> None:
         target = Path(self.temp_dir.name) / "exports" / "element_students.csv"
         output = self.run_xy(
             "stu", "ls",
             "--major", "元素",
-            "--format", "csv",
             "-o", str(target),
         )
         self.assertEqual(output, "")
