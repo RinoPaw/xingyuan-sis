@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import redirect_stdout
 import csv
 from pathlib import Path
 import sys
@@ -62,14 +63,15 @@ def _student_list_parser() -> argparse.ArgumentParser:
     parser.add_argument("--element", dest="elements", action="append", metavar="元素", help="主元素包含，可重复")
     parser.add_argument("--affinity", dest="affinities", action="append", metavar="等级", help="亲和等级包含，可重复")
     parser.add_argument(
-        "--csv",
-        action="store_true",
-        help="以 CSV 输出；未指定 -o 时写到 stdout",
+        "--format",
+        choices=("table", "csv"),
+        default="table",
+        help="输出格式，默认 table",
     )
     parser.add_argument(
         "-o", "--output",
         type=Path,
-        help="将筛选结果直接写入 CSV 文件",
+        help="输出文件；省略时写到 stdout",
     )
     return parser
 
@@ -109,6 +111,35 @@ def _write_student_csv(rows: Sequence[StudentListRecord], output: Path | None) -
             writer.writerow(_csv_row(row))
 
 
+def _print_student_table(rows: Sequence[StudentListRecord]) -> None:
+    print_table(
+        ("学号", "姓名", "支系", "班级", "专业", "主元素", "状态"),
+        (
+            (
+                row.student_no,
+                row.name,
+                row.branch,
+                row.class_name,
+                row.major_name,
+                row.primary_element,
+                row.status,
+            )
+            for row in rows
+        ),
+    )
+
+
+def _write_student_table(rows: Sequence[StudentListRecord], output: Path | None) -> None:
+    if output is None:
+        _print_student_table(rows)
+        return
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("w", encoding="utf-8", newline="") as file:
+        with redirect_stdout(file):
+            _print_student_table(rows)
+
+
 def _run_student_list(argv: Sequence[str]) -> int:
     parser = _student_list_parser()
     args = parser.parse_args(argv)
@@ -131,25 +162,10 @@ def _run_student_list(argv: Sequence[str]) -> int:
         affinities=args.affinities,
     )
 
-    if args.csv or args.output is not None:
+    if args.format == "csv":
         _write_student_csv(rows, args.output)
-        return 0
-
-    print_table(
-        ("学号", "姓名", "支系", "班级", "专业", "主元素", "状态"),
-        (
-            (
-                row.student_no,
-                row.name,
-                row.branch,
-                row.class_name,
-                row.major_name,
-                row.primary_element,
-                row.status,
-            )
-            for row in rows
-        ),
-    )
+    else:
+        _write_student_table(rows, args.output)
     return 0
 
 
