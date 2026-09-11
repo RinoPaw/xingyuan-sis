@@ -33,6 +33,39 @@ def _student_list_requested(argv: Sequence[str]) -> bool:
     )
 
 
+def _menu_requested(argv: Sequence[str]) -> bool:
+    tokens = list(argv)
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--db":
+            if index + 1 >= len(tokens):
+                return False
+            index += 2
+            continue
+        if token.startswith("--db="):
+            index += 1
+            continue
+        break
+    remaining = tokens[index:]
+    return not remaining or remaining == ["--basic"]
+
+
+def _menu_db(argv: Sequence[str]) -> Path | None:
+    tokens = list(argv)
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--db":
+            if index + 1 >= len(tokens):
+                return None
+            return Path(tokens[index + 1])
+        if token.startswith("--db="):
+            return Path(token.split("=", 1)[1])
+        index += 1
+    return None
+
+
 def _student_list_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="xy stu ls",
@@ -169,10 +202,24 @@ def _run_student_list(argv: Sequence[str]) -> int:
     return 0
 
 
+def _run_menu(argv: Sequence[str]) -> int:
+    db_path = _menu_db(argv)
+    initialize_database(db_path)
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        print("当前环境不是交互终端；请使用 xy <command>。", file=sys.stderr)
+        return 2
+    from .menu import run
+
+    run(db_path)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if _student_list_requested(args):
         return _run_student_list(args)
+    if _menu_requested(args):
+        return _run_menu(args)
     return cli_main(args)
 
 
