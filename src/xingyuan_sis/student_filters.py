@@ -43,6 +43,14 @@ def _contains(value: object | None, choices: Iterable[object] | None) -> bool:
     return any(_norm(choice) in actual for choice in choices)
 
 
+def _contains_any(values: Iterable[object | None], choices: Iterable[object] | None) -> bool:
+    if not choices:
+        return True
+    actuals = tuple(_norm(value) for value in values)
+    needles = tuple(_norm(choice) for choice in choices)
+    return any(needle in actual for needle in needles for actual in actuals)
+
+
 def query_students(
     service: XingyuanService,
     *,
@@ -101,23 +109,23 @@ def query_students(
             continue
         if not _contains(row["name"], names):
             continue
-        if not _exact(row["family"], families):
+        if not _contains(row["family"], families):
             continue
-        if not _exact(row["branch"], branches):
+        if not _contains(row["branch"], branches):
             continue
-        if not _exact(class_code, class_codes):
+        if not _contains_any((class_code, class_name), class_codes):
             continue
-        if not _exact(major_code, major_codes):
+        if not _contains_any((major_code, major_name), major_codes):
             continue
-        if not _exact(college_code, college_codes):
+        if not _contains_any((college_code, college_name), college_codes):
             continue
         if not _exact(row["enrollment_year"], years):
             continue
-        if not _exact(row["status"], statuses):
+        if not _contains(row["status"], statuses):
             continue
-        if not _exact(row["primary_element"], elements):
+        if not _contains(row["primary_element"], elements):
             continue
-        if not _exact(row["primary_affinity"], affinities):
+        if not _contains(row["primary_affinity"], affinities):
             continue
 
         result.append(
