@@ -7,7 +7,7 @@ name = "xingyuan-sis"
 version = "0.1.0"
 description = "Xingyuan University student information system"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = []
 
 [project.scripts]
