@@ -86,7 +86,7 @@ class StudentsPage(VerticalScroll):
             yield Button("+ 新建学生", id="student-new", classes="primary-action")
 
         yield Input(
-            placeholder="搜索学号、姓名、班级、专业或主元素…",
+            placeholder="搜索学号、姓名、支系、班级、专业或主元素…",
             id="student-search",
         )
         yield DataTable(id="students-table", cursor_type="row")
@@ -94,7 +94,7 @@ class StudentsPage(VerticalScroll):
 
     def on_mount(self) -> None:
         table = self.query_one("#students-table", DataTable)
-        table.add_columns("学号", "姓名", "班级", "专业", "主元素", "状态")
+        table.add_columns("学号", "姓名", "支系", "班级", "专业", "主元素", "状态")
         self.refresh_table()
 
     def refresh_table(self, keyword: str = "") -> None:
@@ -106,6 +106,7 @@ class StudentsPage(VerticalScroll):
             table.add_row(
                 _show(row["student_no"]),
                 _show(row["name"]),
+                _show(row["branch"]),
                 _show(row["class_name"]),
                 _show(row["major_name"]),
                 _show(row["primary_element"]),
