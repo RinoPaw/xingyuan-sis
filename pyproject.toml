@@ -13,8 +13,8 @@ dependencies = [
 ]
 
 [project.scripts]
-xy = "xingyuan_sis.cli:main"
-xingyuan-sis = "xingyuan_sis.cli:main"
+xy = "xingyuan_sis.entry:main"
+xingyuan-sis = "xingyuan_sis.entry:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
