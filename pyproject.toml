@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xingyuan-sis"
+version = "0.1.0"
+description = "Xingyuan University student information system"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "textual>=1.0",
+]
+
+[project.scripts]
+xingyuan-sis = "xingyuan_sis.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

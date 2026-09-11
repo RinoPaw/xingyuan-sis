@@ -1,0 +1,1 @@
+"""Xingyuan SIS package."""
