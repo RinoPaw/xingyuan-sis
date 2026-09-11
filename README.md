@@ -100,15 +100,21 @@ xy stu ls --element 风 --element 雷 --status 在读
 
 表示“主元素包含风或雷，并且状态包含在读”。
 
-筛选结果默认以终端表格显示，也可以直接输出 CSV：
+筛选结果默认以终端表格显示。指定 `-o / --output` 时会直接写入 CSV 文件：
 
 ```bash
-xy stu ls --major 元素 --format csv
-xy stu ls --major 元素 --format csv > students.csv
-xy stu ls --major 元素 --format csv -o students.csv
+xy stu ls --major 元素 -o students.csv
+xy stu ls --major 元素 --year 2026 --status 在读 -o element_2026.csv
 ```
 
-省略 `-o` 时，CSV 写到 stdout；指定 `-o / --output` 时直接写入文件。文件输出使用 UTF-8 with BOM，并沿用 `xy data export` 的学生字段格式，因此可以继续交给 `xy data import` 使用。
+需要把 CSV 输出到 stdout 时使用 `--csv`：
+
+```bash
+xy stu ls --major 元素 --csv
+xy stu ls --major 元素 --csv > students.csv
+```
+
+文件输出使用 UTF-8 with BOM，并沿用 `xy data export` 的学生字段格式，因此可以继续交给 `xy data import` 使用。
 
 不带完整参数执行 `xy stu add`、`xy course add`、`xy grade add` 等命令时，会进入逐项输入模式。
 
