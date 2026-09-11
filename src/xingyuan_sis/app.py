@@ -457,13 +457,15 @@ class XingyuanSIS(App[None]):
     def on_mount(self) -> None:
         self.query_one("#overview-heading", Static).update("星原 SIS")
         self.query_one("#overview-subheading", Static).update("星原大学学生信息系统")
-        self._apply_responsive_layout(self.size.width)
+        self._apply_responsive_layout(self.size.width, self.size.height)
 
     def on_resize(self, event: Resize) -> None:
-        self._apply_responsive_layout(event.size.width)
+        self._apply_responsive_layout(event.size.width, event.size.height)
 
-    def _apply_responsive_layout(self, width: int) -> None:
+    def _apply_responsive_layout(self, width: int, height: int) -> None:
         nav = self.query_one("#nav", Vertical)
+        nav_brand = self.query_one("#nav-brand", Static)
+        nav_items = list(self.query(".nav-item"))
         overview = self.query_one("#overview-page", OverviewPage)
         stats = self.query_one("#overview-stats", Horizontal)
         pages = (
@@ -474,30 +476,55 @@ class XingyuanSIS(App[None]):
             "#reports-page",
         )
 
+        # Width controls sidebar width and horizontal padding. Keep enough cells
+        # for two CJK characters even on narrow terminals.
         if width < 60:
-            nav.styles.width = 10
+            nav.styles.width = 12
+            nav.styles.padding = (1, 0)
+            nav_brand.styles.padding = (1, 1)
             overview.styles.padding = (1, 1)
             stats.styles.grid_size_columns = 1
             stats.styles.grid_size_rows = 4
             stats.styles.height = 27
-            for selector in pages:
-                self.query_one(selector).styles.padding = (1, 1)
+            page_padding = (1, 1)
+            item_padding = (0, 0)
         elif width < 96:
-            nav.styles.width = 12
+            nav.styles.width = 14
+            nav.styles.padding = (1, 0)
+            nav_brand.styles.padding = (1, 1)
             overview.styles.padding = (1, 2)
             stats.styles.grid_size_columns = 2
             stats.styles.grid_size_rows = 2
             stats.styles.height = 13
-            for selector in pages:
-                self.query_one(selector).styles.padding = (1, 2)
+            page_padding = (1, 2)
+            item_padding = (0, 1)
         else:
             nav.styles.width = 18
+            nav.styles.padding = 1
+            nav_brand.styles.padding = 1
             overview.styles.padding = (2, 4)
             stats.styles.grid_size_columns = 4
             stats.styles.grid_size_rows = 1
             stats.styles.height = 6
-            for selector in pages:
-                self.query_one(selector).styles.padding = (2, 3)
+            page_padding = (2, 3)
+            item_padding = (0, 1)
+
+        for selector in pages:
+            self.query_one(selector).styles.padding = page_padding
+
+        # Height controls the vertical rhythm of the nav. Each item gets a
+        # leading gap so a tall terminal breathes while a short terminal stays
+        # compact. Resize events recalculate this when the soft keyboard opens.
+        if height >= 54:
+            item_gap = 2
+        elif height >= 38:
+            item_gap = 1
+        else:
+            item_gap = 0
+
+        for button in nav_items:
+            button.styles.margin = (item_gap, 0, 0, 0)
+            button.styles.padding = item_padding
 
     def navigate_to(
         self,
