@@ -8,6 +8,7 @@ import unicodedata
 from typing import Any, Iterable, Sequence
 
 from .database import initialize_database
+from .seed_data import seed_demo
 from .service import XingyuanService
 
 
@@ -187,6 +188,12 @@ def build_parser() -> argparse.ArgumentParser:
     data = groups.add_parser("data", help="统计与数据交换")
     data_cmd = data.add_subparsers(dest="action", required=True)
     data_cmd.add_parser("stats", help="显示统计摘要")
+    data_seed = data_cmd.add_parser("seed", help="写入默认演示数据")
+    data_seed.add_argument(
+        "--reset",
+        action="store_true",
+        help="清空现有业务数据后重建演示数据",
+    )
     data_export = data_cmd.add_parser("export", help="导出学生 CSV")
     data_export.add_argument("path", type=Path)
     data_import = data_cmd.add_parser("import", help="导入学生 CSV")
@@ -676,6 +683,14 @@ def _run_data(service: XingyuanService, args: argparse.Namespace) -> int:
                 ("平均成绩", stats["average_score"]), ("最高", stats["max_score"]),
                 ("最低", stats["min_score"]),
             )
+        )
+        return 0
+    if args.action == "seed":
+        result = seed_demo(service.db_path, reset=args.reset)
+        print(
+            "✓ 演示数据已写入："
+            f"学院 {result.departments}，专业 {result.majors}，班级 {result.classes}，"
+            f"学生 {result.students}，课程 {result.courses}，选课 {result.enrollments}"
         )
         return 0
     if args.action == "export":
