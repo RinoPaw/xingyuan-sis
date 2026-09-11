@@ -77,12 +77,19 @@ class StudentsPage(VerticalScroll):
         super().__init__(id=id)
         self.repository = repository
         self._student_ids: list[int] = []
+        self._selected_ids: set[int] = set()
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="students-header"):
             with Vertical():
                 yield Static("学生", classes="page-title")
                 yield Static("浏览档案与课程成绩", classes="page-subtitle")
+            yield Button(
+                "查看所选",
+                id="student-view",
+                classes="primary-action",
+                disabled=True,
+            )
             yield Button("+ 新建学生", id="student-new", classes="primary-action")
 
         yield Input(
@@ -90,20 +97,31 @@ class StudentsPage(VerticalScroll):
             id="student-search",
         )
         yield DataTable(id="students-table", cursor_type="row")
-        yield Static("↑↓ 选择   Enter 查看   / 搜索", id="students-hint")
+        yield Static("点击行勾选   选择 1 名后查看   / 搜索", id="students-hint")
 
     def on_mount(self) -> None:
         table = self.query_one("#students-table", DataTable)
-        table.add_columns("学号", "姓名", "支系", "班级", "专业", "主元素", "状态")
+        table.add_column("选", key="selected", width=3)
+        table.add_column("学号", key="student_no")
+        table.add_column("姓名", key="name")
+        table.add_column("支系", key="branch")
+        table.add_column("班级", key="class_name")
+        table.add_column("专业", key="major_name")
+        table.add_column("主元素", key="primary_element")
+        table.add_column("状态", key="status")
         self.refresh_table()
 
     def refresh_table(self, keyword: str = "") -> None:
         rows = self.repository.list_students(keyword)
         self._student_ids = [int(row["id"]) for row in rows]
+        self._selected_ids.intersection_update(self._student_ids)
+
         table = self.query_one("#students-table", DataTable)
         table.clear()
         for row in rows:
+            student_id = int(row["id"])
             table.add_row(
+                "☑" if student_id in self._selected_ids else "☐",
                 _show(row["student_no"]),
                 _show(row["name"]),
                 _show(row["branch"]),
@@ -111,7 +129,20 @@ class StudentsPage(VerticalScroll):
                 _show(row["major_name"]),
                 _show(row["primary_element"]),
                 _show(row["status"]),
+                key=str(student_id),
             )
+        self._update_selection_ui()
+
+    def _update_selection_ui(self) -> None:
+        count = len(self._selected_ids)
+        self.query_one("#student-view", Button).disabled = count != 1
+        hint = self.query_one("#students-hint", Static)
+        if count == 0:
+            hint.update("点击行勾选   选择 1 名后查看   / 搜索")
+        elif count == 1:
+            hint.update("已选 1 名   再点一次取消   查看所选 打开档案")
+        else:
+            hint.update(f"已选 {count} 名   点击已选行可取消   查看需只选 1 名")
 
     def _refresh_after_edit(self, changed: bool | None) -> None:
         if changed:
@@ -126,13 +157,31 @@ class StudentsPage(VerticalScroll):
             return
         if not (0 <= event.cursor_row < len(self._student_ids)):
             return
+
         student_id = self._student_ids[event.cursor_row]
+        if student_id in self._selected_ids:
+            self._selected_ids.remove(student_id)
+            mark = "☐"
+        else:
+            self._selected_ids.add(student_id)
+            mark = "☑"
+
+        event.data_table.update_cell(str(student_id), "selected", mark)
+        self._update_selection_ui()
+
+    def _open_selected_student(self) -> None:
+        if len(self._selected_ids) != 1:
+            return
+        student_id = next(iter(self._selected_ids))
         self.app.push_screen(
             StudentDetailScreen(self.repository, student_id),
             self._refresh_after_edit,
         )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "student-view":
+            self._open_selected_student()
+            return
         if event.button.id == "student-new":
             self.app.push_screen(
                 StudentEditScreen(self.repository),
