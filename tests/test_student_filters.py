@@ -26,22 +26,46 @@ class StudentFilterCliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         return output.getvalue()
 
-    def test_exact_branch_filter(self) -> None:
-        output = self.run_xy("stu", "ls", "--branch", "石虎")
+    def test_branch_filter_is_fuzzy(self) -> None:
+        output = self.run_xy("stu", "ls", "--branch", "牧羊")
+        self.assertIn("20250002", output)
+        self.assertIn("20230001", output)
+        self.assertNotIn("20260001", output)
+
+    def test_major_matches_code_or_name_fuzzily(self) -> None:
+        output = self.run_xy("stu", "ls", "--major", "元素")
         self.assertIn("20260001", output)
-        self.assertIn("林岚", output)
+        self.assertIn("20250004", output)
+        self.assertIn("20250001", output)
         self.assertNotIn("20260002", output)
+
+        output = self.run_xy("stu", "ls", "--major", "ELS")
+        self.assertIn("20260001", output)
+        self.assertIn("20250004", output)
+        self.assertNotIn("20250001", output)
+
+    def test_class_and_college_match_code_or_name_fuzzily(self) -> None:
+        output = self.run_xy("stu", "ls", "--class", "2601")
+        self.assertIn("20260001", output)
+        self.assertIn("20260002", output)
+        self.assertIn("20260003", output)
+        self.assertNotIn("20250004", output)
+
+        output = self.run_xy("stu", "ls", "--college", "工程")
+        self.assertIn("20250001", output)
+        self.assertIn("20230001", output)
+        self.assertNotIn("20260001", output)
 
     def test_filters_are_and_across_fields(self) -> None:
         output = self.run_xy(
             "stu", "ls",
-            "--major", "ELS",
+            "--major", "元素",
             "--year", "2026",
-            "--status", "在读",
+            "--status", "在",
         )
         self.assertIn("20260001", output)
         self.assertNotIn("20250004", output)
-        self.assertNotIn("20260002", output)
+        self.assertNotIn("20250001", output)
 
     def test_repeated_filter_is_or_within_field(self) -> None:
         output = self.run_xy(
@@ -64,13 +88,15 @@ class StudentFilterCliTests(unittest.TestCase):
         self.assertIn("20240003", output)
         self.assertNotIn("20230002", output)
 
-    def test_name_is_fuzzy_but_codes_are_exact(self) -> None:
-        output = self.run_xy("stu", "ls", "--name", "林")
-        self.assertIn("林岚", output)
-
-        output = self.run_xy("stu", "ls", "--class", "ELS2601")
+    def test_student_number_and_year_remain_exact(self) -> None:
+        output = self.run_xy("stu", "ls", "--no", "20260001")
         self.assertIn("20260001", output)
-        self.assertNotIn("20250004", output)
+        self.assertNotIn("20260002", output)
+
+        output = self.run_xy("stu", "ls", "--year", "2026")
+        self.assertIn("20260001", output)
+        self.assertIn("20260002", output)
+        self.assertNotIn("20250001", output)
 
 
 if __name__ == "__main__":
