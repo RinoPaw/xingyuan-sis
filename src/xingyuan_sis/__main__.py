@@ -1,11 +1,5 @@
-from .app import XingyuanSIS
-from .database import initialize_database
-
-
-def main() -> None:
-    initialize_database()
-    XingyuanSIS().run()
+from .cli import main
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
