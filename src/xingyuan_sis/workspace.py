@@ -48,28 +48,51 @@ class SignalMark(Static):
 
 
 class OverviewPage(VerticalScroll):
+    BANNER = (
+        "█ █ ███ █ █ ███ █ █ █ █  █  █ █\n"
+        "█ █  █  ███ █   █ █ █ █ █ █ ███\n"
+        " █   █  ███ █ █  █  █ █ ███ ███\n"
+        "█ █  █  █ █ █ █  █  █ █ █ █ █ █\n"
+        "█ █ ███ █ █ ███  █  ███ █ █ █ █"
+    )
+
     def __init__(self, repository: Repository, *, id: str) -> None:
         super().__init__(id=id)
         self.repository = repository
 
     def compose(self) -> ComposeResult:
-        yield Static("Xingyuan", id="overview-heading")
-        yield Static("student workspace", id="overview-subheading")
+        yield Static(self.BANNER, id="overview-heading")
+        yield Static("星原大学学生信息系统 · student workspace", id="overview-subheading")
         yield SignalMark(id="overview-signal")
         with Horizontal(id="overview-stats"):
-            yield Static("-\n学生", id="overview-students", classes="stat")
-            yield Static("-\n班级", id="overview-classes", classes="stat")
-            yield Static("-\n课程", id="overview-courses", classes="stat")
-            yield Static("-\n平均成绩", id="overview-average", classes="stat")
+            yield Button("-\n学生  ↗", id="overview-students", classes="stat")
+            yield Button("-\n班级  ↗", id="overview-classes", classes="stat")
+            yield Button("-\n课程  ↗", id="overview-courses", classes="stat")
+            yield Button("-\n平均成绩  ↗", id="overview-average", classes="stat")
 
     def on_mount(self) -> None:
         stats = summary(self.repository.db_path)
-        self.query_one("#overview-students", Static).update(f"{stats['students']}\n学生")
-        self.query_one("#overview-classes", Static).update(f"{stats['classes']}\n班级")
-        self.query_one("#overview-courses", Static).update(f"{stats['courses']}\n课程")
-        self.query_one("#overview-average", Static).update(
-            f"{_show(stats['average_score']) or '-'}\n平均成绩"
+        self.query_one("#overview-students", Button).label = f"{stats['students']}\n学生  ↗"
+        self.query_one("#overview-classes", Button).label = f"{stats['classes']}\n班级  ↗"
+        self.query_one("#overview-courses", Button).label = f"{stats['courses']}\n课程  ↗"
+        self.query_one("#overview-average", Button).label = (
+            f"{_show(stats['average_score']) or '-'}\n平均成绩  ↗"
         )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        targets = {
+            "overview-students": ("students-page", "nav-students", None),
+            "overview-classes": ("academics-page", "nav-academics", "classes"),
+            "overview-courses": ("courses-page", "nav-courses", None),
+            "overview-average": ("grades-page", "nav-grades", None),
+        }
+        target = targets.get(event.button.id)
+        if target is None:
+            return
+        page_id, nav_button_id, academics_tab = target
+        navigate = getattr(self.app, "navigate_to", None)
+        if navigate is not None:
+            navigate(page_id, nav_button_id, academics_tab=academics_tab)
 
 
 class StudentsPage(VerticalScroll):
