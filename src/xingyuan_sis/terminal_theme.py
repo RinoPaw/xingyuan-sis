@@ -5,15 +5,21 @@ from typing import Sequence
 
 
 _BUTTON = "\x1b[48;5;237m\x1b[38;5;252m"
+_BAR_SURFACE = "\x1b[48;5;236m\x1b[38;5;250m"
+_TOPBAR = "\x1b[48;5;234m\x1b[38;5;110m\x1b[1m"
 
 
 def install(menu: ModuleType) -> None:
-    """Install the responsive visual theme onto the stdlib terminal menu.
+    """Install the responsive visual theme onto the stdlib terminal menu."""
+    if getattr(menu, "_xingyuan_theme_installed", False):
+        return
+    menu._xingyuan_theme_installed = True
 
-    The interaction engine stays in ``menu.py``.  This module only owns the
-    visual treatment so landscape layout and clickable affordances can evolve
-    without making the input loop even larger.
-    """
+    base_paint = menu._paint
+    last_geometry: tuple[int, int] | None = None
+
+    def bar_space(count: int) -> str:
+        return menu._ansi(" " * max(0, count), _BAR_SURFACE)
 
     def button(label: str, *, selected: bool = False, width: int | None = None) -> str:
         shown = f"[ {label} ]"
@@ -21,37 +27,62 @@ def install(menu: ModuleType) -> None:
             shown = menu._pad_cells(menu._clip_cells(shown, width), width)
         return menu._ansi(shown, menu._SELECTED if selected else _BUTTON)
 
+    def topbar(width: int, *, database: str | None = None) -> str:
+        left = "✦ 星原 / 教务台"
+        right = f"LOCAL / {database}" if database else ""
+        if right and menu._display_width(left) + menu._display_width(right) + 2 <= width:
+            gap = width - menu._display_width(left) - menu._display_width(right)
+            plain = left + " " * gap + right
+        else:
+            plain = menu._pad_cells(menu._clip_cells(left, width), width)
+        return menu._ansi(menu._pad_cells(menu._clip_cells(plain, width), width), _TOPBAR)
+
     def footer(
         width: int,
         buttons: Sequence[tuple[str, str, str]],
         row: int,
     ) -> tuple[str, list[object]]:
-        def render(use_short: bool) -> tuple[str, list[object]]:
-            text = ""
-            regions: list[object] = []
-            for long, short, action in buttons:
-                label = short if use_short else long
-                shown = f"[ {label} ]"
-                separator = " " if text else ""
-                if menu._display_width(text + separator + shown) > width:
-                    continue
-                if separator:
-                    text += separator
-                x = menu._display_width(text) + 1
-                regions.append(menu.HitRegion(x, row, menu._display_width(shown), action))
-                text += menu._ansi(shown, _BUTTON)
-            return text, regions
+        def labels(use_short: bool) -> list[tuple[str, str]]:
+            return [
+                (f"[ {short if use_short else long} ]", action)
+                for long, short, action in buttons
+            ]
 
-        long_text, long_regions = render(False)
-        expected_long = " ".join(f"[ {long} ]" for long, _, _ in buttons)
-        if menu._display_width(expected_long) <= width:
-            text, regions = long_text, long_regions
-        else:
-            text, regions = render(True)
+        chosen = labels(False)
+        minimum = sum(menu._display_width(text) for text, _ in chosen) + max(0, len(chosen) - 1)
+        if minimum > width:
+            chosen = labels(True)
 
-        # Never wrap a footer.  If the compact labels still do not fit,
-        # render() simply keeps the highest-priority controls from the left.
-        return menu._pad_cells(menu._clip_cells(text, width), width), regions
+        # Keep the exit control when an unusually narrow terminal cannot fit
+        # every compact button. Drop optional middle controls first.
+        while chosen and (
+            sum(menu._display_width(text) for text, _ in chosen) + max(0, len(chosen) - 1) > width
+        ):
+            if len(chosen) > 2:
+                chosen.pop(-2)
+            else:
+                chosen.pop(0)
+
+        if not chosen:
+            return bar_space(width), []
+
+        button_width = sum(menu._display_width(text) for text, _ in chosen)
+        free = max(0, width - button_width)
+        slots = len(chosen) + 1
+        base_gap, extra = divmod(free, slots)
+        gaps = [base_gap + (1 if index < extra else 0) for index in range(slots)]
+
+        parts: list[str] = [bar_space(gaps[0])]
+        regions: list[object] = []
+        cell = gaps[0]
+        for index, (shown, action) in enumerate(chosen):
+            regions.append(menu.HitRegion(cell + 1, row, menu._display_width(shown), action))
+            parts.append(menu._ansi(shown, _BUTTON))
+            cell += menu._display_width(shown)
+            parts.append(bar_space(gaps[index + 1]))
+            cell += gaps[index + 1]
+
+        return "".join(parts), regions
 
     def selection_frame(
         title: str,
@@ -61,13 +92,9 @@ def install(menu: ModuleType) -> None:
     ):
         terminal = menu._terminal_size()
         width, height = max(1, terminal.columns - 1), max(3, terminal.lines)
-        capacity = max(1, height - 5)
+        capacity = max(1, height - 3)
         first = min(max(0, selected - capacity + 1), max(0, len(items) - capacity))
-        lines = [
-            menu._ansi("✦ 星原 / 教务台", menu._BOLD + menu._ACCENT),
-            menu._ansi(f"首页 / {title}", menu._DIM),
-            menu._ansi("─" * width, menu._DIM),
-        ]
+        lines = [topbar(width), menu._ansi(f"首页 / {title}", menu._DIM)]
         regions: list[object] = []
         panel_width = min(width, 36 if width >= 72 else width)
 
@@ -80,7 +107,7 @@ def install(menu: ModuleType) -> None:
         while len(lines) < height:
             lines.append("")
 
-        if width >= 72 and height >= 10:
+        if width >= 72 and height >= 9:
             details = [
                 items[selected],
                 "",
@@ -88,11 +115,11 @@ def install(menu: ModuleType) -> None:
                 "方向键 / 滚轮切换选项。",
                 "q 返回上一级。",
             ]
-            for offset, detail in enumerate(details, start=3):
+            for offset, detail in enumerate(details, start=2):
                 if offset < height - 1:
                     lines[offset] = (
                         menu._pad_cells(lines[offset], panel_width + 3)
-                        + menu._ansi(detail, menu._ACCENT if offset == 3 else menu._DIM)
+                        + menu._ansi(detail, menu._ACCENT if offset == 2 else menu._DIM)
                     )
 
         footer_line, controls = footer(
@@ -123,30 +150,20 @@ def install(menu: ModuleType) -> None:
         width, height = max(1, terminal.columns - 1), max(3, terminal.lines)
         title, description, _ = menu._MODULES[selected]
 
-        header = menu._ansi("✦ 星原 / 教务台", menu._BOLD + menu._ACCENT)
-        database_label = menu._ansi(f"LOCAL / {database}", menu._DIM)
-        if width >= 64:
-            header = (
-                menu._pad_cells(header, max(24, width - menu._display_width(database_label)))
-                + database_label
-            )
-
-        top = [header, menu._ansi("─" * width, menu._DIM)]
-        body_height = max(0, height - len(top) - 1)
+        top = [topbar(width, database=database)]
+        body_height = max(0, height - 2)
         footer_line, controls = menu._home_footer(width, height, animate)
         regions: list[object] = []
 
-        # Compact/portrait mode: keep the globe above a dense two-column grid.
-        if width < 50 or height < 10:
+        # The layout mode depends only on width. Soft-keyboard height changes
+        # therefore cannot make the whole home screen oscillate between modes.
+        if width < 38:
             columns = 2 if width >= 28 else 1
             nav_rows = (len(labels) + columns - 1) // columns
             graph_height = max(0, body_height - nav_rows - 1)
-            body = (
-                [menu._ansi(title, menu._BOLD + menu._ACCENT),
-                 *menu._orbit(width, graph_height, angle, selected)]
-                if graph_height
-                else []
-            )
+            body = [menu._ansi(title, menu._BOLD + menu._ACCENT)]
+            if graph_height:
+                body.extend(menu._orbit(width, graph_height, angle, selected))
             cell_width = max(1, width // columns)
             for row in range(nav_rows):
                 parts: list[str] = []
@@ -157,8 +174,9 @@ def install(menu: ModuleType) -> None:
                         parts.append(" " * cell_width)
                         continue
                     number = "0" if index == len(labels) - 1 else str(index + 1)
-                    label = f"{number} {labels[index]}"
-                    parts.append(button(label, selected=index == selected, width=cell_width))
+                    parts.append(
+                        button(f"{number} {labels[index]}", selected=index == selected, width=cell_width)
+                    )
                     regions.append(
                         menu.HitRegion(col * cell_width + 1, screen_row, cell_width, f"item:{index}")
                     )
@@ -170,42 +188,30 @@ def install(menu: ModuleType) -> None:
             )
             return menu._starlight(frame, width, angle)
 
-        # Landscape mode: a narrow, stable navigation rail leaves the visual
-        # field to the module description and the animated globe.
-        nav_width = min(22, max(16, width // 5))
+        nav_width = min(22, max(14, width // 5))
         graph_width = max(1, width - nav_width - 3)
-        spacious = body_height >= 16
-        left: list[str] = [menu._ansi("工作区", menu._DIM), ""] if spacious else []
+        left: list[str] = [menu._ansi("工作区", menu._DIM)]
 
+        # Keep navigation density fixed at every height; the earlier blank rows
+        # made Termux visibly jump as the IME changed the reported line count.
         for index, label in enumerate(labels):
             number = "0" if index == len(labels) - 1 else str(index + 1)
-            line = button(
-                f"{number} {label}",
-                selected=index == selected,
-                width=nav_width,
-            )
+            line = button(f"{number} {label}", selected=index == selected, width=nav_width)
             regions.append(menu.HitRegion(1, len(top) + len(left) + 1, nav_width, f"item:{index}"))
             left.append(line)
-            if spacious and index < len(labels) - 1:
-                left.append("")
 
-        stats_lines = [
+        for line in (
             "",
             menu._ansi("校园概览", menu._DIM),
             f"学生 {stats.get('students', 0)} / 班级 {stats.get('classes', 0)}",
             f"课程 {stats.get('courses', 0)} / 选课 {stats.get('enrollments', 0)}",
-        ]
-        for line in stats_lines:
+        ):
             if len(left) < body_height:
                 left.append(line)
 
         right = [menu._ansi(f"{selected + 1:02d} / {title}", menu._BOLD + menu._ACCENT)]
-        if graph_width >= 28 and body_height >= 9:
+        if graph_width >= 28 and body_height >= 8:
             right.extend([menu._ansi(description, menu._DIM), ""])
-
-        # The former actions line lived immediately above the real footer and
-        # visually looked like a second bottom bar.  Module actions stay in the
-        # clickable submenu; the home page gives all remaining height to art.
         graph_height = max(1, body_height - len(right))
         right.extend(menu._orbit(graph_width, graph_height, angle, selected))
 
@@ -225,6 +231,18 @@ def install(menu: ModuleType) -> None:
         )
         return menu._starlight(frame, width, angle)
 
+    def paint(lines: Sequence[str], previous: Sequence[str] = ()) -> None:
+        nonlocal last_geometry
+        geometry = (len(lines), max((menu._display_width(line) for line in lines), default=0))
+        if geometry != last_geometry:
+            if menu.sys.stdout.isatty():
+                menu.sys.stdout.write("\x1b[0m\x1b[2J\x1b[H")
+                menu.sys.stdout.flush()
+            previous = ()
+            last_geometry = geometry
+        base_paint(lines, previous)
+
     menu._footer = footer
     menu._selection_frame = selection_frame
     menu._home_frame = home_frame
+    menu._paint = paint
