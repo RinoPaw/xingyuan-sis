@@ -4,16 +4,16 @@ from pathlib import Path
 import sqlite3
 from typing import Any
 
+from .csv_io import ImportResult, export_students_csv, import_students_csv
+from .reports import summary
 from .repository import Repository
 
 
 class XingyuanService:
     """Application-facing operations shared by CLI, TUI and the basic UI.
 
-    Existing TUI code may still call repository-style methods through this
-    facade. New frontends should prefer the higher-level methods below so
-    user-facing identifiers (student number, course code, class code) are
-    resolved here rather than exposing database ids.
+    Frontends should prefer business identifiers such as student numbers and
+    course / class codes. Database ids are resolved here and stay internal.
     """
 
     def __init__(self, db_path: Path | str | None = None) -> None:
@@ -24,6 +24,8 @@ class XingyuanService:
         return self.repository.db_path
 
     def __getattr__(self, name: str) -> Any:
+        # Compatibility path for TUI pages that still use repository-style
+        # methods. New code should prefer the higher-level methods below.
         return getattr(self.repository, name)
 
     # ----- lookup helpers -------------------------------------------------
@@ -87,6 +89,104 @@ class XingyuanService:
         if row is None:
             raise ValueError(message)
         return row
+
+    # ----- academics ------------------------------------------------------
+    def create_department(self, *, code: str, name: str) -> int:
+        return self.repository.add_department(code, name)
+
+    def update_department_by_code(
+        self,
+        code: str,
+        *,
+        new_code: str | None = None,
+        name: str | None = None,
+    ) -> None:
+        row = self._require(self.department_by_code(code), f"找不到学院：{code}")
+        self.repository.update_department(
+            int(row["id"]),
+            new_code if new_code is not None else str(row["code"]),
+            name if name is not None else str(row["name"]),
+        )
+
+    def delete_department_by_code(self, code: str) -> None:
+        row = self._require(self.department_by_code(code), f"找不到学院：{code}")
+        self.repository.delete_department(int(row["id"]))
+
+    def create_major(self, *, code: str, name: str, department_code: str) -> int:
+        department = self._require(
+            self.department_by_code(department_code),
+            f"找不到学院：{department_code}",
+        )
+        return self.repository.add_major(code, name, int(department["id"]))
+
+    def update_major_by_code(
+        self,
+        code: str,
+        *,
+        new_code: str | None = None,
+        name: str | None = None,
+        department_code: str | None = None,
+    ) -> None:
+        row = self._require(self.major_by_code(code), f"找不到专业：{code}")
+        department_id = int(row["department_id"])
+        if department_code is not None:
+            department = self._require(
+                self.department_by_code(department_code),
+                f"找不到学院：{department_code}",
+            )
+            department_id = int(department["id"])
+        self.repository.update_major(
+            int(row["id"]),
+            new_code if new_code is not None else str(row["code"]),
+            name if name is not None else str(row["name"]),
+            department_id,
+        )
+
+    def delete_major_by_code(self, code: str) -> None:
+        row = self._require(self.major_by_code(code), f"找不到专业：{code}")
+        self.repository.delete_major(int(row["id"]))
+
+    def create_class(
+        self,
+        *,
+        code: str,
+        name: str,
+        major_code: str,
+        enrollment_year: int,
+    ) -> int:
+        major = self._require(self.major_by_code(major_code), f"找不到专业：{major_code}")
+        return self.repository.add_class(
+            code,
+            name,
+            int(major["id"]),
+            enrollment_year,
+        )
+
+    def update_class_by_code(
+        self,
+        code: str,
+        *,
+        new_code: str | None = None,
+        name: str | None = None,
+        major_code: str | None = None,
+        enrollment_year: int | None = None,
+    ) -> None:
+        row = self._require(self.class_by_code(code), f"找不到班级：{code}")
+        major_id = int(row["major_id"])
+        if major_code is not None:
+            major = self._require(self.major_by_code(major_code), f"找不到专业：{major_code}")
+            major_id = int(major["id"])
+        self.repository.update_class(
+            int(row["id"]),
+            new_code if new_code is not None else str(row["code"]),
+            name if name is not None else str(row["name"]),
+            major_id,
+            enrollment_year if enrollment_year is not None else int(row["enrollment_year"]),
+        )
+
+    def delete_class_by_code(self, code: str) -> None:
+        row = self._require(self.class_by_code(code), f"找不到班级：{code}")
+        self.repository.delete_class(int(row["id"]))
 
     # ----- students -------------------------------------------------------
     def create_student(
@@ -244,3 +344,13 @@ class XingyuanService:
             "找不到这条选课记录",
         )
         self.repository.delete_enrollment(int(row["id"]))
+
+    # ----- data -----------------------------------------------------------
+    def stats(self) -> dict[str, Any]:
+        return summary(self.db_path)
+
+    def export_students(self, path: Path | str) -> int:
+        return export_students_csv(path, self.db_path)
+
+    def import_students(self, path: Path | str) -> ImportResult:
+        return import_students_csv(path, self.db_path)
