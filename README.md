@@ -20,6 +20,7 @@
 - 班级人数、主元素分布、课程成绩统计
 - 学生 CSV 导入与导出
 - CLI / TUI / Basic UI 三种终端交互方式
+- 可选的星原大学演示数据 seed
 
 学生档案包含学号、姓名、族系、支系、性别、出生日期、入学年份、班级、学籍状态、主元素亲和与等级等信息。学院和专业通过班级关系获得，不在学生表重复保存。
 
@@ -64,12 +65,12 @@ xy acad major ls
 xy acad class ls
 
 xy course ls
-xy course show ELM101
+xy course show ELS101
 xy course add
 
 xy grade ls
-xy grade add 20260001 ELM101 --semester 2026-2027-1 --score 92
-xy grade edit 20260001 ELM101 2026-2027-1 --score 95
+xy grade add 20260001 ELS101 --semester 2026-2027-1 --score 92
+xy grade edit 20260001 ELS101 2026-2027-1 --score 95
 
 xy data stats
 xy data export data/students.csv
@@ -83,6 +84,24 @@ xy data import data/students.csv
 ```bash
 xy --db data/demo.db stu ls
 ```
+
+## 演示数据
+
+空数据库可以一次写入项目自带的基础数据：
+
+```bash
+xy data seed
+```
+
+当前 seed 包含 4 个学院、10 个专业、11 个班级、12 名学生、11 门课程和 16 条选课/成绩记录。它用于填充 TUI、CLI 和统计页面，数据关系完整，并包含一名休学学生和一条尚未录入成绩的选课记录。
+
+如果数据库已经存在任何业务数据，普通 `seed` 会拒绝执行，避免覆盖真实内容。需要明确清空并恢复为默认演示数据时才使用：
+
+```bash
+xy data seed --reset
+```
+
+`--reset` 会删除当前学院、专业、班级、学生、课程和选课数据，然后重新生成整套演示数据。
 
 ## 界面层次
 
@@ -114,6 +133,7 @@ xingyuan-sis/
 │   ├── courses.py        # 课程
 │   ├── grades.py         # 成绩
 │   ├── data_workspace.py # 数据与 CSV
+│   ├── seed_data.py      # 默认演示数据
 │   ├── service.py        # 跨界面业务接口
 │   ├── repository.py     # SQLite 数据访问层
 │   ├── database.py       # 连接与表结构初始化
