@@ -1,22 +1,102 @@
+from __future__ import annotations
+
 from pathlib import Path
 import sqlite3
 
 DATA_DIR = Path.cwd() / "data"
 DB_PATH = DATA_DIR / "xingyuan.db"
 
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS departments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL UNIQUE
+);
 
-def connect() -> sqlite3.Connection:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(DB_PATH)
+CREATE TABLE IF NOT EXISTS majors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    department_id INTEGER NOT NULL,
+    UNIQUE(name, department_id),
+    FOREIGN KEY (department_id) REFERENCES departments(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS classes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    major_id INTEGER NOT NULL,
+    enrollment_year INTEGER NOT NULL CHECK(enrollment_year >= 1900),
+    UNIQUE(name, major_id, enrollment_year),
+    FOREIGN KEY (major_id) REFERENCES majors(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS students (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_no TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    family TEXT NOT NULL,
+    branch TEXT NOT NULL,
+    gender TEXT,
+    birth_date TEXT,
+    enrollment_year INTEGER NOT NULL CHECK(enrollment_year >= 1900),
+    class_id INTEGER,
+    status TEXT NOT NULL DEFAULT '在读',
+    primary_element TEXT,
+    primary_affinity TEXT,
+    secondary_element TEXT,
+    secondary_affinity TEXT,
+    contact TEXT,
+    dormitory TEXT,
+    notes TEXT,
+    FOREIGN KEY (class_id) REFERENCES classes(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS courses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    department_id INTEGER,
+    credits REAL NOT NULL DEFAULT 0 CHECK(credits >= 0),
+    hours INTEGER NOT NULL DEFAULT 0 CHECK(hours >= 0),
+    FOREIGN KEY (department_id) REFERENCES departments(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS enrollments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER NOT NULL,
+    course_id INTEGER NOT NULL,
+    semester TEXT NOT NULL,
+    score REAL CHECK(score IS NULL OR (score >= 0 AND score <= 100)),
+    UNIQUE(student_id, course_id, semester),
+    FOREIGN KEY (student_id) REFERENCES students(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (course_id) REFERENCES courses(id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_students_name ON students(name);
+CREATE INDEX IF NOT EXISTS idx_students_class_id ON students(class_id);
+CREATE INDEX IF NOT EXISTS idx_courses_name ON courses(name);
+CREATE INDEX IF NOT EXISTS idx_enrollments_student_id ON enrollments(student_id);
+CREATE INDEX IF NOT EXISTS idx_enrollments_course_id ON enrollments(course_id);
+"""
+
+
+def connect(db_path: Path | str | None = None) -> sqlite3.Connection:
+    path = Path(db_path) if db_path is not None else DB_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(path)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     return connection
 
 
-def initialize_database() -> None:
-    """Create the database file and prepare the connection environment.
-
-    Table definitions are intentionally left to the data-model issue.
-    """
-    with connect():
-        pass
+def initialize_database(db_path: Path | str | None = None) -> None:
+    with connect(db_path) as connection:
+        connection.executescript(SCHEMA)
