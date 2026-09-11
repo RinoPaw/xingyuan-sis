@@ -47,8 +47,6 @@ CREATE TABLE IF NOT EXISTS students (
     status TEXT NOT NULL DEFAULT '在读',
     primary_element TEXT,
     primary_affinity TEXT,
-    secondary_element TEXT,
-    secondary_affinity TEXT,
     contact TEXT,
     dormitory TEXT,
     notes TEXT,

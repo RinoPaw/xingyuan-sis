@@ -116,7 +116,6 @@ class Repository:
             SELECT s.id, s.student_no, s.name, s.family, s.branch,
                    s.gender, s.birth_date, s.enrollment_year, s.status,
                    s.primary_element, s.primary_affinity,
-                   s.secondary_element, s.secondary_affinity,
                    s.contact, s.dormitory, s.notes, s.class_id,
                    c.name AS class_name, m.name AS major_name,
                    d.name AS department_name
@@ -155,8 +154,6 @@ class Repository:
         status: str = "在读",
         primary_element: str | None = None,
         primary_affinity: str | None = None,
-        secondary_element: str | None = None,
-        secondary_affinity: str | None = None,
         contact: str | None = None,
         dormitory: str | None = None,
         notes: str | None = None,
@@ -167,16 +164,14 @@ class Repository:
                 student_no, name, family, branch, gender, birth_date,
                 enrollment_year, class_id, status,
                 primary_element, primary_affinity,
-                secondary_element, secondary_affinity,
                 contact, dormitory, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 student_no.strip(), name.strip(), family.strip(), branch.strip(),
                 _blank_to_none(gender), _blank_to_none(birth_date), enrollment_year,
                 class_id, status.strip() or "在读",
                 _blank_to_none(primary_element), _blank_to_none(primary_affinity),
-                _blank_to_none(secondary_element), _blank_to_none(secondary_affinity),
                 _blank_to_none(contact), _blank_to_none(dormitory), _blank_to_none(notes),
             ),
         )
@@ -185,8 +180,7 @@ class Repository:
         allowed = {
             "student_no", "name", "family", "branch", "gender", "birth_date",
             "enrollment_year", "class_id", "status", "primary_element",
-            "primary_affinity", "secondary_element", "secondary_affinity",
-            "contact", "dormitory", "notes",
+            "primary_affinity", "contact", "dormitory", "notes",
         }
         unknown = set(values) - allowed
         if unknown:

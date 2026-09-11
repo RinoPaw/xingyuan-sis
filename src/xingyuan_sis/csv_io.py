@@ -10,8 +10,7 @@ from .database import connect
 STUDENT_FIELDS = [
     "student_no", "name", "family", "branch", "gender", "birth_date",
     "enrollment_year", "class_code", "status", "primary_element",
-    "primary_affinity", "secondary_element", "secondary_affinity",
-    "contact", "dormitory", "notes",
+    "primary_affinity", "contact", "dormitory", "notes",
 ]
 
 
@@ -33,7 +32,6 @@ def export_students_csv(
             SELECT s.student_no, s.name, s.family, s.branch, s.gender,
                    s.birth_date, s.enrollment_year, c.code AS class_code,
                    s.status, s.primary_element, s.primary_affinity,
-                   s.secondary_element, s.secondary_affinity,
                    s.contact, s.dormitory, s.notes
             FROM students AS s
             LEFT JOIN classes AS c ON c.id = s.class_id
@@ -85,9 +83,8 @@ def import_students_csv(
                             student_no, name, family, branch, gender, birth_date,
                             enrollment_year, class_id, status,
                             primary_element, primary_affinity,
-                            secondary_element, secondary_affinity,
                             contact, dormitory, notes
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             _required(row, "student_no"),
@@ -101,8 +98,6 @@ def import_students_csv(
                             (row.get("status") or "在读").strip() or "在读",
                             _optional(row.get("primary_element")),
                             _optional(row.get("primary_affinity")),
-                            _optional(row.get("secondary_element")),
-                            _optional(row.get("secondary_affinity")),
                             _optional(row.get("contact")),
                             _optional(row.get("dormitory")),
                             _optional(row.get("notes")),
