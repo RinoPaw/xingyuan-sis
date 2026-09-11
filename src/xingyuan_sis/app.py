@@ -474,10 +474,6 @@ class XingyuanSIS(App[None]):
             "#reports-page",
         )
 
-        stats.styles.layout = "grid"
-        stats.styles.grid_rows = "6"
-        stats.styles.grid_gutter = (1, 1)
-
         if width < 60:
             nav.styles.width = 10
             overview.styles.padding = (1, 1)
