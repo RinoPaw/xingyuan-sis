@@ -20,7 +20,9 @@ def _ansi(text: str, style: str) -> str:
 
 
 def _clear() -> None:
-    if sys.stdout.isatty():
+    if os.name == "nt":
+        os.system("cls")
+    elif sys.stdout.isatty():
         print("\x1b[2J\x1b[H", end="", flush=True)
     else:
         print("\n" * 40)
@@ -44,6 +46,26 @@ def _read_key_windows() -> str:
     return "other"
 
 
+def _read_escape_sequence(fd: int) -> bytes:
+    """Read the bytes following ESC without going through TextIO buffering."""
+    sequence = bytearray()
+    # Arrow keys normally arrive as ESC [ A/B or ESC O A/B. Some terminals
+    # add CSI parameters (for example ESC [ 1 ; 2 A), so read through the
+    # final control byte rather than assuming a fixed sequence length.
+    while len(sequence) < 16:
+        ready, _, _ = select.select([fd], [], [], 0.08)
+        if not ready:
+            break
+        chunk = os.read(fd, 1)
+        if not chunk:
+            break
+        sequence += chunk
+        byte = chunk[0]
+        if len(sequence) >= 2 and 0x40 <= byte <= 0x7E:
+            break
+    return bytes(sequence)
+
+
 def _read_key_posix() -> str:
     import termios
     import tty
@@ -52,19 +74,21 @@ def _read_key_posix() -> str:
     previous = termios.tcgetattr(fd)
     try:
         tty.setcbreak(fd)
-        char = sys.stdin.read(1)
-        if char == "\x1b":
-            sequence = ""
-            while len(sequence) < 2 and select.select([sys.stdin], [], [], 0.03)[0]:
-                sequence += sys.stdin.read(1)
-            if sequence == "[A":
+        char = os.read(fd, 1)
+        if char == b"\x1b":
+            sequence = _read_escape_sequence(fd)
+            if sequence in {b"[A", b"OA"} or (
+                sequence.startswith(b"[") and sequence.endswith(b"A")
+            ):
                 return "up"
-            if sequence == "[B":
+            if sequence in {b"[B", b"OB"} or (
+                sequence.startswith(b"[") and sequence.endswith(b"B")
+            ):
                 return "down"
             return "back"
-        if char in {" ", "\r", "\n"}:
+        if char in {b" ", b"\r", b"\n"}:
             return "select"
-        if char.lower() == "q":
+        if char in {b"q", b"Q"}:
             return "back"
         return "other"
     finally:
@@ -77,7 +101,13 @@ def _read_key() -> str:
     return _read_key_posix()
 
 
-def _select(title: str, items: Sequence[str], *, allow_back: bool = True) -> int | None:
+def _select(
+    title: str,
+    items: Sequence[str],
+    *,
+    allow_back: bool = True,
+    back_label: str = "返回",
+) -> int | None:
     if not items:
         return None
     selected = 0
@@ -95,7 +125,7 @@ def _select(title: str, items: Sequence[str], *, allow_back: bool = True) -> int
             else:
                 print(f"  {label}")
 
-        back_hint = "   Esc/q 返回" if allow_back else ""
+        back_hint = f"   Esc/q {back_label}" if allow_back else ""
         print(_ansi(f"\n↑↓ 移动   Space 确定{back_hint}", _DIM))
 
         key = _read_key()
@@ -334,8 +364,8 @@ def run(db_path: Path | str | None = None) -> None:
     labels = ("学生", "教务", "课程", "成绩", "数据", "退出")
 
     while True:
-        choice = _select("", labels, allow_back=False)
-        if choice == len(labels) - 1:
+        choice = _select("", labels, back_label="退出")
+        if choice is None or choice == len(labels) - 1:
             _clear()
             return
         actions[choice]()
