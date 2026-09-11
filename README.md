@@ -17,6 +17,7 @@
 - 课程维护
 - 选课与成绩维护
 - 学生全局模糊搜索与结构化字段过滤
+- 筛选结果直接输出为 CSV
 - 班级人数、主元素分布、课程成绩统计
 - 学生 CSV 导入与导出
 - CLI / TUI / Basic UI 三种终端交互方式
@@ -80,24 +81,34 @@ xy data import data/students.csv
 `xy stu ls` 保留 `-s / --search` 作为全字段模糊搜索，同时支持结构化过滤：
 
 ```bash
-xy stu ls --branch 石虎
-xy stu ls --class ELS2601
-xy stu ls --major ELS --year 2026 --status 在读
-xy stu ls --college SCI --element 风
+xy stu ls --branch 牧羊
+xy stu ls --class 2601
+xy stu ls --major 元素 --year 2026 --status 在读
+xy stu ls --college 工程 --element 风
 xy stu ls --affinity A
 xy stu ls --name 林
-xy stu ls --major ELS -s 岚
+xy stu ls --major 元素 -s 岚
 ```
 
 可用字段包括 `--no`、`--name`、`--family`、`--branch`、`--class`、`--major`、`--college`（也可写 `--department`）、`--year`、`--status`、`--element` 和 `--affinity`。
 
-不同字段之间按 AND 组合；同一个字段可以重复，此时按 OR 组合。例如：
+文本字段使用包含匹配；`--class`、`--major` 和 `--college` 会同时匹配对应的业务编号和名称。`--no` 与 `--year` 保持精确匹配。不同字段之间按 AND 组合；同一个字段可以重复，此时按 OR 组合。例如：
 
 ```bash
 xy stu ls --element 风 --element 雷 --status 在读
 ```
 
-表示“主元素为风或雷，并且状态为在读”。`--name` 使用包含匹配，其余结构化字段使用精确匹配；班级、专业和学院使用业务编号。
+表示“主元素包含风或雷，并且状态包含在读”。
+
+筛选结果默认以终端表格显示，也可以直接输出 CSV：
+
+```bash
+xy stu ls --major 元素 --format csv
+xy stu ls --major 元素 --format csv > students.csv
+xy stu ls --major 元素 --format csv -o students.csv
+```
+
+省略 `-o` 时，CSV 写到 stdout；指定 `-o / --output` 时直接写入文件。文件输出使用 UTF-8 with BOM，并沿用 `xy data export` 的学生字段格式，因此可以继续交给 `xy data import` 使用。
 
 不带完整参数执行 `xy stu add`、`xy course add`、`xy grade add` 等命令时，会进入逐项输入模式。
 
