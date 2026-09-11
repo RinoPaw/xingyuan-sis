@@ -1,16 +1,19 @@
+from __future__ import annotations
+
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, ContentSwitcher, Footer, Static
 
 from .academics import AcademicsPage
-from .repository import Repository
-from .reports_view import ReportsPage
-from .views import CoursePage, GradePage
+from .courses import CoursesPage
+from .data_workspace import DataPage
+from .grades import GradesPage
+from .service import XingyuanService
 from .workspace import OverviewPage, StudentsPage
 
 
 class XingyuanSIS(App[None]):
-    TITLE = "星原大学学生信息管理系统"
+    TITLE = "星原大学"
     BINDINGS = [("q", "quit", "退出")]
 
     CSS = """
@@ -89,42 +92,6 @@ class XingyuanSIS(App[None]):
     .page-subtitle {
         height: auto;
         color: #6f7885;
-    }
-
-    .section-title {
-        text-style: bold;
-        color: #b7c0cc;
-        margin-top: 1;
-    }
-
-    .form-row {
-        height: auto;
-        margin-bottom: 1;
-    }
-
-    .form-row Input {
-        width: 1fr;
-        min-width: 14;
-        margin-right: 1;
-    }
-
-    .form-row Button {
-        margin-right: 1;
-    }
-
-    .actions {
-        height: auto;
-        margin-bottom: 1;
-    }
-
-    .actions Button {
-        margin-right: 1;
-    }
-
-    .actions Input {
-        width: 1fr;
-        min-width: 24;
-        margin-right: 1;
     }
 
     DataTable {
@@ -449,9 +416,9 @@ class XingyuanSIS(App[None]):
     }
     """
 
-    def __init__(self) -> None:
+    def __init__(self, service: XingyuanService | None = None) -> None:
         super().__init__()
-        self.repository = Repository()
+        self.service = service or XingyuanService()
 
     def compose(self) -> ComposeResult:
         yield Static("xingyuan / student workspace", id="topbar")
@@ -465,12 +432,12 @@ class XingyuanSIS(App[None]):
                 yield Button("成绩", id="nav-grades", classes="nav-item")
                 yield Button("数据", id="nav-reports", classes="nav-item")
             with ContentSwitcher(initial="overview-page", id="content-switcher"):
-                yield OverviewPage(self.repository, id="overview-page")
-                yield StudentsPage(self.repository, id="students-page")
-                yield AcademicsPage(self.repository, id="academics-page")
-                yield CoursePage(self.repository, id="courses-page")
-                yield GradePage(self.repository, id="grades-page")
-                yield ReportsPage(id="reports-page")
+                yield OverviewPage(self.service, id="overview-page")
+                yield StudentsPage(self.service, id="students-page")
+                yield AcademicsPage(self.service, id="academics-page")
+                yield CoursesPage(self.service, id="courses-page")
+                yield GradesPage(self.service, id="grades-page")
+                yield DataPage(self.service, id="reports-page")
         yield Footer()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
