@@ -2,11 +2,11 @@
 
 星原大学学生信息系统。
 
-这是一个 Python 课程设计项目。数据保存在本地 SQLite 中，交互保留两层：默认的轻量键盘菜单用于日常操作，CLI 用于结构化查询、脚本和精确控制。
+这是一个 Python 课程设计项目。数据保存在本地 SQLite 中。默认使用轻量即时键盘菜单；在方向键等终端交互不可靠时，可切换到数字输入的基础菜单；CLI 用于结构化查询、脚本和精确控制。
 
 ## 技术栈
 
-- Python 3.11+
+- Python 3.14+
 - SQLite / `sqlite3`
 - Python 标准库终端交互
 
@@ -40,7 +40,7 @@ pip install -e .
 xy
 ```
 
-默认进入轻量键盘菜单：
+默认进入即时键盘菜单：
 
 ```text
 星原 SIS
@@ -56,6 +56,27 @@ xy
 ```
 
 子菜单使用同样的交互方式；`Esc` 或 `q` 返回。实现保持简单：循环重绘当前菜单，读取一个按键，再更新选择或执行动作。
+
+如果当前终端的方向键、转义序列或即时按键读取不可靠，可以显式使用基础菜单：
+
+```bash
+xy --basic
+```
+
+基础菜单采用最朴素的 `while True + 清屏 + 输入数字`：
+
+```text
+星原 SIS
+
+1. 学生
+2. 教务
+3. 课程
+4. 成绩
+5. 数据
+0. 退出
+
+> 
+```
 
 `python -m xingyuan_sis` 和旧命令 `xingyuan-sis` 使用同一入口。
 
@@ -126,6 +147,7 @@ xy stu ls --major 元素 --format csv -o students.csv
 
 ```bash
 xy --db data/demo.db
+xy --db data/demo.db --basic
 xy --db data/demo.db stu ls
 ```
 
@@ -151,11 +173,11 @@ xy data seed --reset
 
 ```text
 Keyboard Menu ─┐
-               ├── XingyuanService ── Repository ── SQLite
-CLI ───────────┘
+Basic Menu ─────┼── XingyuanService ── Repository ── SQLite
+CLI ────────────┘
 ```
 
-菜单不会启动子进程；它只是把选择转换成项目本身的 CLI 调用。学生结构化查询由独立的 `student_filters` 查询层处理。
+两个菜单都不会启动子进程；它们只是把用户操作转换成项目本身的 CLI / service 调用。学生结构化查询由独立的 `student_filters` 查询层处理。
 
 ## 测试
 
@@ -168,17 +190,18 @@ python -m unittest discover -s tests
 ```text
 xingyuan-sis/
 ├── src/xingyuan_sis/
-│   ├── __main__.py       # python -m 入口
-│   ├── entry.py          # 统一入口与学生结构化查询分流
-│   ├── menu.py           # ↑↓ + Space 的轻量键盘菜单
-│   ├── cli.py            # CLI 命令实现
-│   ├── student_filters.py# 学生结构化过滤
-│   ├── seed_data.py      # 默认演示数据
-│   ├── service.py        # 业务接口
-│   ├── repository.py     # SQLite 数据访问层
-│   ├── database.py       # 连接与表结构初始化
-│   ├── reports.py        # 统计查询
-│   └── csv_io.py         # CSV 导入导出
+│   ├── __main__.py        # python -m 入口
+│   ├── entry.py           # 统一入口与学生结构化查询分流
+│   ├── menu.py            # ↑↓ + Space 的默认即时键盘菜单
+│   ├── basic_ui.py        # while True + 清屏 + 数字输入备用菜单
+│   ├── cli.py             # CLI 命令实现
+│   ├── student_filters.py # 学生结构化过滤
+│   ├── seed_data.py       # 默认演示数据
+│   ├── service.py         # 业务接口
+│   ├── repository.py      # SQLite 数据访问层
+│   ├── database.py        # 连接与表结构初始化
+│   ├── reports.py         # 统计查询
+│   └── csv_io.py          # CSV 导入导出
 ├── docs/
 │   └── data-model.md
 ├── tests/
