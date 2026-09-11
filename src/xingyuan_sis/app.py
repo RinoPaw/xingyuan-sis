@@ -126,20 +126,22 @@ class XingyuanSIS(App[None]):
     }
 
     #overview-heading {
-        margin-top: 2;
-        color: #f0f4f8;
+        height: 5;
+        margin-top: 1;
+        color: #eef6ff;
         text-style: bold;
     }
 
     #overview-subheading {
-        color: #687280;
-        margin-bottom: 1;
+        height: auto;
+        color: #7d8997;
+        margin: 1 0;
     }
 
     #overview-signal {
-        height: 3;
+        height: 2;
         color: #72c7ff;
-        margin: 1 0 2 0;
+        margin: 0 0 2 0;
     }
 
     #overview-stats {
@@ -147,15 +149,24 @@ class XingyuanSIS(App[None]):
         margin-bottom: 2;
     }
 
-    .stat {
+    Button.stat {
         width: 1fr;
         min-width: 12;
         height: 6;
         margin-right: 1;
         padding: 1;
         background: #10141a;
-        border: solid #1b222c;
-        color: #8894a2;
+        border: solid #252d38;
+        color: #e5edf6;
+        text-style: bold;
+        content-align: left middle;
+    }
+
+    Button.stat:hover,
+    Button.stat:focus {
+        background: #141c26;
+        border: solid #3b526b;
+        color: #ffffff;
     }
 
     #students-page {
@@ -440,6 +451,34 @@ class XingyuanSIS(App[None]):
                 yield DataPage(self.service, id="reports-page")
         yield Footer()
 
+    def navigate_to(
+        self,
+        page_id: str,
+        nav_button_id: str,
+        *,
+        academics_tab: str | None = None,
+    ) -> None:
+        for button in self.query(".nav-item"):
+            button.remove_class("active")
+        self.query_one(f"#{nav_button_id}", Button).add_class("active")
+        self.query_one("#content-switcher", ContentSwitcher).current = page_id
+
+        if page_id == "academics-page" and academics_tab is not None:
+            academics = self.query_one("#academics-page", AcademicsPage)
+            targets = {
+                "departments": ("academics-tab-departments", "academics-departments"),
+                "majors": ("academics-tab-majors", "academics-majors"),
+                "classes": ("academics-tab-classes", "academics-classes"),
+            }
+            target = targets.get(academics_tab)
+            if target is None:
+                return
+            button_id, panel_id = target
+            for button in academics.query("#academics-tabs Button"):
+                button.remove_class("active")
+            academics.query_one(f"#{button_id}", Button).add_class("active")
+            academics.query_one("#academics-switcher", ContentSwitcher).current = panel_id
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         pages = {
             "nav-overview": "overview-page",
@@ -452,8 +491,4 @@ class XingyuanSIS(App[None]):
         target = pages.get(event.button.id)
         if target is None:
             return
-
-        for button in self.query(".nav-item"):
-            button.remove_class("active")
-        event.button.add_class("active")
-        self.query_one("#content-switcher", ContentSwitcher).current = target
+        self.navigate_to(target, event.button.id)
