@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.events import Resize
 from textual.widgets import Button, ContentSwitcher, Footer, Static
 
 from .academics import AcademicsPage
@@ -121,12 +122,12 @@ class XingyuanSIS(App[None]):
         color: #ffaaaa;
     }
 
-    #overview {
+    #overview-page {
         padding: 2 4;
     }
 
     #overview-heading {
-        height: 5;
+        height: auto;
         margin-top: 1;
         color: #eef6ff;
         text-style: bold;
@@ -134,30 +135,32 @@ class XingyuanSIS(App[None]):
 
     #overview-subheading {
         height: auto;
-        color: #7d8997;
-        margin: 1 0;
+        color: #8995a3;
+        margin: 1 0 2 0;
     }
 
     #overview-signal {
-        height: 2;
-        color: #72c7ff;
-        margin: 0 0 2 0;
+        display: none;
     }
 
     #overview-stats {
-        height: 7;
+        layout: grid;
+        grid-size: 4 1;
+        grid-columns: 1fr;
+        grid-rows: 6;
+        grid-gutter: 1;
+        height: 6;
         margin-bottom: 2;
     }
 
     Button.stat {
-        width: 1fr;
-        min-width: 12;
+        width: 100%;
+        min-width: 0;
         height: 6;
-        margin-right: 1;
         padding: 1;
         background: #10141a;
         border: solid #252d38;
-        color: #e5edf6;
+        color: #f1f5f9;
         text-style: bold;
         content-align: left middle;
     }
@@ -450,6 +453,55 @@ class XingyuanSIS(App[None]):
                 yield GradesPage(self.service, id="grades-page")
                 yield DataPage(self.service, id="reports-page")
         yield Footer()
+
+    def on_mount(self) -> None:
+        self.query_one("#overview-heading", Static).update("星原 SIS")
+        self.query_one("#overview-subheading", Static).update("星原大学学生信息系统")
+        self._apply_responsive_layout(self.size.width)
+
+    def on_resize(self, event: Resize) -> None:
+        self._apply_responsive_layout(event.size.width)
+
+    def _apply_responsive_layout(self, width: int) -> None:
+        nav = self.query_one("#nav", Vertical)
+        overview = self.query_one("#overview-page", OverviewPage)
+        stats = self.query_one("#overview-stats", Horizontal)
+        pages = (
+            "#students-page",
+            "#academics-page",
+            "#courses-page",
+            "#grades-page",
+            "#reports-page",
+        )
+
+        stats.styles.layout = "grid"
+        stats.styles.grid_rows = "6"
+        stats.styles.grid_gutter = (1, 1)
+
+        if width < 60:
+            nav.styles.width = 10
+            overview.styles.padding = (1, 1)
+            stats.styles.grid_size_columns = 1
+            stats.styles.grid_size_rows = 4
+            stats.styles.height = 27
+            for selector in pages:
+                self.query_one(selector).styles.padding = (1, 1)
+        elif width < 96:
+            nav.styles.width = 12
+            overview.styles.padding = (1, 2)
+            stats.styles.grid_size_columns = 2
+            stats.styles.grid_size_rows = 2
+            stats.styles.height = 13
+            for selector in pages:
+                self.query_one(selector).styles.padding = (1, 2)
+        else:
+            nav.styles.width = 18
+            overview.styles.padding = (2, 4)
+            stats.styles.grid_size_columns = 4
+            stats.styles.grid_size_rows = 1
+            stats.styles.height = 6
+            for selector in pages:
+                self.query_one(selector).styles.padding = (2, 3)
 
     def navigate_to(
         self,
