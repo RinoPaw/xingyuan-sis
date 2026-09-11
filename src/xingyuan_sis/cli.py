@@ -318,10 +318,10 @@ def _run_student(service: XingyuanService, args: argparse.Namespace) -> int:
     if args.action in {"ls", "list"}:
         rows = service.list_students(args.search)
         print_table(
-            ("学号", "姓名", "班级", "专业", "主元素", "状态"),
+            ("学号", "姓名", "支系", "班级", "专业", "主元素", "状态"),
             (
                 (
-                    row["student_no"], row["name"], row["class_name"],
+                    row["student_no"], row["name"], row["branch"], row["class_name"],
                     row["major_name"], row["primary_element"], row["status"],
                 )
                 for row in rows
