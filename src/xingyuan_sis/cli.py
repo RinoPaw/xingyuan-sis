@@ -7,6 +7,7 @@ import sys
 import unicodedata
 from typing import Any, Iterable, Sequence
 
+from .terminal_input import read_input
 from .database import initialize_database
 from .seed_data import seed_demo
 from .service import XingyuanService
@@ -49,7 +50,7 @@ def _prompt(label: str, value: str | None = None, *, required: bool = False) -> 
     if value is not None:
         return value
     while True:
-        text = input(f"{label}: ").strip()
+        text = read_input(f"{label}: ").strip()
         if text or not required:
             return text or None
         print(f"{label}不能为空。")
@@ -59,7 +60,7 @@ def _prompt_int(label: str, value: int | None = None, *, required: bool = False)
     if value is not None:
         return value
     while True:
-        text = input(f"{label}: ").strip()
+        text = read_input(f"{label}: ").strip()
         if not text and not required:
             return None
         try:
@@ -72,7 +73,7 @@ def _prompt_float(label: str, value: float | None = None, *, required: bool = Fa
     if value is not None:
         return value
     while True:
-        text = input(f"{label}: ").strip()
+        text = read_input(f"{label}: ").strip()
         if not text and not required:
             return None
         try:
@@ -84,7 +85,7 @@ def _prompt_float(label: str, value: float | None = None, *, required: bool = Fa
 def _edit_prompt(label: str, current: object, *, clearable: bool = False) -> object:
     shown = "—" if current is None or current == "" else current
     suffix = "；输入 - 清空" if clearable else ""
-    raw = input(f"{label} [{shown}]（留空保持{suffix}）: ").strip()
+    raw = read_input(f"{label} [{shown}]（留空保持{suffix}）: ").strip()
     if not raw:
         return _UNCHANGED
     if clearable and raw == "-":
@@ -95,7 +96,7 @@ def _edit_prompt(label: str, current: object, *, clearable: bool = False) -> obj
 def _confirm(message: str, assume_yes: bool = False) -> bool:
     if assume_yes:
         return True
-    return input(f"{message} [y/N] ").strip().lower() in {"y", "yes"}
+    return read_input(f"{message} [y/N] ").strip().lower() in {"y", "yes"}
 
 
 _UNCHANGED = object()

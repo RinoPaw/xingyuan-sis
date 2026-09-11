@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+from dataclasses import dataclass
 import math
 import os
 from pathlib import Path
@@ -11,16 +13,18 @@ import time
 import unicodedata
 from typing import Callable, Sequence
 
+from .terminal_input import read_input
 from .terminal_ui import read_number, run_action, run_command, search_grades, search_students
 
 
 _RESET = "\x1b[0m"
 _BOLD = "\x1b[1m"
-_ACCENT = "\x1b[36m"
-_DIM = "\x1b[2m"
-_SELECTED = "\x1b[30;106m"
-_GOLD = "\x1b[93m"
-_BAR = "\x1b[37;44m"
+_ACCENT = "\x1b[38;5;110m"
+_DIM = "\x1b[38;5;245m"
+_SELECTED = "\x1b[48;5;238m\x1b[38;5;255m"
+_GOLD = "\x1b[38;5;180m"
+_BAR = "\x1b[38;5;245m"
+_SURFACE = "\x1b[48;5;235m\x1b[38;5;252m"
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 
 
@@ -64,6 +68,104 @@ def _clear() -> None:
         print("\n" * 40)
 
 
+
+@dataclass(frozen=True)
+class MouseClick:
+    x: int
+    y: int
+
+
+@dataclass(frozen=True)
+class HitRegion:
+    x: int
+    y: int
+    width: int
+    action: str
+
+
+@dataclass
+class ScreenFrame:
+    lines: list[str]
+    regions: list[HitRegion]
+
+
+def _mouse_event(sequence: bytes) -> str | MouseClick:
+    match = re.fullmatch(rb"\[<(\d+);(\d+);(\d+)([Mm])", sequence)
+    if match is None:
+        return "other"
+    button, x, y = (int(match[i]) for i in (1, 2, 3))
+    if x < 1 or y < 1:
+        return "other"
+    # Activate on release, so a pending release sequence cannot leak into
+    # the native text input opened by a click.
+    if match[4] == b"m":
+        return MouseClick(x, y) if button == 0 else "other"
+    if button == 64:
+        return "up"
+    if button == 65:
+        return "down"
+    return "other"
+
+
+@contextmanager
+def _mouse_tracking():
+    enabled = os.name != "nt" and sys.stdin.isatty() and sys.stdout.isatty()
+    if enabled:
+        sys.stdout.write("\x1b[?25l\x1b[?1000h\x1b[?1006h")
+        sys.stdout.flush()
+    try:
+        yield
+    finally:
+        if enabled:
+            sys.stdout.write("\x1b[?1000l\x1b[?1006l\x1b[?25h")
+            sys.stdout.flush()
+
+
+def _hit_action(click: MouseClick, regions: Sequence[HitRegion]) -> str | None:
+    return next((region.action for region in regions
+                 if click.y == region.y and region.x <= click.x < region.x + region.width), None)
+
+
+def _footer(width: int, buttons: Sequence[tuple[str, str, str]], row: int) -> tuple[str, list[HitRegion]]:
+    compact = sum(_display_width(button[0]) + 3 for button in buttons) > width
+    text = ""
+    regions = []
+    for long, short, action in buttons:
+        label = short if compact else long
+        shown = f" {label} "
+        if _display_width(text + shown) > width:
+            continue
+        regions.append(HitRegion(_display_width(text) + 1, row, _display_width(shown), action))
+        text += shown + " "
+    return _ansi(_pad_cells(_clip_cells(text, width), width), _BAR), regions
+
+
+def _selection_frame(title: str, items: Sequence[str], selected: int, back_label: str) -> ScreenFrame:
+    terminal = _terminal_size()
+    width, height = max(1, terminal.columns - 1), max(3, terminal.lines)
+    capacity = max(1, height - 5)
+    first = min(max(0, selected - capacity + 1), max(0, len(items) - capacity))
+    lines = [_ansi("✦ 星原 / 教务台", _BOLD + _ACCENT),
+             _ansi(f"首页 / {title}", _DIM), _ansi("─" * width, _DIM)]
+    regions = []
+    panel_width = min(width, 38 if width >= 72 else width)
+    for index in range(first, min(len(items), first + capacity)):
+        text = _pad_cells(_clip_cells(f" {'›' if index == selected else ' '} {index + 1}  {items[index]}", panel_width), panel_width)
+        regions.append(HitRegion(1, len(lines) + 1, panel_width, f"item:{index}"))
+        lines.append(_ansi(text, _SELECTED) if index == selected else text)
+    while len(lines) < height:
+        lines.append("")
+    if width >= 72 and height >= 10:
+        details = [items[selected], "", "点击菜单项或按 Enter 打开。", "方向键 / 滚轮切换选项。", "q 返回上一级。"]
+        for offset, detail in enumerate(details, start=3):
+            if offset < height - 1:
+                lines[offset] = _pad_cells(lines[offset], panel_width + 3) + _ansi(detail, _ACCENT if offset == 3 else _DIM)
+    footer, controls = _footer(width, (("↑↓/滚轮 移动", "↑↓", "down"),
+                                     ("Enter/点击 打开", "Enter", "select"),
+                                     (f"q {back_label}", f"q{back_label}", "back")), height)
+    lines[-1] = footer
+    return ScreenFrame([_clip_cells(line, width) for line in lines], regions + controls)
+
 def _read_key_windows(timeout: float | None = None) -> str | None:
     import msvcrt
 
@@ -105,13 +207,15 @@ def _plain_key(char: str) -> str:
         return "down"
     if char.lower() == "p":
         return "pause"
+    if char.lower() == "n":
+        return "next"
     return char if char in "123456789" else "other"
 
 
 def _read_escape_sequence(fd: int) -> bytes:
     """Read the bytes following ESC without going through TextIO buffering."""
     sequence = bytearray()
-    while len(sequence) < 16:
+    while len(sequence) < 64:
         ready, _, _ = select.select([fd], [], [], 0.08)
         if not ready:
             break
@@ -125,7 +229,7 @@ def _read_escape_sequence(fd: int) -> bytes:
     return bytes(sequence)
 
 
-def _read_key_posix(timeout: float | None = None) -> str | None:
+def _read_key_posix(timeout: float | None = None) -> str | MouseClick | None:
     import termios
     import tty
 
@@ -141,6 +245,8 @@ def _read_key_posix(timeout: float | None = None) -> str | None:
         char = os.read(fd, 1)
         if char == b"\x1b":
             sequence = _read_escape_sequence(fd)
+            if sequence.startswith(b"[<"):
+                return _mouse_event(sequence)
             if sequence in {b"[A", b"OA"} or (
                 sequence.startswith(b"[") and sequence.endswith(b"A")
             ):
@@ -149,6 +255,10 @@ def _read_key_posix(timeout: float | None = None) -> str | None:
                 sequence.startswith(b"[") and sequence.endswith(b"B")
             ):
                 return "down"
+            if sequence == b"[5~":
+                return "page_up"
+            if sequence == b"[6~":
+                return "page_down"
             if sequence in {b"[H", b"OH", b"[1~", b"[7~"}:
                 return "home"
             if sequence in {b"[F", b"OF", b"[4~", b"[8~"}:
@@ -159,7 +269,7 @@ def _read_key_posix(timeout: float | None = None) -> str | None:
         termios.tcsetattr(fd, termios.TCSADRAIN, previous)
 
 
-def _read_key(timeout: float | None = None) -> str | None:
+def _read_key(timeout: float | None = None) -> str | MouseClick | None:
     if os.name == "nt":
         return _read_key_windows(timeout)
     return _read_key_posix(timeout)
@@ -176,39 +286,32 @@ def _select(
     if not items:
         return None
     selected = min(max(0, selected), len(items) - 1)
-    while True:
-        _clear()
-        print(_ansi("✦ 星原 / 教务台", _BOLD + _ACCENT))
-        if title:
-            print(_ansi(f"首页 / {title}\n", _DIM))
-        else:
-            print()
-
-        for index, label in enumerate(items):
-            if index == selected:
-                print(f"{_ansi('›', _ACCENT)} {index + 1}. {_ansi(label, _BOLD)}")
-            else:
-                print(f"  {index + 1}. {label}")
-
-        back_hint = f"   Esc/q {back_label}" if allow_back else ""
-        print(_ansi("\n↑↓/j/k 移动 · Enter/Space 确定", _DIM))
-        print(_ansi(f"数字直达{back_hint}", _DIM))
-
-        key = _read_key()
-        if key == "up":
-            selected = (selected - 1) % len(items)
-        elif key == "down":
-            selected = (selected + 1) % len(items)
-        elif key == "select":
-            return selected
-        elif key == "home":
-            selected = 0
-        elif key == "end":
-            selected = len(items) - 1
-        elif key in tuple("123456789") and int(key) <= len(items):
-            return int(key) - 1
-        elif key == "back" and allow_back:
-            return None
+    previous: list[str] = []
+    with _mouse_tracking():
+        while True:
+            frame = _selection_frame(title, items, selected, back_label)
+            if frame.lines != previous:
+                _paint(frame.lines, previous)
+                previous = frame.lines
+            key = _read_key(0.15)
+            if isinstance(key, MouseClick):
+                key = _hit_action(key, frame.regions)
+                if key and key.startswith("item:"):
+                    return int(key.split(":")[1])
+            if key == "up":
+                selected = (selected - 1) % len(items)
+            elif key == "down":
+                selected = (selected + 1) % len(items)
+            elif key == "select":
+                return selected
+            elif key == "home":
+                selected = 0
+            elif key == "end":
+                selected = len(items) - 1
+            elif key in tuple("123456789") and int(key) <= len(items):
+                return int(key) - 1
+            elif key == "back" and allow_back:
+                return None
 
 
 _MODULES = (
@@ -294,7 +397,7 @@ def _orbit(width: int, height: int, angle: float, selected: int) -> list[str]:
     for dx, dy in ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)):
         point(x + dx, y + dy, 4)
 
-    styles = ("", "\x1b[34m", "\x1b[96m", _GOLD, "\x1b[97m")
+    styles = ("", "\x1b[38;5;60m", _ACCENT, _GOLD, "\x1b[38;5;252m")
     lines = []
     for row in range(height):
         # Group adjacent equal colors, avoiding an escape sequence per dot.
@@ -314,20 +417,19 @@ def _orbit(width: int, height: int, angle: float, selected: int) -> list[str]:
     return lines
 
 
-def _bottom_bar(width: int, animate: bool) -> str:
+def _home_footer(width: int, height: int, animate: bool) -> tuple[str, list[HitRegion]]:
     motion = "暂停" if animate else "播放"
-    candidates = (
-        f" ↑↓/jk 移动   Enter/Space 打开   1–5 直达   p {motion}   q/0 退出 ",
-        f" ↑↓ 移动  Enter 打开  数字直达  p {motion}  q 退出 ",
-        f" ↑↓  Enter打开  p{motion}  q退出 ",
-        f" ↑↓ Enter p{motion} q退出 ",
-        " Enter打开 q退出 ",
-    )
-    text = next((text for text in candidates if _display_width(text) <= width), candidates[-1])
-    return _ansi(_pad_cells(_clip_cells(text, width), width), _BAR)
+    return _footer(width, (("↑↓/滚轮 移动", "↑↓", "down"),
+                           ("Enter/点击 打开", "Enter", "select"),
+                           (f"p {motion}", f"p{motion}", "pause"),
+                           ("q/0 退出", "q退出", "back")), height)
 
 
-def _home_lines(
+def _bottom_bar(width: int, animate: bool) -> str:
+    return _home_footer(width, 1, animate)[0]
+
+
+def _home_frame(
     labels: Sequence[str],
     selected: int,
     stats: dict[str, object],
@@ -335,7 +437,7 @@ def _home_lines(
     *,
     animate: bool = True,
     database: str = "xingyuan.db",
-) -> list[str]:
+) -> ScreenFrame:
     terminal = _terminal_size()
     width, height = max(1, terminal.columns - 1), max(3, terminal.lines)
     title, description, actions = _MODULES[selected]
@@ -345,6 +447,27 @@ def _home_lines(
         header = _pad_cells(header, max(24, width - _display_width(database_label))) + database_label
     top = [header, _ansi("─" * width, _DIM)]
     body_height = height - len(top) - 1
+    footer, controls = _home_footer(width, height, animate)
+    regions = []
+    if width < 50 or height < 10:
+        columns = 2 if width >= 26 else 1
+        nav_rows = math.ceil(len(labels) / columns)
+        graph_height = max(0, body_height - nav_rows - 1)
+        body = [_ansi(title, _BOLD + _ACCENT), *_orbit(width, graph_height, angle, selected)] if graph_height else []
+        cell_width = width // columns
+        for row in range(nav_rows):
+            parts = []
+            for col in range(columns):
+                index = row * columns + col
+                if index >= len(labels):
+                    continue
+                number = "0" if index == len(labels) - 1 else str(index + 1)
+                text = _pad_cells(_clip_cells(f" {'›' if selected == index else ' '} {number} {labels[index]}", cell_width), cell_width)
+                parts.append(_ansi(text, _SELECTED) if selected == index else text)
+                regions.append(HitRegion(col * cell_width + 1, len(top) + len(body) + 1, cell_width, f"item:{index}"))
+            body.append("".join(parts))
+        body = (body + [""] * body_height)[:body_height]
+        return _starlight(ScreenFrame([_clip_cells(line, width) for line in [*top, *body, footer]], regions + controls), width, angle)
     nav_width = min(26, max(12, width // 3))
     graph_width = max(1, width - nav_width - 3)
     spacious = body_height >= 17 and width >= 64
@@ -353,6 +476,7 @@ def _home_lines(
         number = "0" if index == len(labels) - 1 else str(index + 1)
         text = f" {'›' if selected == index else ' '} {number}  {label}"
         text = _pad_cells(_clip_cells(text, nav_width - 1), nav_width - 1)
+        regions.append(HitRegion(1, len(top) + len(left) + 1, nav_width - 1, f"item:{index}"))
         left.append(_ansi(text, _SELECTED) if index == selected else text)
         if spacious and index < len(labels) - 1:
             left.append("")
@@ -379,15 +503,67 @@ def _home_lines(
         right_line = right[row] if row < len(right) else ""
         body.append(_pad_cells(_clip_cells(left_line, nav_width), nav_width)
                     + _ansi(" │ ", _DIM) + _clip_cells(right_line, graph_width))
-    return [_clip_cells(line, width) for line in [*top, *body, _bottom_bar(width, animate)]]
+    return _starlight(ScreenFrame([_clip_cells(line, width) for line in [*top, *body, footer]], regions + controls), width, angle)
 
 
-def _paint(lines: Sequence[str]) -> None:
+
+def _starlight(frame: ScreenFrame, width: int, phase: float) -> ScreenFrame:
+    """Sparse glints in empty space, with navigation and text kept clear."""
+    for row in range(3, len(frame.lines) - 1):
+        original = frame.lines[row]
+        plain = _ANSI_RE.sub("", original)
+        targets = {}
+        for sector in range(max(1, width // 16)):
+            seed = row * 173 + sector * 997
+            if seed % 5 != 0:
+                continue
+            x = sector * 16 + 3 + seed % 9
+            if x >= width or _hit_action(MouseClick(x + 1, row + 1), frame.regions):
+                continue
+            # Require a generous blank run; a glint must never split a label.
+            cell = 0
+            run_start = None
+            allowed = False
+            for char in plain + "x":
+                if char == " " and run_start is None:
+                    run_start = cell
+                if char != " " and run_start is not None:
+                    if run_start + 3 <= x < cell - 3:
+                        allowed = True
+                    run_start = None
+                cell += _cell_width(char)
+            if allowed:
+                glow = (math.sin(phase * 1.4 + seed) + 1) / 2
+                glyph = "✦" if glow > 0.94 else "·"
+                targets[x] = _ansi(glyph, f"\x1b[38;5;{238 + round(glow * 9)}m")
+        if targets:
+            parts, cell = [], 0
+            for token in re.split(f"({_ANSI_RE.pattern})", original):
+                if _ANSI_RE.fullmatch(token):
+                    parts.append(token)
+                    continue
+                for char in token:
+                    parts.append(targets.get(cell, char) if char == " " else char)
+                    cell += _cell_width(char)
+            frame.lines[row] = "".join(parts)
+    return frame
+
+
+def _home_lines(*args, **kwargs) -> list[str]:
+    return _home_frame(*args, **kwargs).lines
+
+
+def _paint(lines: Sequence[str], previous: Sequence[str] = ()) -> None:
     if sys.stdout.isatty():
         # Absolute row positions work even when the terminal disables ONLCR.
         # Reset BEFORE erasing, so the selection background cannot bleed.
-        frame = "".join(f"\x1b[{row};1H{_RESET}\x1b[2K{line}{_RESET}"
-                        for row, line in enumerate(lines, start=1))
+        surface = _SURFACE if os.environ.get("NO_COLOR") is None else ""
+        if len(lines) != len(previous) or max(map(_display_width, lines), default=0) != max(map(_display_width, previous), default=0):
+            previous = ()
+        frame = "".join(f"\x1b[{row};1H{_RESET}{surface}\x1b[2K"
+                        + line.replace(_RESET, _RESET + surface) + _RESET
+                        for row, line in enumerate(lines, start=1)
+                        if row > len(previous) or line != previous[row - 1])
         sys.stdout.write(frame)
         sys.stdout.flush()
         return
@@ -413,44 +589,56 @@ def _home(
         sys.stdout.flush()
 
     try:
-        while True:
-            animate = preferences.get("animate", True)
-            if animate:
-                angle = time.monotonic() * 0.85
-            lines = _home_lines(labels, selected, stats, angle, animate=animate,
-                                database=Path(db_path).name if db_path else "xingyuan.db")
-            if lines != previous_lines:
-                _paint(lines)
-                previous_lines = lines
-            key = _read_key(0.08 if animate else 0.5)
-            if key == "up":
-                selected = (selected - 1) % len(labels)
-            elif key == "down":
-                selected = (selected + 1) % len(labels)
-            elif key == "select":
-                return selected
-            elif key == "home":
-                selected = 0
-            elif key == "end":
-                selected = len(labels) - 1
-            elif key in tuple("123456789") and int(key) <= len(labels):
-                return int(key) - 1
-            elif key == "pause":
-                preferences["animate"] = not animate
-            elif key == "back":
-                return None
+        with _mouse_tracking():
+            return _home_loop(labels, stats, db_path, selected, preferences, angle, previous_lines)
     finally:
         if sys.stdout.isatty():
             sys.stdout.write("\x1b[?25h")
             sys.stdout.flush()
 
 
+def _home_loop(
+    labels: Sequence[str], stats: dict[str, object], db_path: Path | str | None,
+    selected: int, preferences: dict[str, bool], angle: float, previous_lines: list[str],
+) -> int | None:
+    while True:
+        animate = preferences.get("animate", True)
+        if animate:
+            angle = time.monotonic() * 0.85
+        frame = _home_frame(labels, selected, stats, angle, animate=animate,
+                            database=Path(db_path).name if db_path else "xingyuan.db")
+        lines = frame.lines
+        if lines != previous_lines:
+            _paint(lines, previous_lines)
+            previous_lines = lines
+        key = _read_key(0.08 if animate else 0.15)
+        if isinstance(key, MouseClick):
+            key = _hit_action(key, frame.regions)
+            if key and key.startswith("item:"):
+                return int(key.split(":")[1])
+        if key == "up":
+            selected = (selected - 1) % len(labels)
+        elif key == "down":
+            selected = (selected + 1) % len(labels)
+        elif key == "select":
+            return selected
+        elif key == "home":
+            selected = 0
+        elif key == "end":
+            selected = len(labels) - 1
+        elif key in tuple("123456789") and int(key) <= len(labels):
+            return int(key) - 1
+        elif key == "pause":
+            preferences["animate"] = not animate
+        elif key == "back":
+            return None
+
 def _read(label: str) -> str:
-    return input(f"{label}: ").strip()
+    return read_input(f"{label}: ").strip()
 
 
 def _command(db_path: Path | str | None, argv: list[str]) -> None:
-    run_command(db_path, argv, _clear)
+    run_command(db_path, argv, _clear, interactive=True)
 
 
 def _menu(title: str, items: Sequence[tuple[str, Callable[[], None]]]) -> None:
@@ -463,7 +651,7 @@ def _menu(title: str, items: Sequence[tuple[str, Callable[[], None]]]) -> None:
         if choice is None:
             return
         selected = choice
-        run_action(items[choice][1], _clear)
+        run_action(items[choice][1], _clear, interactive=True, title=f"{title} / {items[choice][0]}")
 
 
 def _students(db_path: Path | str | None) -> None:
@@ -668,6 +856,6 @@ def run(db_path: Path | str | None = None) -> None:
                 _clear()
                 return
             selected = choice
-            run_action(actions[choice], _clear)
+            run_action(actions[choice], _clear, interactive=True, title=labels[choice])
     except (KeyboardInterrupt, EOFError):
         print("\n已退出星原 SIS。")

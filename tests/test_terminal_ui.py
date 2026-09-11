@@ -71,14 +71,15 @@ class KeyboardMenuTests(unittest.TestCase):
             os.environ.pop("NO_COLOR", None)
             highlighted = menu._ansi("学生档案      ", menu._SELECTED)
             clipped = menu._clip_cells(highlighted, 6)
-        self.assertIn("\x1b[30;106m", clipped)
+        self.assertIn("\x1b[48;5;238m", clipped)
         self.assertTrue(clipped.endswith(menu._RESET))
         self.assertEqual(menu._display_width(clipped), 5)
         self.assertNotIn(";7m", highlighted)
         self.assertEqual(menu._display_width("e\u0301学生"), 5)
 
     def test_paint_clears_old_background_and_never_uses_newlines(self) -> None:
-        with redirect_stdout(StringIO()) as output, patch("sys.stdout.isatty", return_value=True):
+        with redirect_stdout(StringIO()) as output, patch("sys.stdout.isatty", return_value=True), \
+             patch.dict(os.environ, {"NO_COLOR": "1"}):
             menu._paint(["one", "two"])
         self.assertEqual(output.getvalue(),
                          "\x1b[1;1H\x1b[0m\x1b[2Kone\x1b[0m"
