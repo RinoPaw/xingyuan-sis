@@ -26,6 +26,8 @@ class SeedDataTests(unittest.TestCase):
         self.assertEqual(result.departments, 4)
         self.assertEqual(result.majors, 10)
         self.assertEqual(result.classes, 26)
+        self.assertEqual(result.species_families, 32)
+        self.assertEqual(result.species_branches, 70)
         self.assertEqual(result.students, 100)
         self.assertEqual(result.courses, 20)
         self.assertEqual(result.enrollments, 400)
