@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 from typing import Any, Sequence
 
+from ..auth import reset_student_password
 from ..csv_io import STUDENT_FIELDS
 from ..service import XingyuanService
 from ..student_filters import StudentListRecord, query_students
@@ -154,7 +155,18 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
             student_no=str(student_no), name=str(name), family=str(family), branch=str(branch),
             enrollment_year=int(year), **optional,
         )
+        initial_password = reset_student_password(service.db_path, str(student_no))
         print(f"✓ 已创建 {name} ({student_no})")
+        print(f"初始密码：{initial_password}")
+        print("首次登录必须修改密码")
+        return 0
+
+    if args.action == "reset-password":
+        row = _student(service, args.student_no)
+        initial_password = reset_student_password(service.db_path, args.student_no)
+        print(f"✓ 已重置 {row['name']} ({row['student_no']}) 的登录密码")
+        print(f"初始密码：{initial_password}")
+        print("首次登录必须修改密码")
         return 0
 
     if args.action == "edit":
