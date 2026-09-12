@@ -32,7 +32,8 @@ def _menu(
     notice = ""
     while True:
         _clear()
-        print(f"✦ 星原 / 教务台\n首页 / {title}\n")
+        path = "首页" if title == "首页" else f"首页 / {title}"
+        print(f"✦ 星原 / 教务台\n{path}\n")
         for key, label, _ in items:
             print(f"{key}. {label}")
         print(f"0. {back_label}")
@@ -237,7 +238,7 @@ def _data(db_path: Path | str | None) -> None:
 
 def run(db_path: Path | str | None = None) -> None:
     try:
-        _menu("工作区", [
+        _menu("首页", [
             ("1", "学生", lambda: _students(db_path)),
             ("2", "教务", lambda: _academics(db_path)),
             ("3", "课程", lambda: _courses(db_path)),

@@ -231,7 +231,7 @@ class XingyuanService:
             notes=notes,
         )
 
-    def update_student_by_no(self, student_no: str, **values: Any) -> None:
+    def update_student_by_no(self, student_no: str, /, **values: Any) -> None:
         row = self._require(self.student_by_no(student_no), f"找不到学生：{student_no}")
         if "class_code" in values:
             class_code = values.pop("class_code")
@@ -274,7 +274,7 @@ class XingyuanService:
             hours,
         )
 
-    def update_course_by_code(self, course_code: str, **values: Any) -> None:
+    def update_course_by_code(self, course_code: str, /, **values: Any) -> None:
         row = self._require(self.course_by_code(course_code), f"找不到课程：{course_code}")
         current = dict(row)
         if "department_code" in values:
