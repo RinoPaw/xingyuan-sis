@@ -9,6 +9,7 @@ from . import screen, animation
 _BUTTON = "\x1b[48;5;237m\x1b[38;5;252m"
 _BAR_SURFACE = "\x1b[48;5;236m\x1b[38;5;250m"
 _TOPBAR = "\x1b[48;5;234m\x1b[38;5;110m\x1b[1m"
+_SECTION_HEADING = "\x1b[38;5;252m\x1b[1m"
 
 
 def bar_space(count: int) -> str:
@@ -184,7 +185,7 @@ def home_frame(
 
     for line in (
         "",
-        screen._ansi("校园概览", screen._DIM),
+        screen._ansi("校园概览", _SECTION_HEADING),
         overview_row("学生", stats.get("students", 0), "班级", stats.get("classes", 0)),
         overview_row("课程", stats.get("courses", 0), "选课", stats.get("enrollments", 0)),
     ):
