@@ -22,6 +22,20 @@ def button(label: str, *, selected: bool = False, width: int | None = None) -> s
     return screen._ansi(shown, screen._SELECTED if selected else _BUTTON)
 
 
+def nav_item(label: str, *, selected: bool = False, width: int | None = None) -> str:
+    """Render a lightweight home navigation row.
+
+    Only the active item gets a marker and accent; inactive rows stay plain so
+    the sidebar reads as navigation rather than a wall of buttons.
+    """
+    shown = f"{'▌' if selected else ' '} {label}"
+    if width is not None:
+        shown = screen._pad_cells(screen._clip_cells(shown, width), width)
+    if selected:
+        return screen._ansi(shown, screen._BOLD + screen._ACCENT)
+    return shown
+
+
 def topbar(width: int, *, database: str | None = None) -> str:
     left = "✦ 星原 / 教务台"
     right = f"LOCAL / {database}" if database else ""
@@ -125,7 +139,7 @@ def home_frame(
                     continue
                 number = "0" if index == len(labels) - 1 else str(index + 1)
                 parts.append(
-                    button(f"{number} {labels[index]}", selected=index == selected, width=cell_width)
+                    nav_item(f"{number} {labels[index]}", selected=index == selected, width=cell_width)
                 )
                 regions.append(
                     screen.HitRegion(col * cell_width + 1, screen_row, cell_width, f"item:{index}")
@@ -146,7 +160,7 @@ def home_frame(
     # made Termux visibly jump as the IME changed the reported line count.
     for index, label in enumerate(labels):
         number = "0" if index == len(labels) - 1 else str(index + 1)
-        line = button(f"{number} {label}", selected=index == selected, width=nav_width)
+        line = nav_item(f"{number} {label}", selected=index == selected, width=nav_width)
         regions.append(screen.HitRegion(1, len(top) + len(left) + 1, nav_width, f"item:{index}"))
         left.append(line)
 
