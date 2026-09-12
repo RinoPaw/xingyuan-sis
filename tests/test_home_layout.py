@@ -36,12 +36,13 @@ class HomeLayoutTests(unittest.TestCase):
         self.assertNotIn("滚轮", footer)
         self.assertNotIn("点击", footer)
 
-    def test_compact_footer_keeps_action_meaning(self):
-        footer = self.plain(self.render((65, 36)).lines[-1])
-        for hint in ("↑↓移动", "Enter打开", "p暂停动画", "Esc退出"):
+        paused = self.plain(self.render((120, 36), animate=False).lines[-1])
+        self.assertIn("p 播放动画", paused)
+
+    def test_minimum_footer_keeps_all_essential_keys(self):
+        footer = self.plain(self.render((30, 12)).lines[-1])
+        for hint in ("↑↓", "↵", "p", "Esc退"):
             self.assertIn(hint, footer)
-        paused = self.plain(self.render((65, 36), animate=False).lines[-1])
-        self.assertIn("p播放动画", paused)
 
 
 if __name__ == "__main__":
