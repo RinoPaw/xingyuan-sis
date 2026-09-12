@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+import time
 from typing import Mapping
 
 from ..auth import (
@@ -137,6 +138,7 @@ def frame(
     active: str = "",
     message: str = "",
     database: str = "xingyuan.db",
+    phase: float = 0.35,
 ) -> screen.ScreenFrame:
     """Render an authentication page without reading input."""
     terminal = screen._terminal_size()
@@ -196,7 +198,7 @@ def frame(
     if message and message_row < height - 1:
         board.put(left, message_row, message, screen._TEXT_ACCENT, width=field_width)
 
-    return animation._starlight(board.frame(), width, 0.35, protected_cells)
+    return animation._starlight(board.frame(), width, phase, protected_cells)
 
 
 def _initialize_admin(db_path: Path | str | None) -> bool:
@@ -239,9 +241,6 @@ def _read_field(
     database: str,
     message: str,
 ) -> str | None:
-    rendered = frame(mode, values, active=key, message=message, database=database)
-    screen._paint(rendered.lines)
-
     width, height = max(1, screen._terminal_size().columns - 1), max(5, screen._terminal_size().lines)
     fields = _fields(mode)
     left, top, field_width = _layout(width, height, len(fields))
@@ -251,12 +250,38 @@ def _read_field(
     box_width = max(4, field_width - label_width - 2)
     prompt = " " * max(0, left - 2) + screen._pad_cells(label, label_width) + "  "
 
+    rendered = frame(
+        mode, values, active=key, message=message, database=database, phase=_phase()
+    )
+    screen._paint(rendered.lines)
+    previous_lines = rendered.lines
+
+    def refresh(current: str) -> None:
+        nonlocal previous_lines
+        current_values = dict(values)
+        current_values[key] = current
+        animated = frame(
+            mode,
+            current_values,
+            active=key,
+            message=message,
+            database=database,
+            phase=_phase(),
+        )
+        screen._paint(animated.lines, previous_lines)
+        previous_lines = animated.lines
+        _move_cursor_to_row(row)
+
     try:
-        if sys.stdout.isatty():
-            sys.stdout.write(f"\x1b[{row + 1};1H{screen._RESET}{screen._SURFACE}\x1b[2K")
-            sys.stdout.flush()
+        _move_cursor_to_row(row)
         with input_style(True):
-            return read_input(prompt, secret=secret, field_width=box_width)
+            return read_input(
+                prompt,
+                secret=secret,
+                field_width=box_width,
+                on_idle=refresh,
+                idle_interval=animation._SPARKLE_FRAME,
+            )
     except (KeyboardInterrupt, EOFError):
         return None
 
@@ -268,15 +293,30 @@ def _wait_message(
     *,
     database: str,
 ) -> None:
-    rendered = frame(mode, values, message=message, database=database)
-    screen._paint(rendered.lines)
+    previous_lines: list[str] = []
     while True:
+        rendered = frame(
+            mode, values, message=message, database=database, phase=_phase()
+        )
+        screen._paint(rendered.lines, previous_lines)
+        previous_lines = rendered.lines
         try:
-            key = keys._read_key()
+            key = keys._read_key(animation._SPARKLE_FRAME)
         except (KeyboardInterrupt, EOFError):
             return
         if key in {"select", "back"}:
             return
+
+
+def _move_cursor_to_row(row: int) -> None:
+    if not sys.stdout.isatty():
+        return
+    sys.stdout.write(f"\x1b[{row + 1};1H{screen._RESET}{screen._SURFACE}\x1b[2K")
+    sys.stdout.flush()
+
+
+def _phase() -> float:
+    return time.monotonic() * 0.85
 
 
 def _fields(mode: str) -> tuple[tuple[str, str, bool, bool], ...]:
