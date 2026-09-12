@@ -1,40 +1,106 @@
 from __future__ import annotations
 
 import argparse
-from typing import Any
+from contextlib import redirect_stdout
+import csv
+from pathlib import Path
+import sys
+from typing import Any, Sequence
 
+from ..csv_io import STUDENT_FIELDS
 from ..service import XingyuanService
+from ..student_filters import StudentListRecord, query_students
 from .common import UNCHANGED, confirm, edit_prompt, print_fields, print_table, prompt, prompt_int
 
 
-def _student_class_code(service: XingyuanService, student: Any) -> str | None:
-    class_id = student["class_id"]
-    if class_id is None:
-        return None
-    row = next(
-        (row for row in service.list_classes() if int(row["id"]) == int(class_id)),
-        None,
+def _student(service: XingyuanService, student_no: str):
+    row = service.student_by_no(student_no)
+    if row is None:
+        raise ValueError(f"找不到学生：{student_no}")
+    return row
+
+
+def _csv_row(row: StudentListRecord) -> dict[str, object | None]:
+    return {
+        "student_no": row.student_no,
+        "name": row.name,
+        "family": row.family,
+        "branch": row.branch,
+        "gender": row.gender,
+        "birth_date": row.birth_date,
+        "enrollment_year": row.enrollment_year,
+        "class_code": row.class_code,
+        "status": row.status,
+        "primary_element": row.primary_element,
+        "primary_affinity": row.primary_affinity,
+        "contact": row.contact,
+        "dormitory": row.dormitory,
+        "notes": row.notes,
+    }
+
+
+def _print_student_table(rows: Sequence[StudentListRecord]) -> None:
+    print_table(
+        ("学号", "姓名", "支系", "班级", "专业", "主元素", "状态"),
+        (
+            (
+                row.student_no,
+                row.name,
+                row.branch,
+                row.class_name,
+                row.major_name,
+                row.primary_element,
+                row.status,
+            )
+            for row in rows
+        ),
     )
-    return None if row is None else str(row["code"])
+
+
+def _write_students(rows: Sequence[StudentListRecord], format_: str, output: Path | None) -> None:
+    if format_ == "csv":
+        if output is None:
+            writer = csv.DictWriter(sys.stdout, fieldnames=STUDENT_FIELDS, lineterminator="\n")
+            writer.writeheader()
+            writer.writerows(_csv_row(row) for row in rows)
+            return
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with output.open("w", encoding="utf-8-sig", newline="") as file:
+            writer = csv.DictWriter(file, fieldnames=STUDENT_FIELDS)
+            writer.writeheader()
+            writer.writerows(_csv_row(row) for row in rows)
+        return
+
+    if output is None:
+        _print_student_table(rows)
+        return
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("w", encoding="utf-8", newline="") as file, redirect_stdout(file):
+        _print_student_table(rows)
 
 
 def run(service: XingyuanService, args: argparse.Namespace) -> int:
     if args.action in {"ls", "list"}:
-        rows = service.list_students(args.search)
-        print_table(
-            ("学号", "姓名", "支系", "班级", "专业", "主元素", "状态"),
-            (
-                (
-                    row["student_no"], row["name"], row["branch"], row["class_name"],
-                    row["major_name"], row["primary_element"], row["status"],
-                )
-                for row in rows
-            ),
+        rows = query_students(
+            service,
+            search=args.search,
+            student_nos=args.student_nos,
+            names=args.names,
+            families=args.families,
+            branches=args.branches,
+            class_codes=args.class_codes,
+            major_codes=args.major_codes,
+            college_codes=args.college_codes,
+            years=args.years,
+            statuses=args.statuses,
+            elements=args.elements,
+            affinities=args.affinities,
         )
+        _write_students(rows, args.format, args.output)
         return 0
 
     if args.action == "show":
-        row = service._require(service.student_by_no(args.student_no), f"找不到学生：{args.student_no}")
+        row = _student(service, args.student_no)
         print_fields(
             (
                 ("学号", row["student_no"]), ("姓名", row["name"]),
@@ -47,7 +113,7 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
                 ("备注", row["notes"]),
             )
         )
-        grades = [r for r in service.list_enrollments() if r["student_no"] == args.student_no]
+        grades = service.enrollments_for_student(args.student_no)
         if grades:
             print("\n课程与成绩")
             print_table(
@@ -92,7 +158,7 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
         return 0
 
     if args.action == "edit":
-        row = service._require(service.student_by_no(args.student_no), f"找不到学生：{args.student_no}")
+        row = _student(service, args.student_no)
         values: dict[str, Any] = {}
         mapping = {
             "student_no": args.new_student_no,
@@ -116,14 +182,13 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
             values["class_code"] = None
 
         if not values:
-            current_class = _student_class_code(service, row)
             fields = (
                 ("student_no", "学号", row["student_no"], False),
                 ("name", "姓名", row["name"], False),
                 ("family", "族系", row["family"], False),
                 ("branch", "支系", row["branch"], False),
                 ("enrollment_year", "入学年份", row["enrollment_year"], False),
-                ("class_code", "班级编号", current_class, True),
+                ("class_code", "班级编号", row["class_code"], True),
                 ("gender", "性别", row["gender"], True),
                 ("birth_date", "出生日期", row["birth_date"], True),
                 ("status", "状态", row["status"], False),
@@ -146,7 +211,7 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
         return 0
 
     if args.action in {"rm", "remove", "delete"}:
-        row = service._require(service.student_by_no(args.student_no), f"找不到学生：{args.student_no}")
+        row = _student(service, args.student_no)
         if not confirm(f"删除 {row['name']} ({row['student_no']})？", args.yes):
             print("已取消。")
             return 0
