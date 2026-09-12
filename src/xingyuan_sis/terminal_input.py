@@ -106,6 +106,21 @@ def _redraw_line(
     sys.stdout.flush()
 
 
+def _refresh_idle(on_idle: Callable[[str], None], value: str, redraw: Callable[[], None]) -> None:
+    """Refresh an animated surface without exposing intermediate cursor moves."""
+    hide_cursor = sys.stdout.isatty()
+    if hide_cursor:
+        sys.stdout.write("\x1b[?25l")
+        sys.stdout.flush()
+    try:
+        on_idle(value)
+        redraw()
+    finally:
+        if hide_cursor:
+            sys.stdout.write("\x1b[?25h")
+            sys.stdout.flush()
+
+
 def _read_escape_sequence(fd: int) -> bytes:
     sequence = bytearray()
     while len(sequence) < 32:
@@ -180,10 +195,17 @@ def _read_line_posix(
             if on_idle is not None:
                 ready, _, _ = select.select([fd], [], [], max(0.01, idle_interval))
                 if not ready:
-                    on_idle("".join(chars))
-                    _redraw_line(
-                        prompt, chars, cursor,
-                        colored=colored, secret=secret, field_width=field_width,
+                    _refresh_idle(
+                        on_idle,
+                        "".join(chars),
+                        lambda: _redraw_line(
+                            prompt,
+                            chars,
+                            cursor,
+                            colored=colored,
+                            secret=secret,
+                            field_width=field_width,
+                        ),
                     )
                     continue
             raw = os.read(fd, 1)
@@ -272,10 +294,17 @@ def _read_line_windows(
             while not msvcrt.kbhit():
                 now = time.monotonic()
                 if now >= next_idle:
-                    on_idle("".join(chars))
-                    _redraw_line(
-                        prompt, chars, cursor,
-                        colored=colored, secret=secret, field_width=field_width,
+                    _refresh_idle(
+                        on_idle,
+                        "".join(chars),
+                        lambda: _redraw_line(
+                            prompt,
+                            chars,
+                            cursor,
+                            colored=colored,
+                            secret=secret,
+                            field_width=field_width,
+                        ),
                     )
                     next_idle = now + max(0.01, idle_interval)
                 time.sleep(min(0.01, max(0.0, next_idle - now)))
