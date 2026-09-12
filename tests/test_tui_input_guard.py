@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from xingyuan_sis import terminal_input
 from xingyuan_sis import tui
-from xingyuan_sis.tui import auth_view, screen
+from xingyuan_sis.tui import animation, auth_view, screen
 
 
 class TuiInputGuardTests(unittest.TestCase):
@@ -58,6 +58,30 @@ class TuiInputGuardTests(unittest.TestCase):
             )
         self.assertIsNone(value)
         self.assertTrue(read.call_args.kwargs["secret"])
+
+    def test_auth_field_repaints_animation_while_input_is_idle(self):
+        def fake_read(_prompt, **kwargs):
+            kwargs["on_idle"]("abc")
+            return "abc"
+
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 24))), \
+             patch.object(screen, "_paint") as paint, patch("sys.stdout.isatty", return_value=False), \
+             patch.object(auth_view, "_phase", side_effect=[0.0, 2.0]), \
+             patch.object(auth_view, "read_input", side_effect=fake_read) as read:
+            value = auth_view._read_field(
+                "login",
+                {"username": "", "password": ""},
+                "password",
+                "密码",
+                secret=True,
+                database="test.db",
+                message="",
+            )
+
+        self.assertEqual(value, "abc")
+        self.assertGreaterEqual(paint.call_count, 2)
+        self.assertIsNotNone(read.call_args.kwargs["on_idle"])
+        self.assertEqual(read.call_args.kwargs["idle_interval"], animation._SPARKLE_FRAME)
 
 
 if __name__ == "__main__":
