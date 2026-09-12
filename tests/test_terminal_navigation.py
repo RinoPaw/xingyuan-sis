@@ -39,16 +39,13 @@ class BreadcrumbTests(unittest.TestCase):
                                  ([] if width < 4 else ["navigate:"] if width < 11
                                   else ["navigate:", "navigate:教务"]))
 
-
-
-
     def test_query_titles_include_academic_entity(self):
         for entity, label in (("college", "学院"), ("major", "专业"), ("class", "班级")):
             self.assertEqual(terminal_ui._command_title(["acad", entity, "ls"]), f"教务 / {label} / 列表")
 
 
 class TerminalSurfaceTests(unittest.TestCase):
-    def test_screen_and_background_are_restored_on_exit_or_failure(self):
+    def test_screen_is_restored_on_exit_or_failure_without_mutating_terminal_palette(self):
         for failure in (None, KeyboardInterrupt, EOFError, RuntimeError):
             with self.subTest(failure=failure), redirect_stdout(StringIO()) as output, \
                  patch("sys.stdout.isatty", return_value=True), patch("sys.stdin.isatty", return_value=True), \
@@ -59,8 +56,11 @@ class TerminalSurfaceTests(unittest.TestCase):
                         menu.run()
                 else:
                     menu.run()
-            self.assertIn("\x1b[?1049h\x1b]11;#262626\x1b\\", output.getvalue())
-            self.assertTrue(output.getvalue().endswith("\x1b[0m\x1b]111\x1b\\\x1b[?1049l\x1b[?25h"))
+            rendered = output.getvalue()
+            self.assertIn("\x1b[?1049h", rendered)
+            self.assertTrue(rendered.endswith("\x1b[0m\x1b[?1049l\x1b[?25h"))
+            self.assertNotIn("\x1b]11;", rendered)
+            self.assertNotIn("\x1b]111", rendered)
 
     def test_no_color_does_not_change_terminal_palette(self):
         with redirect_stdout(StringIO()) as output, patch("sys.stdout.isatty", return_value=True), \
