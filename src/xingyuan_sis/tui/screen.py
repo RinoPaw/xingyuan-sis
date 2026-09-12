@@ -29,8 +29,10 @@ _SELECTED = "\x1b[48;5;238m\x1b[38;5;255m"
 _GOLD = "\x1b[38;5;180m"
 
 
+# Keep the host terminal background aligned with the surrounding window frame,
+# while the application itself retains its original dark page surface.
 _TERMINAL_BG = "#666769"
-_SURFACE = "\x1b[48;2;102;103;105m\x1b[38;5;252m"
+_SURFACE = "\x1b[48;5;235m\x1b[38;5;252m"
 
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
