@@ -7,15 +7,10 @@ from typing import Any
 from .csv_io import ImportResult, export_students_csv, import_students_csv
 from .reports import summary
 from .repository import Repository
-from .species import SpeciesBranch, parse_species_branch
 
 
 class XingyuanService:
-    """Application-facing operations shared by CLI, TUI and the basic UI.
-
-    Frontends should prefer business identifiers such as student numbers and
-    course / class codes. Database ids are resolved here and stay internal.
-    """
+    """Application-facing operations shared by CLI, TUI and the basic UI."""
 
     def __init__(self, db_path: Path | str | None = None) -> None:
         self.repository = Repository(db_path)
@@ -25,8 +20,6 @@ class XingyuanService:
         return self.repository.db_path
 
     def __getattr__(self, name: str) -> Any:
-        # Compatibility path for TUI pages that still use repository-style
-        # methods. New code should prefer the higher-level methods below.
         return getattr(self.repository, name)
 
     # ----- lookup helpers -------------------------------------------------
@@ -62,6 +55,30 @@ class XingyuanService:
         key = major_code.strip()
         return next(
             (row for row in self.repository.list_majors() if row["code"] == key),
+            None,
+        )
+
+    def species_family_by_name(self, name: str) -> sqlite3.Row | None:
+        key = name.strip()
+        return next(
+            (row for row in self.repository.list_species_families() if row["name"] == key),
+            None,
+        )
+
+    def species_branch_by_name(
+        self,
+        branch: str,
+        family: str | None = None,
+    ) -> sqlite3.Row | None:
+        branch_key = branch.strip()
+        family_key = None if family is None else family.strip()
+        return next(
+            (
+                row
+                for row in self.repository.list_species_branches()
+                if row["name"] == branch_key
+                and (family_key is None or row["family_name"] == family_key)
+            ),
             None,
         )
 
@@ -156,12 +173,7 @@ class XingyuanService:
         enrollment_year: int,
     ) -> int:
         major = self._require(self.major_by_code(major_code), f"找不到专业：{major_code}")
-        return self.repository.add_class(
-            code,
-            name,
-            int(major["id"]),
-            enrollment_year,
-        )
+        return self.repository.add_class(code, name, int(major["id"]), enrollment_year)
 
     def update_class_by_code(
         self,
@@ -189,6 +201,52 @@ class XingyuanService:
         row = self._require(self.class_by_code(code), f"找不到班级：{code}")
         self.repository.delete_class(int(row["id"]))
 
+    # ----- species --------------------------------------------------------
+    def create_species_family(self, *, name: str) -> int:
+        return self.repository.add_species_family(name)
+
+    def update_species_family_by_name(self, name: str, *, new_name: str) -> None:
+        row = self._require(self.species_family_by_name(name), f"找不到族系：{name}")
+        self.repository.update_species_family(int(row["id"]), new_name)
+
+    def delete_species_family_by_name(self, name: str) -> None:
+        row = self._require(self.species_family_by_name(name), f"找不到族系：{name}")
+        self.repository.delete_species_family(int(row["id"]))
+
+    def create_species_branch(self, *, name: str, family: str) -> int:
+        family_row = self._require(self.species_family_by_name(family), f"找不到族系：{family}")
+        return self.repository.add_species_branch(name, int(family_row["id"]))
+
+    def update_species_branch_by_name(
+        self,
+        name: str,
+        *,
+        family: str,
+        new_name: str | None = None,
+        new_family: str | None = None,
+    ) -> None:
+        row = self._require(
+            self.species_branch_by_name(name, family),
+            f"找不到支系：{family} · {name}",
+        )
+        target_family = new_family if new_family is not None else family
+        family_row = self._require(
+            self.species_family_by_name(target_family),
+            f"找不到族系：{target_family}",
+        )
+        self.repository.update_species_branch(
+            int(row["id"]),
+            new_name if new_name is not None else str(row["name"]),
+            int(family_row["id"]),
+        )
+
+    def delete_species_branch_by_name(self, name: str, *, family: str) -> None:
+        row = self._require(
+            self.species_branch_by_name(name, family),
+            f"找不到支系：{family} · {name}",
+        )
+        self.repository.delete_species_branch(int(row["id"]))
+
     # ----- students -------------------------------------------------------
     def create_student(
         self,
@@ -196,7 +254,7 @@ class XingyuanService:
         student_no: str,
         name: str,
         family: str,
-        branch: SpeciesBranch | str,
+        branch: str,
         enrollment_year: int,
         class_code: str | None = None,
         gender: str | None = None,
@@ -208,19 +266,18 @@ class XingyuanService:
         dormitory: str | None = None,
         notes: str | None = None,
     ) -> int:
+        species = self._require(
+            self.species_branch_by_name(branch, family),
+            f"找不到种族支系：{family} · {branch}",
+        )
         class_id = None
         if class_code:
-            row = self._require(
-                self.class_by_code(class_code),
-                f"找不到班级：{class_code}",
-            )
+            row = self._require(self.class_by_code(class_code), f"找不到班级：{class_code}")
             class_id = int(row["id"])
-        branch_value = parse_species_branch(branch).value
         return self.repository.add_student(
             student_no=student_no,
             name=name,
-            family=family,
-            branch=branch_value,
+            species_branch_id=int(species["id"]),
             enrollment_year=enrollment_year,
             gender=gender,
             birth_date=birth_date,
@@ -235,8 +292,16 @@ class XingyuanService:
 
     def update_student_by_no(self, student_no: str, /, **values: Any) -> None:
         row = self._require(self.student_by_no(student_no), f"找不到学生：{student_no}")
-        if "branch" in values:
-            values["branch"] = parse_species_branch(values["branch"]).value
+
+        if "family" in values or "branch" in values:
+            family = str(values.pop("family", row["family"]))
+            branch = str(values.pop("branch", row["branch"]))
+            species = self._require(
+                self.species_branch_by_name(branch, family),
+                f"找不到种族支系：{family} · {branch}",
+            )
+            values["species_branch_id"] = int(species["id"])
+
         if "class_code" in values:
             class_code = values.pop("class_code")
             if class_code:
@@ -247,6 +312,7 @@ class XingyuanService:
                 values["class_id"] = int(class_row["id"])
             else:
                 values["class_id"] = None
+
         self.repository.update_student(int(row["id"]), **values)
 
     def delete_student_by_no(self, student_no: str) -> None:
@@ -270,13 +336,7 @@ class XingyuanService:
                 f"找不到学院：{department_code}",
             )
             department_id = int(row["id"])
-        return self.repository.add_course(
-            course_code,
-            name,
-            department_id,
-            credits,
-            hours,
-        )
+        return self.repository.add_course(course_code, name, department_id, credits, hours)
 
     def update_course_by_code(self, course_code: str, /, **values: Any) -> None:
         row = self._require(self.course_by_code(course_code), f"找不到课程：{course_code}")
@@ -317,10 +377,7 @@ class XingyuanService:
         student = self._require(self.student_by_no(student_no), f"找不到学生：{student_no}")
         course = self._require(self.course_by_code(course_code), f"找不到课程：{course_code}")
         return self.repository.add_enrollment(
-            int(student["id"]),
-            int(course["id"]),
-            semester,
-            score,
+            int(student["id"]), int(course["id"]), semester, score
         )
 
     def update_grade(
@@ -337,9 +394,7 @@ class XingyuanService:
             "找不到这条选课记录",
         )
         self.repository.update_enrollment(
-            int(row["id"]),
-            (new_semester or semester).strip(),
-            score,
+            int(row["id"]), (new_semester or semester).strip(), score
         )
 
     def delete_grade(self, *, student_no: str, course_code: str, semester: str) -> None:
