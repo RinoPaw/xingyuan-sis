@@ -295,7 +295,7 @@ def _copy(mode: str) -> tuple[str, str]:
     if mode == "initialize":
         return "首次初始化", "创建唯一管理员 Administrator"
     if mode == "login":
-        return "欢迎回来", "使用管理员账号或学生学号登录"
+        return "登录星原", "使用管理员账号或学生学号登录"
     if mode == "forced-password":
         return "首次登录 · 修改密码", "设置新密码后即可进入星原 SIS"
     return "个人中心 · 修改密码", "更新当前账户的登录密码"
