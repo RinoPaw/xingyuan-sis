@@ -72,17 +72,20 @@ def footer(
     row: int,
 ) -> tuple[str, list[screen.HitRegion]]:
     def labels(use_short: bool) -> list[tuple[str, str]]:
-        return [
-            (f"[ {short if use_short else long} ]", action)
-            for long, short, action in buttons
-        ]
+        result: list[tuple[str, str]] = []
+        for long, short, action in buttons:
+            # Back/cancel has one universal visible hint. Legacy q/0 aliases
+            # can remain functional without competing for UI space.
+            label = "Esc" if action in {"back", "cancel"} else (short if use_short else long)
+            result.append((f"[ {label} ]", action))
+        return result
 
     chosen = labels(False)
     minimum = sum(screen._display_width(text) for text, _ in chosen) + max(0, len(chosen) - 1)
     if minimum > width:
         chosen = labels(True)
 
-    # Keep the exit control when an unusually narrow terminal cannot fit
+    # Keep the escape control when an unusually narrow terminal cannot fit
     # every compact button. Drop optional middle controls first.
     while chosen and (
         sum(screen._display_width(text) for text, _ in chosen) + max(0, len(chosen) - 1) > width
@@ -236,4 +239,4 @@ def home_footer(width: int, height: int, animate: bool) -> tuple[str, list[scree
     return footer(width, (("↑↓/滚轮 移动", "↑↓", "down"),
                            ("Enter/点击 打开", "↵", "select"),
                            (f"p {motion}", "p", "pause"),
-                           ("q/0 退出", "q/0", "back")), height)
+                           ("Esc", "Esc", "back")), height)

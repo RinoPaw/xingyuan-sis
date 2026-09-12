@@ -36,14 +36,13 @@ def show(text: str, title: str) -> None:
             ]
             while len(lines) < height - 1:
                 lines.append("")
-            next_text = "Enter 返回" if last == len(records) else "Enter 下一页"
-            footer, regions = theme.footer(
-                width,
-                (("p 上一页", "p上页", "prev"),
-                 (next_text, "Enter", "next"),
-                 ("q 返回", "q返回", "back")),
-                height,
-            )
+
+            buttons = [("p 上一页", "p上页", "prev")]
+            if last < len(records):
+                buttons.append(("Enter 下一页", "Enter", "next"))
+            buttons.append(("Esc", "Esc", "back"))
+            footer, regions = theme.footer(width, tuple(buttons), height)
+
             lines.append(footer)
             lines = [screen._clip_cells(line, width) for line in lines]
             if lines != previous:
@@ -59,9 +58,8 @@ def show(text: str, title: str) -> None:
             if key == "back":
                 return
             if key in {"select", "next", "page_down"}:
-                if last == len(records):
-                    return
-                first = last
+                if last < len(records):
+                    first = last
             elif key in {"pause", "prev", "page_up"}:
                 first = max(0, first - page_size)
             elif key == "down":

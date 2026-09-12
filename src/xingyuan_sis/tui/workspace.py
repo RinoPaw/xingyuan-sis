@@ -64,7 +64,7 @@ def _open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
         state.form = Form(mode, (Field("path", "CSV 文件路径", True),), {"path": "data/students.csv"})
     else:
         state.form = Form(mode, original=row)
-    state.notice = "更改尚未保存；点击字段或按 Enter 编辑，s 保存，q 取消。"
+    state.notice = "更改尚未保存。Esc 取消。"
     state.detail_scroll = 0
 
 
@@ -154,7 +154,7 @@ def _interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                         index = int(key.split(":")[1]) if key.startswith("option:") else form.option_index
                         form.values[form.fields[form.position].key] = form.options[index][0]
                         form.options = None
-                        state.notice = "已选择；s 保存全部更改。"
+                        state.notice = "已选择，尚未保存。"
                 continue
             if key == "save":
                 return "save", 0
@@ -242,7 +242,7 @@ def _read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> N
     kind, index = event
     if kind == "search":
         label, current = "搜索姓名、编号、班级等", state.query
-        state.notice = "支持多个关键词；留空清除筛选，Ctrl+C 取消。"
+        state.notice = "支持多个关键词。Esc 取消。"
     else:
         field_ = state.form.fields[index]
         state.form.position = index
@@ -251,10 +251,14 @@ def _read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> N
             state.form.options = options
             state.form.option_index = next((i for i, (value, _) in enumerate(options)
                                            if value == state.form.values.get(field_.key)), 0)
-            state.notice = "选择已有记录；无需记住编号。"
+            state.notice = "选择已有记录；无需记住编号。Esc 取消。"
             return
         label, current = field_.label, state.form.values.get(field_.key)
-        state.notice = f"当前：{safe(current)} · 留空保持" + ("；输入 - 清空" if not field_.required else "") + "；Ctrl+C 取消"
+        state.notice = (
+            f"当前：{safe(current)} · 留空保持"
+            + (" · 输入 - 清空" if not field_.required else "")
+            + " · Esc 取消"
+        )
     frame = render(state, catalog)
     screen._paint(frame.lines)
     height = len(frame.lines)
@@ -269,7 +273,7 @@ def _read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> N
     elif raw:
         value = None if raw == "-" and not field_.required else raw
         state.form.values[field_.key] = field_.parse(value)
-        state.notice = "字段已暂存；s 保存全部更改，q 取消。"
+        state.notice = "字段已暂存。Esc 取消。"
 
 
 def run(db_path: Path | str | None, collection: str) -> None:
