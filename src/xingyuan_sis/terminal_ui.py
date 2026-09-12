@@ -65,7 +65,7 @@ def run_command(
     *,
     interactive: bool = False,
 ) -> None:
-    from .entry import main
+    from .cli import main
 
     clear()
     args = ([] if db_path is None else ["--db", str(db_path)]) + argv
