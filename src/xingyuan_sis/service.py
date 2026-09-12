@@ -7,6 +7,7 @@ from typing import Any
 from .csv_io import ImportResult, export_students_csv, import_students_csv
 from .reports import summary
 from .repository import Repository
+from .species import SpeciesBranch, parse_species_branch
 
 
 class XingyuanService:
@@ -195,7 +196,7 @@ class XingyuanService:
         student_no: str,
         name: str,
         family: str,
-        branch: str,
+        branch: SpeciesBranch | str,
         enrollment_year: int,
         class_code: str | None = None,
         gender: str | None = None,
@@ -214,11 +215,12 @@ class XingyuanService:
                 f"找不到班级：{class_code}",
             )
             class_id = int(row["id"])
+        branch_value = parse_species_branch(branch).value
         return self.repository.add_student(
             student_no=student_no,
             name=name,
             family=family,
-            branch=branch,
+            branch=branch_value,
             enrollment_year=enrollment_year,
             gender=gender,
             birth_date=birth_date,
@@ -233,6 +235,8 @@ class XingyuanService:
 
     def update_student_by_no(self, student_no: str, /, **values: Any) -> None:
         row = self._require(self.student_by_no(student_no), f"找不到学生：{student_no}")
+        if "branch" in values:
+            values["branch"] = parse_species_branch(values["branch"]).value
         if "class_code" in values:
             class_code = values.pop("class_code")
             if class_code:
