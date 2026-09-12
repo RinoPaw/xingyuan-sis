@@ -100,10 +100,11 @@ def _orbit(width: int, height: int, angle: float, selected: int) -> list[str]:
 
 
 def _orbit_exclusion_mask(width: int, height: int, angle: float) -> set[tuple[int, int]]:
-    """Return terminal cells enclosed by the globe or the outer orbital ring.
+    """Protect the globe interior and the two orbital strokes from sparkles.
 
-    The orbit art is sparse Braille, so visually empty cells can still sit inside
-    the globe or ring. Sparkles must treat that enclosed area as protected sky.
+    The empty sky between the globe and the rings stays available for stars. The
+    rings themselves get a thin protected band so a sparkle cannot visually sit
+    on an orbital stroke even when Braille rasterization leaves nearby blank cells.
     """
     width, height = max(1, width), max(1, height)
     pixels_w, pixels_h = width * 2, height * 4
@@ -111,26 +112,36 @@ def _orbit_exclusion_mask(width: int, height: int, angle: float) -> set[tuple[in
     cx, cy = pixels_w / 2, pixels_h / 2
     tilt = -0.32 + math.sin(angle * 0.18) * 0.1
     cos_t, sin_t = math.cos(tilt), math.sin(tilt)
-    ring_a = radius * 2.12
     ring_b = radius * 0.48
+    # About one Braille pixel on either side of the orbital curve.
+    ring_band = 1.25 / max(1.0, ring_b)
     protected: set[tuple[int, int]] = set()
 
     for row in range(height):
         for col in range(width):
             # A terminal cell contains 2×4 Braille pixels. Protect the whole
-            # cell if any of those pixels falls inside either enclosed shape.
+            # cell when any subpixel lies in the globe or close to either ring.
             for dy in range(4):
                 for dx in range(2):
                     x = col * 2 + dx - cx
                     y = row * 4 + dy - cy
-                    inside_globe = x * x + y * y <= radius * radius
+                    if x * x + y * y <= radius * radius:
+                        protected.add((row, col))
+                        break
 
-                    # Undo the ring tilt, then test the outer ellipse. The inner
-                    # ring lies entirely inside this footprint, so one mask covers both.
+                    # Undo the ring tilt and measure distance from each ellipse
+                    # in normalized coordinates. Only the narrow stroke is
+                    # protected; the ellipse interior remains usable sky.
                     u = x * cos_t + y * sin_t
                     v = -x * sin_t + y * cos_t
-                    inside_ring = (u / ring_a) ** 2 + (v / ring_b) ** 2 <= 1.0
-                    if inside_globe or inside_ring:
+                    on_ring = False
+                    for scale in (1.8, 2.12):
+                        ring_a = radius * scale
+                        ellipse_radius = math.sqrt((u / ring_a) ** 2 + (v / ring_b) ** 2)
+                        if abs(ellipse_radius - 1.0) <= ring_band:
+                            on_ring = True
+                            break
+                    if on_ring:
                         protected.add((row, col))
                         break
                 if (row, col) in protected:
