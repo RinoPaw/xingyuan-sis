@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from xingyuan_sis.tui import screen, theme
+from xingyuan_sis.tui import animation, screen, theme
 
 
 LABELS = ("学生", "教务", "课程", "成绩", "数据", "退出")
@@ -26,6 +26,17 @@ class HomeLayoutTests(unittest.TestCase):
             self.assertEqual(len(matches), 1)
             positions.append(matches[0])
         self.assertEqual(positions, list(range(positions[0], positions[0] + 4)))
+
+    def test_coordinate_layout_leaves_visual_gaps_available_to_starlight(self):
+        frame = self.render((120, 36))
+        lines = [self.plain(line) for line in frame.lines]
+        dots = set(animation._SPARKLE_DOTS)
+
+        sidebar_rows = [line.split("│", 1)[0] for line in lines[2:8]]
+        self.assertTrue(any(char in dots for line in sidebar_rows for char in line))
+
+        right_title = lines[1].split("│", 1)[1]
+        self.assertTrue(any(char in dots for char in right_title))
 
     def test_home_footer_only_describes_keyboard_actions(self):
         footer = self.plain(self.render((120, 36)).lines[-1])

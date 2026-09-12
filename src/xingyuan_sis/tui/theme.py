@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from typing import Sequence
 
-from . import screen, animation
+from . import animation, screen
+from .board import Board
 
 
 _BUTTON = screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
@@ -25,11 +26,7 @@ def button(label: str, *, selected: bool = False, width: int | None = None) -> s
 
 
 def nav_item(label: str, *, selected: bool = False, width: int | None = None) -> str:
-    """Render a lightweight home navigation row.
-
-    Only the active item gets a marker and accent; inactive rows stay plain so
-    the sidebar reads as navigation rather than a wall of buttons.
-    """
+    """Render a lightweight home navigation row."""
     shown = f"{'▌' if selected else ' '} {label}"
     if width is not None:
         shown = screen._pad_cells(screen._clip_cells(shown, width), width)
@@ -38,7 +35,6 @@ def nav_item(label: str, *, selected: bool = False, width: int | None = None) ->
 
 
 def overview_item(label: str, value: object) -> str:
-    """Render one campus overview metric on its own line."""
     return (
         screen._ansi(label, screen._TEXT_SECONDARY)
         + "  "
@@ -73,8 +69,6 @@ def footer(
     if minimum > width:
         chosen = labels(True)
 
-    # Keep the escape control when an unusually narrow terminal cannot fit
-    # every compact button. Drop optional middle controls first.
     while chosen and (
         sum(screen._display_width(text) for text, _ in chosen) + max(0, len(chosen) - 1) > width
     ):
@@ -116,102 +110,98 @@ def home_frame(
 ) -> screen.ScreenFrame:
     terminal = screen._terminal_size()
     width, height = max(1, terminal.columns - 1), max(3, terminal.lines)
+    body_height = max(0, height - 2)
     title, description, _ = _MODULES[selected]
 
-    top = [topbar(width, database=database)]
-    body_height = max(0, height - 2)
+    board = Board(width, height)
+    board.put(0, 0, topbar(width, database=database))
     footer_line, controls = home_footer(width, height, animate)
-    regions: list[screen.HitRegion] = []
+    board.put(0, height - 1, footer_line)
+    board.regions.extend(controls)
     protected_cells: set[tuple[int, int]] = set()
 
-    # The layout mode depends only on width. Soft-keyboard height changes
-    # therefore cannot make the whole home screen oscillate between modes.
+    # Compact layout: title and orbit occupy the body; navigation is positioned
+    # directly at the bottom of that body instead of being padded into columns.
     if width < 38:
         columns = 2 if width >= 28 else 1
         nav_rows = (len(labels) + columns - 1) // columns
         graph_height = max(0, body_height - nav_rows - 1)
-        body = [screen._ansi(title, screen._BOLD + screen._TEXT_ACCENT)]
+        board.put(0, 1, title, screen._BOLD + screen._TEXT_ACCENT)
+
+        orbit_top = 2
         if graph_height:
-            body.extend(animation._orbit(width, graph_height, angle, selected))
-            orbit_row_offset = len(top) + 1
+            for row, line in enumerate(animation._orbit(width, graph_height, angle, selected)):
+                board.put(0, orbit_top + row, line, width=width)
             protected_cells.update(
-                (orbit_row_offset + row, col)
+                (orbit_top + row, col)
                 for row, col in animation._orbit_exclusion_mask(width, graph_height, angle)
             )
+
         cell_width = max(1, width // columns)
+        nav_top = orbit_top + graph_height
         for row in range(nav_rows):
-            parts: list[str] = []
-            screen_row = len(top) + len(body) + 1
             for col in range(columns):
                 index = row * columns + col
                 if index >= len(labels):
-                    parts.append(" " * cell_width)
                     continue
                 number = "0" if index == len(labels) - 1 else str(index + 1)
-                parts.append(
-                    nav_item(f"{number} {labels[index]}", selected=index == selected, width=cell_width)
+                board.put(
+                    col * cell_width,
+                    nav_top + row,
+                    nav_item(f"{number} {labels[index]}", selected=index == selected),
+                    action=f"item:{index}",
+                    width=cell_width,
                 )
-                regions.append(
-                    screen.HitRegion(col * cell_width + 1, screen_row, cell_width, f"item:{index}")
-                )
-            body.append("".join(parts))
-        body = (body + [""] * body_height)[:body_height]
-        frame = screen.ScreenFrame(
-            [screen._clip_cells(line, width) for line in [*top, *body, footer_line]],
-            regions + controls,
-        )
-        return animation._starlight(frame, width, angle, protected_cells)
+
+        return animation._starlight(board.frame(), width, angle, protected_cells)
 
     nav_width = min(22, max(14, width // 5))
-    graph_width = max(1, width - nav_width - 3)
-    left: list[str] = [screen._ansi("首页", screen._TEXT_SECONDARY)]
+    separator_x = nav_width + 1
+    right_x = nav_width + 3
+    graph_width = max(1, width - right_x)
 
-    # Keep navigation density fixed at every height; the earlier blank rows
-    # made Termux visibly jump as the IME changed the reported line count.
+    board.put(0, 1, "首页", screen._TEXT_SECONDARY)
     for index, label in enumerate(labels):
         number = "0" if index == len(labels) - 1 else str(index + 1)
-        line = nav_item(f"{number} {label}", selected=index == selected, width=nav_width)
-        regions.append(screen.HitRegion(1, len(top) + len(left) + 1, nav_width, f"item:{index}"))
-        left.append(line)
+        board.put(
+            0,
+            2 + index,
+            nav_item(f"{number} {label}", selected=index == selected),
+            action=f"item:{index}",
+            width=nav_width,
+        )
 
-    for line in (
-        "",
-        screen._ansi("校园概览", _SECTION_HEADING),
-        overview_item("学生", stats.get("students", 0)),
-        overview_item("班级", stats.get("classes", 0)),
-        overview_item("课程", stats.get("courses", 0)),
-        overview_item("选课", stats.get("enrollments", 0)),
-    ):
-        if len(left) < body_height:
-            left.append(line)
+    if body_height > 8:
+        board.put(0, 9, "校园概览", _SECTION_HEADING)
+    for offset, (label, value) in enumerate((
+        ("学生", stats.get("students", 0)),
+        ("班级", stats.get("classes", 0)),
+        ("课程", stats.get("courses", 0)),
+        ("选课", stats.get("enrollments", 0)),
+    )):
+        y = 10 + offset
+        if y < height - 1:
+            board.put(0, y, overview_item(label, value), width=nav_width)
 
-    right = [screen._ansi(f"{selected + 1:02d} / {title}", screen._BOLD + screen._TEXT_ACCENT)]
+    for y in range(1, height - 1):
+        board.put(separator_x, y, "│", screen._BORDER_SUBTLE)
+
+    board.put(right_x, 1, f"{selected + 1:02d} / {title}", screen._BOLD + screen._TEXT_ACCENT)
     if graph_width >= 28 and body_height >= 8:
-        right.extend([screen._ansi(description, screen._TEXT_SECONDARY), ""])
-    orbit_row_offset = len(top) + len(right)
-    graph_height = max(1, body_height - len(right))
-    right.extend(animation._orbit(graph_width, graph_height, angle, selected))
-    orbit_col_offset = nav_width + 3
+        board.put(right_x, 2, description, screen._TEXT_SECONDARY)
+        orbit_top = 4
+    else:
+        orbit_top = 2
+
+    graph_height = max(1, height - 1 - orbit_top)
+    for row, line in enumerate(animation._orbit(graph_width, graph_height, angle, selected)):
+        board.put(right_x, orbit_top + row, line, width=graph_width)
     protected_cells.update(
-        (orbit_row_offset + row, orbit_col_offset + col)
+        (orbit_top + row, right_x + col)
         for row, col in animation._orbit_exclusion_mask(graph_width, graph_height, angle)
     )
 
-    body: list[str] = []
-    for row in range(body_height):
-        left_line = left[row] if row < len(left) else ""
-        right_line = right[row] if row < len(right) else ""
-        body.append(
-            screen._pad_cells(screen._clip_cells(left_line, nav_width), nav_width)
-            + screen._ansi(" │ ", screen._BORDER_SUBTLE)
-            + screen._clip_cells(right_line, graph_width)
-        )
-
-    frame = screen.ScreenFrame(
-        [screen._clip_cells(line, width) for line in [*top, *body, footer_line]],
-        regions + controls,
-    )
-    return animation._starlight(frame, width, angle, protected_cells)
+    return animation._starlight(board.frame(), width, angle, protected_cells)
 
 
 _MODULES = (
