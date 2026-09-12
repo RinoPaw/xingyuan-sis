@@ -99,7 +99,52 @@ def _orbit(width: int, height: int, angle: float, selected: int) -> list[str]:
     return lines
 
 
-def _starlight(frame: ScreenFrame, width: int, phase: float) -> ScreenFrame:
+def _orbit_exclusion_mask(width: int, height: int, angle: float) -> set[tuple[int, int]]:
+    """Return terminal cells enclosed by the globe or the outer orbital ring.
+
+    The orbit art is sparse Braille, so visually empty cells can still sit inside
+    the globe or ring. Sparkles must treat that enclosed area as protected sky.
+    """
+    width, height = max(1, width), max(1, height)
+    pixels_w, pixels_h = width * 2, height * 4
+    radius = min(pixels_w / 4.8, pixels_h / 2.5)
+    cx, cy = pixels_w / 2, pixels_h / 2
+    tilt = -0.32 + math.sin(angle * 0.18) * 0.1
+    cos_t, sin_t = math.cos(tilt), math.sin(tilt)
+    ring_a = radius * 2.12
+    ring_b = radius * 0.48
+    protected: set[tuple[int, int]] = set()
+
+    for row in range(height):
+        for col in range(width):
+            # A terminal cell contains 2×4 Braille pixels. Protect the whole
+            # cell if any of those pixels falls inside either enclosed shape.
+            for dy in range(4):
+                for dx in range(2):
+                    x = col * 2 + dx - cx
+                    y = row * 4 + dy - cy
+                    inside_globe = x * x + y * y <= radius * radius
+
+                    # Undo the ring tilt, then test the outer ellipse. The inner
+                    # ring lies entirely inside this footprint, so one mask covers both.
+                    u = x * cos_t + y * sin_t
+                    v = -x * sin_t + y * cos_t
+                    inside_ring = (u / ring_a) ** 2 + (v / ring_b) ** 2 <= 1.0
+                    if inside_globe or inside_ring:
+                        protected.add((row, col))
+                        break
+                if (row, col) in protected:
+                    break
+
+    return protected
+
+
+def _starlight(
+    frame: ScreenFrame,
+    width: int,
+    phase: float,
+    protected_cells: set[tuple[int, int]] | None = None,
+) -> ScreenFrame:
     """Render a stable Codex-style sparkle field over untouched empty cells.
 
     A coordinate hash fixes each star's position, Braille glyph, period and phase.
@@ -112,9 +157,10 @@ def _starlight(frame: ScreenFrame, width: int, phase: float) -> ScreenFrame:
     seconds = math.floor(seconds / _SPARKLE_FRAME) * _SPARKLE_FRAME
     mask = (1 << 64) - 1
     truecolor = os.environ.get("COLORTERM", "").lower() in {"truecolor", "24bit"}
+    protected_cells = protected_cells or set()
 
     # Leave the top bar and footer untouched. Within the body, only use the
-    # interior of blank runs and exclude clickable regions.
+    # interior of blank runs and exclude clickable/protected regions.
     for row in range(1, len(frame.lines) - 1):
         original = frame.lines[row]
         plain = _ANSI_RE.sub("", original)
@@ -129,7 +175,10 @@ def _starlight(frame: ScreenFrame, width: int, phase: float) -> ScreenFrame:
                 start = run_start + 2
                 stop = min(cell - 2, width)
                 for x in range(start, stop):
-                    if _hit_action(MouseClick(x + 1, row + 1), frame.regions) is None:
+                    if (
+                        (row, x) not in protected_cells
+                        and _hit_action(MouseClick(x + 1, row + 1), frame.regions) is None
+                    ):
                         allowed.add(x)
                 run_start = None
             cell += _cell_width(char)
