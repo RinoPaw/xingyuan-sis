@@ -22,7 +22,7 @@ class TuiAuthViewTests(unittest.TestCase):
             self.assertEqual(len(setup.lines), size[1])
             self.assertTrue(all(screen._display_width(line) == size[0] - 1 for line in login.lines))
             self.assertTrue(all(screen._display_width(line) == size[0] - 1 for line in setup.lines))
-            self.assertIn("欢迎回来", "\n".join(login.lines))
+            self.assertIn("登录星原", "\n".join(login.lines))
             self.assertIn("账号", "\n".join(login.lines))
             self.assertIn("密码", "\n".join(login.lines))
             self.assertIn("首次初始化", "\n".join(setup.lines))
