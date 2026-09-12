@@ -23,6 +23,9 @@ _ACCENT = "\x1b[38;5;110m"
 _DIM = "\x1b[38;5;245m"
 
 
+_BORDER = "\x1b[38;5;239m"
+
+
 _SELECTED = "\x1b[48;5;238m\x1b[38;5;255m"
 
 
@@ -33,11 +36,18 @@ _SURFACE = "\x1b[48;5;235m\x1b[38;5;252m"
 
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+_BORDER_GLYPHS = frozenset("─│┌┐└┘├┤┬┴┼╭╮╰╯")
 
 
 def _ansi(text: str, style: str) -> str:
     if not sys.stdout.isatty() or os.environ.get("NO_COLOR") is not None:
         return text
+    # Structural rules need less contrast than secondary text on the #262626
+    # surface. Existing callers may still pass _DIM for separators, so keep
+    # their semantics while rendering pure box-drawing runs with _BORDER.
+    visible = text.strip()
+    if style == _DIM and visible and set(visible) <= _BORDER_GLYPHS:
+        style = _BORDER
     return f"{style}{text}{_RESET}"
 
 
