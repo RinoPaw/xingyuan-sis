@@ -1,11 +1,26 @@
 """Home-screen orbital illustration and quiet background stars."""
 from __future__ import annotations
-from dataclasses import dataclass
+
 import math
-import random
+import os
 import re
-from .screen import (_ansi, _ACCENT, _GOLD, _ANSI_RE, _cell_width, _hit_action,
-                     MouseClick, ScreenFrame)
+
+from .screen import (
+    _ACCENT,
+    _ANSI_RE,
+    _GOLD,
+    _ansi,
+    _cell_width,
+    _hit_action,
+    MouseClick,
+    ScreenFrame,
+)
+
+
+_SPARKLE_DOTS = ("⠁", "⠂", "⠄", "⠈", "⠐", "⠠", "⡀", "⢀")
+_SPARKLE_FRAME = 0.150
+_SPARKLE_BG = 38
+_SPARKLE_FG = 208
 
 
 def _orbit(width: int, height: int, angle: float, selected: int) -> list[str]:
@@ -44,6 +59,7 @@ def _orbit(width: int, height: int, angle: float, selected: int) -> list[str]:
 
     # Two gold rings cross the globe; their far halves disappear behind it.
     tilt = -0.32 + math.sin(angle * 0.18) * 0.1
+
     def ring(t: float, scale: float) -> tuple[float, float]:
         x, y = radius * scale * math.cos(t), radius * 0.48 * math.sin(t)
         return x * math.cos(tilt) - y * math.sin(tilt), x * math.sin(tilt) + y * math.cos(tilt)
@@ -80,91 +96,73 @@ def _orbit(width: int, height: int, angle: float, selected: int) -> list[str]:
     return lines
 
 
-@dataclass
-class _StarGlint:
-    x: int
-    row: int
-    born: float
-    lifetime: float
-    pulse: float
+def _starlight(frame: ScreenFrame, width: int, phase: float) -> ScreenFrame:
+    """Render a stable Codex-style sparkle field over untouched empty cells.
 
+    A coordinate hash fixes each star's position, Braille glyph, period and phase.
+    The layout therefore stays still while individual dots briefly brighten, which
+    avoids the particle-like popping of the previous random star lifecycle.
+    """
+    # ``phase`` is the globe angle (monotonic seconds * 0.85). Convert it back
+    # to seconds and quantize to Codex's 150 ms sparkle cadence.
+    seconds = max(0.0, phase / 0.85)
+    seconds = math.floor(seconds / _SPARKLE_FRAME) * _SPARKLE_FRAME
+    mask = (1 << 64) - 1
+    truecolor = os.environ.get("COLORTERM", "").lower() in {"truecolor", "24bit"}
 
-_STAR_RNG = random.Random()
+    # Leave the top bar and footer untouched. Within the body, only use the
+    # interior of blank runs and exclude clickable regions.
+    for row in range(1, len(frame.lines) - 1):
+        original = frame.lines[row]
+        plain = _ANSI_RE.sub("", original)
 
-
-_STAR_GLINTS: list[_StarGlint] = []
-
-
-_STAR_LAST_PHASE: float | None = None
-
-
-def _starlight_positions(frame: ScreenFrame, width: int) -> list[tuple[int, int]]:
-    """Return safe blank cells where a glint may be drawn."""
-    positions: list[tuple[int, int]] = []
-    for row in range(3, len(frame.lines) - 1):
-        plain = _ANSI_RE.sub("", frame.lines[row])
+        allowed: set[int] = set()
         cell = 0
         run_start: int | None = None
         for char in plain + "x":
             if char == " " and run_start is None:
                 run_start = cell
             elif char != " " and run_start is not None:
-                start = run_start + 3
-                stop = min(cell - 3, width)
+                start = run_start + 2
+                stop = min(cell - 2, width)
                 for x in range(start, stop):
                     if _hit_action(MouseClick(x + 1, row + 1), frame.regions) is None:
-                        positions.append((row, x))
+                        allowed.add(x)
                 run_start = None
             cell += _cell_width(char)
-    return positions
 
-
-def _starlight(frame: ScreenFrame, width: int, phase: float) -> ScreenFrame:
-    """Random, short-lived glints that fade in and out across safe empty space."""
-    global _STAR_LAST_PHASE
-
-    allowed = _starlight_positions(frame, width)
-    allowed_set = set(allowed)
-
-    # Tests and previews may render older phases out of order. Treat a
-    # backwards clock as a fresh sky instead of keeping future stars alive.
-    if _STAR_LAST_PHASE is not None and phase < _STAR_LAST_PHASE:
-        _STAR_GLINTS.clear()
-    _STAR_LAST_PHASE = phase
-
-    _STAR_GLINTS[:] = [
-        star for star in _STAR_GLINTS
-        if (star.row, star.x) in allowed_set and phase < star.born + star.lifetime
-    ]
-
-    desired = min(14, max(2, len(allowed) // 80)) if allowed else 0
-    attempts = 0
-    while len(_STAR_GLINTS) < desired and allowed and attempts < desired * 24:
-        attempts += 1
-        row, x = _STAR_RNG.choice(allowed)
-        if any(abs(row - star.row) <= 1 and abs(x - star.x) < 7 for star in _STAR_GLINTS):
+        if not allowed:
             continue
-        lifetime = _STAR_RNG.uniform(1.8, 4.5)
-        _STAR_GLINTS.append(_StarGlint(
-            x=x,
-            row=row,
-            born=phase - _STAR_RNG.uniform(0.0, min(0.55, lifetime * 0.25)),
-            lifetime=lifetime,
-            pulse=_STAR_RNG.uniform(0.0, math.tau),
-        ))
 
-    by_row: dict[int, dict[int, str]] = {}
-    for star in _STAR_GLINTS:
-        progress = min(1.0, max(0.0, (phase - star.born) / star.lifetime))
-        envelope = math.sin(math.pi * progress) ** 0.7
-        twinkle = 0.72 + 0.28 * (math.sin(phase * 3.2 + star.pulse) + 1.0) / 2.0
-        glow = min(1.0, max(0.0, envelope * twinkle))
-        glyph = "✦" if glow > 0.82 else "·"
-        color = 238 + round(glow * 9)
-        by_row.setdefault(star.row, {})[star.x] = _ansi(glyph, f"\x1b[38;5;{color}m")
+        targets: dict[int, str] = {}
+        for x in allowed:
+            # This is the same coordinate hash used by Codex's sparkle.rs.
+            hash_value = ((row - 1) * 65537 + x) & mask
+            hash_value = ((hash_value ^ (hash_value >> 16)) * 0x45D9F3B) & mask
+            hash_value = ((hash_value ^ (hash_value >> 16)) * 0x45D9F3B) & mask
+            hash_value ^= hash_value >> 16
+            if hash_value % 5 != 0:
+                continue
 
-    for row, targets in by_row.items():
-        original = frame.lines[row]
+            period = 4.0 + (hash_value % 31) / 10.0
+            sparkle_phase = (seconds / period + (hash_value % 997) / 997.0) % 1.0
+            brightness = math.sin(sparkle_phase * math.pi) ** 12 * 0.55
+            if brightness < 0.04:
+                continue
+
+            glyph = _SPARKLE_DOTS[(hash_value // 161) % len(_SPARKLE_DOTS)]
+            level = round(_SPARKLE_BG + (_SPARKLE_FG - _SPARKLE_BG) * brightness)
+            if truecolor:
+                style = f"\x1b[38;2;{level};{level};{level}m"
+            else:
+                # xterm's grayscale ramp approximates the same foreground/background blend.
+                gray = max(235, min(244, 232 + round((level - 8) / 10)))
+                style = f"\x1b[38;5;{gray}m"
+            targets[x] = _ansi(glyph, style)
+
+        if not targets:
+            continue
+
         parts: list[str] = []
         cell = 0
         for token in re.split(f"({_ANSI_RE.pattern})", original):
@@ -175,4 +173,5 @@ def _starlight(frame: ScreenFrame, width: int, phase: float) -> ScreenFrame:
                 parts.append(targets.get(cell, char) if char == " " else char)
                 cell += _cell_width(char)
         frame.lines[row] = "".join(parts)
+
     return frame
