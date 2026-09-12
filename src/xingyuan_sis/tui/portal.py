@@ -95,10 +95,15 @@ def frame(
 
     board.put(0, 1, "导航", screen._TEXT_SECONDARY)
     for index, label in enumerate(PRIMARY_LABELS):
+        is_current = index == selected
         board.put(
             0,
             2 + index,
-            theme.nav_item(label, selected=index == selected),
+            theme.nav_item(
+                label,
+                selected=is_current and focus == "primary",
+                current=is_current and focus != "primary",
+            ),
             action=f"primary:{index}",
             width=nav_width,
         )
@@ -299,11 +304,16 @@ def _secondary_grid(
         item_y = y + row * 2
         if item_y >= board.height - 1:
             break
+        is_current = index == secondary
         board.put(
             x + col * cell_width,
             item_y,
-            theme.button(item.label, selected=selected and index == secondary,
-                         width=max(1, cell_width - 1)),
+            theme.button(
+                item.label,
+                selected=selected and is_current,
+                current=not selected and is_current,
+                width=max(1, cell_width - 1),
+            ),
             action=f"secondary:{index}",
             width=max(1, cell_width - 1),
         )
