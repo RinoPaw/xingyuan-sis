@@ -84,6 +84,10 @@ def _read_key_windows(timeout: float | None = None) -> str | None:
             return "up"
         if code == "P":
             return "down"
+        if code == "K":
+            return "left"
+        if code == "M":
+            return "right"
         if code == "G":
             return "home"
         if code == "O":
@@ -159,6 +163,14 @@ def _read_key_posix(timeout: float | None = None) -> str | MouseClick | MouseScr
                 sequence.startswith(b"[") and sequence.endswith(b"B")
             ):
                 return "down"
+            if sequence in {b"[D", b"OD"} or (
+                sequence.startswith(b"[") and sequence.endswith(b"D")
+            ):
+                return "left"
+            if sequence in {b"[C", b"OC"} or (
+                sequence.startswith(b"[") and sequence.endswith(b"C")
+            ):
+                return "right"
             if sequence == b"[5~":
                 return "page_up"
             if sequence == b"[6~":
