@@ -36,6 +36,24 @@ def nav_item(label: str, *, selected: bool = False, width: int | None = None) ->
     return shown
 
 
+def overview_row(
+    left_label: str,
+    left_value: object,
+    right_label: str,
+    right_value: object,
+) -> str:
+    """Render one compact two-column campus overview row."""
+    return (
+        screen._ansi(left_label, screen._DIM)
+        + " "
+        + screen._ansi(str(left_value), screen._BOLD + screen._ACCENT)
+        + "  "
+        + screen._ansi(right_label, screen._DIM)
+        + " "
+        + screen._ansi(str(right_value), screen._BOLD + screen._ACCENT)
+    )
+
+
 def topbar(width: int, *, database: str | None = None) -> str:
     left = "✦ 星原 / 教务台"
     right = f"LOCAL / {database}" if database else ""
@@ -167,8 +185,8 @@ def home_frame(
     for line in (
         "",
         screen._ansi("校园概览", screen._DIM),
-        f"学生 {stats.get('students', 0)} / 班级 {stats.get('classes', 0)}",
-        f"课程 {stats.get('courses', 0)} / 选课 {stats.get('enrollments', 0)}",
+        overview_row("学生", stats.get("students", 0), "班级", stats.get("classes", 0)),
+        overview_row("课程", stats.get("courses", 0), "选课", stats.get("enrollments", 0)),
     ):
         if len(left) < body_height:
             left.append(line)
