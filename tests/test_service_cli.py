@@ -21,6 +21,13 @@ class ServiceAndCliTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
+    def test_service_exposes_read_models_without_repository_passthrough(self) -> None:
+        self.assertTrue(self.service.list_students())
+        self.assertTrue(self.service.list_courses())
+        self.assertTrue(self.service.list_departments())
+        self.assertFalse(hasattr(self.service, "add_department"))
+        self.assertFalse(hasattr(self.service, "update_student"))
+
     def test_business_codes_drive_shared_service(self) -> None:
         student_seed = STUDENTS[0]
         student_no = str(student_seed[0])
