@@ -120,12 +120,12 @@ class ViewerAndInputTests(unittest.TestCase):
     def test_native_input_keeps_chinese_and_resets_color_on_cancel(self):
         with patch("sys.stdin.isatty", return_value=True), patch("sys.stdout.isatty", return_value=True), \
              patch.object(terminal_input, "_read_interactive_line", return_value="林岚") as read, \
-             redirect_stdout(StringIO()) as output, patch.dict(os.environ):
+             patch("sys.stdout.write") as write, patch("sys.stdout.flush"), patch.dict(os.environ):
             os.environ.pop("NO_COLOR", None)
             with terminal_input.input_style(True):
                 self.assertEqual(terminal_input.read_input("姓名: "), "林岚")
             read.assert_called_once_with("姓名: ", colored=True)
-            self.assertTrue(output.getvalue().endswith("\x1b[0m"))
+            self.assertEqual(write.call_args_list[-1].args[0], "\x1b[0m")
 
         with patch("sys.stdin.isatty", return_value=True), patch("sys.stdout.isatty", return_value=True), \
              patch.object(terminal_input, "_read_interactive_line", side_effect=KeyboardInterrupt), \
