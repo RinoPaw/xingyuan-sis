@@ -87,7 +87,7 @@ def _read_escape_sequence(fd: int) -> bytes:
             break
         sequence += chunk
         byte = chunk[0]
-        if sequence.startswith((b"[", b"O")) and 0x40 <= byte <= 0x7E:
+        if len(sequence) >= 2 and sequence.startswith((b"[", b"O")) and 0x40 <= byte <= 0x7E:
             break
     return bytes(sequence)
 
