@@ -33,6 +33,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(student["name"], expected[1])
         self.assertEqual(student["family"], expected[2])
         self.assertEqual(student["branch"], expected[3])
+        self.assertEqual(student["class_code"], expected[7])
         self.assertEqual(student["class_name"], expected_class_name)
         self.assertEqual(student["primary_affinity"], expected[10])
 
@@ -92,6 +93,21 @@ class RepositoryTests(unittest.TestCase):
             dict(enrollment),
         )
         self.assertIsNone(self.repository.find_student_by_no("missing"))
+
+    def test_enrollment_reads_filter_in_sql(self) -> None:
+        enrollment = self.repository.list_enrollments()[0]
+
+        student_rows = self.repository.list_enrollments_for_student(enrollment["student_no"])
+        self.assertTrue(student_rows)
+        self.assertTrue(all(row["student_no"] == enrollment["student_no"] for row in student_rows))
+
+        course_rows = self.repository.list_enrollments_for_course(enrollment["course_code"])
+        self.assertTrue(course_rows)
+        self.assertTrue(all(row["course_code"] == enrollment["course_code"] for row in course_rows))
+
+        search_rows = self.repository.list_enrollments(enrollment["student_name"])
+        self.assertTrue(search_rows)
+        self.assertTrue(any(row["id"] == enrollment["id"] for row in search_rows))
 
     def test_student_number_is_unique(self) -> None:
         student = self.repository.list_students()[0]

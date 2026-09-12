@@ -18,8 +18,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     stu = groups.add_parser("stu", aliases=["student"], help="学生")
     stu_cmd = stu.add_subparsers(dest="action", required=True)
-    stu_ls = stu_cmd.add_parser("ls", aliases=["list"], help="列出学生")
-    stu_ls.add_argument("-s", "--search", default="", help="搜索关键字")
+    stu_ls = stu_cmd.add_parser(
+        "ls",
+        aliases=["list"],
+        help="列出学生",
+        description=(
+            "列出学生；文本字段使用包含匹配，不同字段之间按 AND，"
+            "同一字段重复时按 OR。学号和年份保持精确匹配。"
+        ),
+    )
+    _student_list_options(stu_ls)
     stu_show = stu_cmd.add_parser("show", help="查看学生")
     stu_show.add_argument("student_no", help="学号")
     stu_add = stu_cmd.add_parser("add", help="新建学生")
@@ -89,6 +97,34 @@ def build_parser() -> argparse.ArgumentParser:
     data_import.add_argument("path", type=Path)
 
     return parser
+
+
+def _student_list_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("-s", "--search", default="", help="全字段模糊搜索")
+    parser.add_argument("--no", dest="student_nos", action="append", metavar="学号", help="精确匹配学号，可重复")
+    parser.add_argument("--name", dest="names", action="append", metavar="姓名", help="姓名包含，可重复")
+    parser.add_argument("--family", dest="families", action="append", metavar="族系", help="族系包含，可重复")
+    parser.add_argument("--branch", dest="branches", action="append", metavar="支系", help="支系包含，可重复")
+    parser.add_argument("--class", dest="class_codes", action="append", metavar="班级", help="班级编号或名称包含，可重复")
+    parser.add_argument("--major", dest="major_codes", action="append", metavar="专业", help="专业编号或名称包含，可重复")
+    parser.add_argument(
+        "--college", "--department",
+        dest="college_codes",
+        action="append",
+        metavar="学院",
+        help="学院编号或名称包含，可重复",
+    )
+    parser.add_argument("--year", dest="years", action="append", type=int, metavar="年份", help="精确匹配入学年份，可重复")
+    parser.add_argument("--status", dest="statuses", action="append", metavar="状态", help="状态包含，可重复")
+    parser.add_argument("--element", dest="elements", action="append", metavar="元素", help="主元素包含，可重复")
+    parser.add_argument("--affinity", dest="affinities", action="append", metavar="等级", help="亲和等级包含，可重复")
+    parser.add_argument(
+        "--format",
+        choices=("table", "csv"),
+        default="table",
+        help="输出格式，默认 table",
+    )
+    parser.add_argument("-o", "--output", type=Path, help="输出文件；省略时写到 stdout")
 
 
 def _student_add_options(parser: argparse.ArgumentParser) -> None:

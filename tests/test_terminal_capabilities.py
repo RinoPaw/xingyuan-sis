@@ -28,7 +28,7 @@ class TerminalCapabilityTests(unittest.TestCase):
              patch.object(entry, "detect_terminal", return_value=TerminalCapabilities(True, False, True)), \
              patch.object(basic_ui, "run") as basic_run:
             db = Path(directory) / "test.db"
-            code = entry._run_menu(["--db", str(db)], mode="auto")
+            code = entry.main(["--db", str(db)])
         self.assertEqual(code, 0)
         basic_run.assert_called_once_with(db)
 
@@ -39,7 +39,7 @@ class TerminalCapabilityTests(unittest.TestCase):
              patch.object(entry, "detect_terminal", return_value=TerminalCapabilities(True, True, True)), \
              patch.object(app, "run") as tui_run:
             db = Path(directory) / "test.db"
-            code = entry._run_menu(["--db", str(db)], mode="auto")
+            code = entry.main(["--db", str(db)])
         self.assertEqual(code, 0)
         tui_run.assert_called_once_with(db)
 
@@ -50,7 +50,7 @@ class TerminalCapabilityTests(unittest.TestCase):
              patch.object(entry, "detect_terminal", return_value=TerminalCapabilities(True, False, False)), \
              patch.object(app, "run") as tui_run:
             db = Path(directory) / "test.db"
-            code = entry._run_menu(["--db", str(db)], mode="tui")
+            code = entry.main(["--db", str(db), "--tui"])
         self.assertEqual(code, 0)
         tui_run.assert_called_once_with(db)
 

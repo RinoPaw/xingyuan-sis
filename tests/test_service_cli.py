@@ -26,6 +26,7 @@ class ServiceAndCliTests(unittest.TestCase):
         self.assertTrue(self.service.list_students())
         self.assertTrue(self.service.list_courses())
         self.assertTrue(self.service.list_departments())
+        self.assertTrue(self.service.enrollments_for_student(self.service.list_students()[0]["student_no"]))
         self.assertFalse(hasattr(self.service, "add_department"))
         self.assertFalse(hasattr(self.service, "update_student"))
 
@@ -65,6 +66,29 @@ class ServiceAndCliTests(unittest.TestCase):
                 side_effect=AssertionError("lookup must not scan a list model"),
             ):
                 self.assertIsNotNone(lookup())
+
+    def test_precise_enrollment_reads_do_not_scan_general_list(self) -> None:
+        enrollment = self.service.list_enrollments()[0]
+        with patch.object(
+            self.service.repository,
+            "list_enrollments",
+            side_effect=AssertionError("precise read must not scan all enrollments"),
+        ):
+            self.assertTrue(self.service.enrollments_for_student(enrollment["student_no"]))
+            self.assertTrue(self.service.enrollments_for_course(enrollment["course_code"]))
+
+    def test_cli_read_commands_do_not_use_service_private_require(self) -> None:
+        student_no = str(STUDENTS[0][0])
+        course_code = str(COURSES[0][0])
+        with patch.object(
+            XingyuanService,
+            "_require",
+            side_effect=AssertionError("CLI must not call private service helpers"),
+        ):
+            for command in (("stu", "show", student_no), ("course", "show", course_code)):
+                with self.subTest(command=command), redirect_stdout(StringIO()):
+                    code = cli_main(["--db", str(self.db_path), *command])
+                self.assertEqual(code, 0)
 
     def test_business_codes_drive_shared_service(self) -> None:
         student_seed = STUDENTS[0]

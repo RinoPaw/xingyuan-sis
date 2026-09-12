@@ -41,8 +41,14 @@ class XingyuanService:
     def list_courses(self) -> list[sqlite3.Row]:
         return self.repository.list_courses()
 
-    def list_enrollments(self) -> list[sqlite3.Row]:
-        return self.repository.list_enrollments()
+    def list_enrollments(self, keyword: str = "") -> list[sqlite3.Row]:
+        return self.repository.list_enrollments(keyword)
+
+    def enrollments_for_student(self, student_no: str) -> list[sqlite3.Row]:
+        return self.repository.list_enrollments_for_student(student_no)
+
+    def enrollments_for_course(self, course_code: str) -> list[sqlite3.Row]:
+        return self.repository.list_enrollments_for_course(course_code)
 
     # ----- lookup helpers -------------------------------------------------
     def student_by_no(self, student_no: str) -> sqlite3.Row | None:

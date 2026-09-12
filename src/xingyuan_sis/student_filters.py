@@ -78,31 +78,16 @@ def query_students(
     elements: Iterable[str] | None = None,
     affinities: Iterable[str] | None = None,
 ) -> list[StudentListRecord]:
-    classes = {int(row["id"]): row for row in service.list_classes()}
-    majors = {int(row["id"]): row for row in service.list_majors()}
-    colleges = {int(row["id"]): row for row in service.list_departments()}
-
     result: list[StudentListRecord] = []
     keyword = _norm(search)
 
     for row in service.list_students(""):
-        class_row = None
-        major_row = None
-        college_row = None
-
-        if row["class_id"] is not None:
-            class_row = classes.get(int(row["class_id"]))
-        if class_row is not None:
-            major_row = majors.get(int(class_row["major_id"]))
-        if major_row is not None:
-            college_row = colleges.get(int(major_row["department_id"]))
-
-        class_code = None if class_row is None else str(class_row["code"])
-        class_name = None if class_row is None else str(class_row["name"])
-        major_code = None if major_row is None else str(major_row["code"])
-        major_name = None if major_row is None else str(major_row["name"])
-        college_code = None if college_row is None else str(college_row["code"])
-        college_name = None if college_row is None else str(college_row["name"])
+        class_code = row["class_code"]
+        class_name = row["class_name"]
+        major_code = row["major_code"]
+        major_name = row["major_name"]
+        college_code = row["department_code"]
+        college_name = row["department_name"]
 
         searchable = (
             row["student_no"], row["name"], row["family"], row["branch"],
@@ -148,12 +133,12 @@ def query_students(
                 gender=None if row["gender"] is None else str(row["gender"]),
                 birth_date=None if row["birth_date"] is None else str(row["birth_date"]),
                 enrollment_year=int(row["enrollment_year"]),
-                class_code=class_code,
-                class_name=class_name,
-                major_code=major_code,
-                major_name=major_name,
-                college_code=college_code,
-                college_name=college_name,
+                class_code=None if class_code is None else str(class_code),
+                class_name=None if class_name is None else str(class_name),
+                major_code=None if major_code is None else str(major_code),
+                major_name=None if major_name is None else str(major_name),
+                college_code=None if college_code is None else str(college_code),
+                college_name=None if college_name is None else str(college_name),
                 status=str(row["status"]),
                 primary_element=None if row["primary_element"] is None else str(row["primary_element"]),
                 primary_affinity=None if row["primary_affinity"] is None else str(row["primary_affinity"]),

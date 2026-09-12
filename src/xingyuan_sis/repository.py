@@ -228,8 +228,9 @@ class Repository:
                    s.gender, s.birth_date, s.enrollment_year, s.status,
                    s.primary_element, s.primary_affinity,
                    s.contact, s.dormitory, s.notes, s.class_id,
-                   c.name AS class_name, m.name AS major_name,
-                   d.name AS department_name
+                   c.code AS class_code, c.name AS class_name,
+                   m.code AS major_code, m.name AS major_name,
+                   d.code AS department_code, d.name AS department_name
             FROM students AS s
             JOIN species_branches AS b ON b.id = s.species_branch_id
             JOIN species_families AS f ON f.id = b.family_id
@@ -258,8 +259,9 @@ class Repository:
                    s.gender, s.birth_date, s.enrollment_year, s.status,
                    s.primary_element, s.primary_affinity,
                    s.contact, s.dormitory, s.notes, s.class_id,
-                   c.name AS class_name, m.name AS major_name,
-                   d.name AS department_name
+                   c.code AS class_code, c.name AS class_name,
+                   m.code AS major_code, m.name AS major_name,
+                   d.code AS department_code, d.name AS department_name
             FROM students AS s
             JOIN species_branches AS b ON b.id = s.species_branch_id
             JOIN species_families AS f ON f.id = b.family_id
@@ -393,7 +395,8 @@ class Repository:
         self._execute("DELETE FROM courses WHERE id = ?", (course_id,))
 
     # 选课与成绩
-    def list_enrollments(self) -> list[sqlite3.Row]:
+    def list_enrollments(self, keyword: str = "") -> list[sqlite3.Row]:
+        pattern = f"%{keyword.strip()}%"
         return self._fetch_all(
             """
             SELECT e.id, e.student_id, e.course_id, e.semester, e.score,
@@ -402,8 +405,45 @@ class Repository:
             FROM enrollments AS e
             JOIN students AS s ON s.id = e.student_id
             JOIN courses AS c ON c.id = e.course_id
+            WHERE ? = '%%'
+               OR s.student_no LIKE ?
+               OR s.name LIKE ?
+               OR c.course_code LIKE ?
+               OR c.name LIKE ?
+               OR e.semester LIKE ?
             ORDER BY e.semester DESC, s.student_no, c.course_code
+            """,
+            (pattern,) * 6,
+        )
+
+    def list_enrollments_for_student(self, student_no: str) -> list[sqlite3.Row]:
+        return self._fetch_all(
             """
+            SELECT e.id, e.student_id, e.course_id, e.semester, e.score,
+                   s.student_no, s.name AS student_name,
+                   c.course_code, c.name AS course_name
+            FROM enrollments AS e
+            JOIN students AS s ON s.id = e.student_id
+            JOIN courses AS c ON c.id = e.course_id
+            WHERE s.student_no = ?
+            ORDER BY e.semester DESC, c.course_code
+            """,
+            (student_no.strip(),),
+        )
+
+    def list_enrollments_for_course(self, course_code: str) -> list[sqlite3.Row]:
+        return self._fetch_all(
+            """
+            SELECT e.id, e.student_id, e.course_id, e.semester, e.score,
+                   s.student_no, s.name AS student_name,
+                   c.course_code, c.name AS course_name
+            FROM enrollments AS e
+            JOIN students AS s ON s.id = e.student_id
+            JOIN courses AS c ON c.id = e.course_id
+            WHERE c.course_code = ?
+            ORDER BY e.semester DESC, s.student_no
+            """,
+            (course_code.strip(),),
         )
 
     def find_enrollment(

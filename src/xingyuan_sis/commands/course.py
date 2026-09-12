@@ -6,6 +6,13 @@ from ..service import XingyuanService
 from .common import confirm, print_fields, print_table, prompt, prompt_float, prompt_int
 
 
+def _course(service: XingyuanService, course_code: str):
+    row = service.course_by_code(course_code)
+    if row is None:
+        raise ValueError(f"找不到课程：{course_code}")
+    return row
+
+
 def run(service: XingyuanService, args: argparse.Namespace) -> int:
     if args.action in {"ls", "list"}:
         print_table(
@@ -18,7 +25,7 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
         return 0
 
     if args.action == "show":
-        row = service._require(service.course_by_code(args.course_code), f"找不到课程：{args.course_code}")
+        row = _course(service, args.course_code)
         print_fields(
             (
                 ("课程编号", row["course_code"]), ("课程", row["name"]),
@@ -26,7 +33,7 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
                 ("课时", row["hours"]),
             )
         )
-        grades = [r for r in service.list_enrollments() if r["course_code"] == args.course_code]
+        grades = service.enrollments_for_course(args.course_code)
         if grades:
             print("\n学生与成绩")
             print_table(
@@ -71,7 +78,7 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
         return 0
 
     if args.action in {"rm", "remove", "delete"}:
-        row = service._require(service.course_by_code(args.course_code), f"找不到课程：{args.course_code}")
+        row = _course(service, args.course_code)
         if confirm(f"删除课程 {row['name']} ({row['course_code']})？", args.yes):
             service.delete_course_by_code(args.course_code)
             print("✓ 课程已删除")
