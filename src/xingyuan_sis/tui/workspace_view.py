@@ -172,17 +172,35 @@ def _roster(board: Board, state: Workspace, catalog: Catalog, width: int) -> Non
     first = min(max(0, state.selected - capacity + 1), max(0, len(rows) - capacity))
     board.put(1, 8, f"名册  {len(rows):02d}  " + (f"/  {first + 1}–{min(first + capacity, len(rows))}" if rows else ""),
               screen._ACCENT if not state.details else screen._DIM, width=width - 1)
-    columns = []
-    available = width - 2
-    for key, label, size in COLLECTIONS[state.key].columns:
-        size = min(size, available) if not columns else size
-        if size > available:
+
+    definitions = COLLECTIONS[state.key].columns
+    available = max(1, width - 2)
+    columns: list[list[Any]] = []
+    remaining = available
+    for key, label, base_size in definitions:
+        size = min(base_size, remaining) if not columns else base_size
+        if size > remaining:
             break
-        columns.append((key, label, size))
-        available -= size + 1
-    if columns and available > 0:
-        key, label, size = columns[-1]
-        columns[-1] = key, label, size + available
+        columns.append([key, label, size])
+        remaining -= size + 1
+
+    # Base widths are only minimums. On a roomy terminal, grow columns to the
+    # widest value they actually need instead of dumping all spare cells into
+    # the final column. This keeps long student names intact on wide screens.
+    if columns and remaining > 0:
+        for column in columns:
+            key, label, size = column
+            desired = max(
+                screen._display_width(label),
+                *(screen._display_width(safe(row.get(key))) for row in rows),
+                size,
+            )
+            growth = min(max(0, desired - size), remaining)
+            column[2] += growth
+            remaining -= growth
+            if remaining <= 0:
+                break
+
     header = " ".join(screen._pad_cells(label, size) for _, label, size in columns)
     board.put(1, 9, header, screen._DIM, width=width - 1)
     for index, row in enumerate(rows[first:first + capacity], start=first):
