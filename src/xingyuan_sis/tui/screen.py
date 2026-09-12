@@ -29,9 +29,6 @@ _SELECTED = "\x1b[48;5;238m\x1b[38;5;255m"
 _GOLD = "\x1b[38;5;180m"
 
 
-# Keep the host terminal background identical to the application's dark page
-# surface so terminal padding cannot appear as a bright frame around the TUI.
-_TERMINAL_BG = "#262626"
 _SURFACE = "\x1b[48;5;235m\x1b[38;5;252m"
 
 
@@ -79,14 +76,12 @@ def _clear() -> None:
 @contextmanager
 def _terminal_session():
     """Keep the terminal padding and unused cells on the menu surface."""
-    colored = os.environ.get("NO_COLOR") is None
     try:
-        sys.stdout.write("\x1b[?1049h" + (f"\x1b]11;{_TERMINAL_BG}\x1b\\" if colored else ""))
+        sys.stdout.write("\x1b[?1049h")
         _clear()
         yield
     finally:
-        sys.stdout.write(_RESET + ("\x1b]111\x1b\\" if colored else "")
-                         + "\x1b[?1049l\x1b[?25h")
+        sys.stdout.write(_RESET + "\x1b[?1049l\x1b[?25h")
         sys.stdout.flush()
 
 
