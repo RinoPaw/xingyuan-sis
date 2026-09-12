@@ -3,6 +3,7 @@ from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from xingyuan_sis.cli import main as cli_main
 from xingyuan_sis.database import initialize_database
@@ -27,6 +28,43 @@ class ServiceAndCliTests(unittest.TestCase):
         self.assertTrue(self.service.list_departments())
         self.assertFalse(hasattr(self.service, "add_department"))
         self.assertFalse(hasattr(self.service, "update_student"))
+
+    def test_lookup_helpers_do_not_scan_list_models(self) -> None:
+        department = self.service.list_departments()[0]
+        major = self.service.list_majors()[0]
+        class_ = self.service.list_classes()[0]
+        family = self.service.list_species_families()[0]
+        branch = self.service.list_species_branches()[0]
+        student = self.service.list_students()[0]
+        course = self.service.list_courses()[0]
+        enrollment = self.service.list_enrollments()[0]
+        repository = self.service.repository
+
+        cases = (
+            ("list_departments", lambda: self.service.department_by_code(department["code"])),
+            ("list_majors", lambda: self.service.major_by_code(major["code"])),
+            ("list_classes", lambda: self.service.class_by_code(class_["code"])),
+            ("list_species_families", lambda: self.service.species_family_by_name(family["name"])),
+            (
+                "list_species_branches",
+                lambda: self.service.species_branch_by_name(branch["name"], branch["family_name"]),
+            ),
+            ("list_students", lambda: self.service.student_by_no(student["student_no"])),
+            ("list_courses", lambda: self.service.course_by_code(course["course_code"])),
+            (
+                "list_enrollments",
+                lambda: self.service.enrollment(
+                    enrollment["student_no"], enrollment["course_code"], enrollment["semester"]
+                ),
+            ),
+        )
+        for list_method, lookup in cases:
+            with self.subTest(list_method=list_method), patch.object(
+                repository,
+                list_method,
+                side_effect=AssertionError("lookup must not scan a list model"),
+            ):
+                self.assertIsNotNone(lookup())
 
     def test_business_codes_drive_shared_service(self) -> None:
         student_seed = STUDENTS[0]
