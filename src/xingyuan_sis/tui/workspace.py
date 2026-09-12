@@ -28,16 +28,18 @@ class Workspace:
     view: int = 0
     query: str = ""
     selected: int = 0
+    roster_scroll: int = 0
     details: bool = False
     detail_scroll: int = 0
     notice: str = ""
     form: Form | None = None
     report: list[str] = field(default_factory=list)
-    history: list[tuple[str, int, str, int]] = field(default_factory=list)
+    history: list[tuple[str, int, str, int, int]] = field(default_factory=list)
 
     def rows(self, catalog: Catalog) -> list[dict[str, Any]]:
         rows = catalog.rows(self.key, self.view, self.query) if self.key != "data" else []
         self.selected = min(max(0, self.selected), max(0, len(rows) - 1))
+        self.roster_scroll = min(max(0, self.roster_scroll), max(0, len(rows) - 1))
         return rows
 
     def current(self, catalog: Catalog) -> dict[str, Any] | None:
@@ -45,7 +47,7 @@ class Workspace:
         return rows[self.selected] if rows else None
 
     def switch(self, key: str) -> None:
-        self.key, self.view, self.query, self.selected = key, 0, "", 0
+        self.key, self.view, self.query, self.selected, self.roster_scroll = key, 0, "", 0, 0
         self.details, self.detail_scroll, self.form = False, 0, None
 
 
@@ -134,7 +136,7 @@ def _interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 state.details = False
                 state.detail_scroll = 0
             elif state.history:
-                state.key, state.view, state.query, state.selected = state.history.pop()
+                state.key, state.view, state.query, state.selected, state.roster_scroll = state.history.pop()
                 state.detail_scroll = 0
             else:
                 return None
@@ -183,7 +185,7 @@ def _interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             state.switch(key.split(":")[1])
         elif key.startswith("related:"):
             _, collection, identifier = key.split(":")
-            state.history.append((state.key, state.view, state.query, state.selected))
+            state.history.append((state.key, state.view, state.query, state.selected, state.roster_scroll))
             state.switch(collection)
             state.selected = next((i for i, row in enumerate(state.rows(catalog)) if str(row["id"]) == identifier), 0)
         elif key.startswith("row:"):
@@ -223,11 +225,11 @@ def _interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             elif state.key in ACADEMICS and index < len(ACADEMICS):
                 state.switch(ACADEMICS[index])
             elif state.key != "data" and index < len(COLLECTIONS[state.key].views):
-                state.view, state.selected, state.detail_scroll = index, 0, 0
+                state.view, state.selected, state.roster_scroll, state.detail_scroll = index, 0, 0, 0
         elif key == "search" and state.key != "data":
             return "search", 0
         elif key == "reset-search":
-            state.query, state.selected = "", 0
+            state.query, state.selected, state.roster_scroll = "", 0, 0
         elif key == "refresh":
             return "refresh", 0
         elif key in {"create", "edit", "delete"} and state.key != "data":
@@ -268,7 +270,7 @@ def _read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> N
     with input_style(True):
         raw = read_input(screen._clip_cells(label, max(4, screen._terminal_size().columns - 8)) + " > ").strip()
     if kind == "search":
-        state.query, state.selected, state.detail_scroll = raw, 0, 0
+        state.query, state.selected, state.roster_scroll, state.detail_scroll = raw, 0, 0, 0
         state.notice = f"搜索：{raw}" if raw else "已显示全部记录。"
     elif raw:
         value = None if raw == "-" and not field_.required else raw
