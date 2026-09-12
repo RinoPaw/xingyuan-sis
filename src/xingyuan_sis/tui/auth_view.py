@@ -1,7 +1,6 @@
 """Native authentication screens for the full-screen TUI."""
 from __future__ import annotations
 
-import getpass
 from pathlib import Path
 import sys
 from typing import Mapping
@@ -16,6 +15,7 @@ from ..auth import (
     initialize_admin,
     write_session,
 )
+from ..terminal_input import input_style, read_input
 from . import animation, keys, screen, theme
 from .board import Board
 
@@ -238,13 +238,15 @@ def _read_field(
     left, top, field_width = _layout(width, height, len(fields))
     field_index = next(index for index, field in enumerate(fields) if field[0] == key)
     row = min(height - 2, top + 3 + field_index * 2)
-    prompt = " " * left + screen._pad_cells(label, min(12, max(1, field_width // 3))) + "  "
+    label_width = min(12, max(1, field_width // 3))
+    prompt = " " * max(0, left - 2) + screen._pad_cells(label, label_width) + "  "
 
     try:
         if sys.stdout.isatty():
             sys.stdout.write(f"\x1b[{row + 1};1H{screen._RESET}{screen._SURFACE}\x1b[2K")
             sys.stdout.flush()
-        return getpass.getpass(prompt) if secret else input(prompt)
+        with input_style(True):
+            return read_input(prompt, secret=secret)
     except (KeyboardInterrupt, EOFError):
         return None
 
