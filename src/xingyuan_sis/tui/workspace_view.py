@@ -520,42 +520,58 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
         noun = COLLECTIONS[state.key].noun if state.key != "data" else "校园概览"
         board.put(1, 3, noun, screen._BOLD + screen._TEXT_ACCENT)
 
-        metrics = catalog.metrics(state.key)
+        x = 1
         if state.key == "data":
             metrics = [
                 ("学生", str(len(catalog.records["students"]))),
                 ("课程", str(len(catalog.records["courses"]))),
                 ("选课", str(len(catalog.records["grades"]))),
             ]
-        board.put(1, 4, _metric_summary(metrics))
-
-        x = 1
-        choices = (
-            [(COLLECTIONS[k].noun, f"collection:{k}", k == state.key) for k in ACADEMICS]
-            if state.key in ACADEMICS else
-            (
-                [(label, f"collection:{key}", False) for label, key in (
+            board.put(1, 4, _metric_summary(metrics))
+            choices = [
+                (label, None, f"collection:{key}", False)
+                for label, key in (
                     ("学生", "students"), ("课程", "courses"),
                     ("成绩", "grades"), ("教务", "departments"),
-                )]
-                if state.key == "data" else
-                [(label, f"view:{i}", i == state.view)
-                 for i, label in enumerate(COLLECTIONS[state.key].views)]
+                )
+            ]
+            choice_row = 5
+        elif state.key in ACADEMICS:
+            choices = [
+                (COLLECTIONS[key].noun, len(catalog.records[key]), f"collection:{key}", key == state.key)
+                for key in ACADEMICS
+            ]
+            choice_row = 4
+        else:
+            choices = [
+                (
+                    label,
+                    len(catalog.rows(state.key, i, state.query)),
+                    f"view:{i}",
+                    i == state.view,
+                )
+                for i, label in enumerate(COLLECTIONS[state.key].views)
+            ]
+            choice_row = 4
+
+        for i, (label, count, action, selected) in enumerate(choices):
+            count_text = f" · {count}" if count is not None else ""
+            shown = (
+                f"{i + 1} {label}{count_text}"
+                if width >= 48 else f"{label}{count_text}"
             )
-        )
-        for i, (label, action, selected) in enumerate(choices):
-            shown = f"{i + 1} {label}" if width >= 48 else label
             if x + screen._display_width(shown) + 4 <= width:
-                x = board.button(x, 5, shown, action, selected=selected)
+                x = board.button(x, choice_row, shown, action, selected=selected)
 
         if state.key != "data":
             text = f"/ {safe(state.query)}" if state.query else "/ 搜索姓名、编号、班级…"
-            board.put(1, 6, text, screen._TEXT_SECONDARY, "search", max(1, width - 12))
+            board.put(1, 5, text, screen._TEXT_SECONDARY, "search", max(1, width - 12))
             if state.query and width >= 40:
                 clear = theme.button("清除")
-                board.put(width - 10, 6, clear, action="reset-search")
+                board.put(width - 10, 5, clear, action="reset-search")
 
-        board.put(0, 7, "─" * width, screen._BORDER_SUBTLE)
+        separator_row = 7 if state.key == "data" else 6
+        board.put(0, separator_row, "─" * width, screen._BORDER_SUBTLE)
 
         if state.key == "data" and not state.form:
             _dashboard(board, state, catalog)
