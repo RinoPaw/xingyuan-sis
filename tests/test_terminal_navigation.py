@@ -33,15 +33,15 @@ class BreadcrumbTests(unittest.TestCase):
                     self.assertLessEqual(region.x + region.width - 1, width)
                     for cell in range(region.x, region.x + region.width):
                         self.assertEqual(screen._hit_action(keys.MouseClick(cell, 2), regions), region.action)
-                self.assertIsNone(screen._hit_action(keys.MouseClick(6, 2), regions))  # separator
-                self.assertIsNone(screen._hit_action(keys.MouseClick(15, 2), regions))  # current page
+                self.assertIsNone(screen._hit_action(keys.MouseClick(6, 2), regions))
+                self.assertIsNone(screen._hit_action(keys.MouseClick(15, 2), regions))
                 self.assertEqual([region.action for region in regions],
                                  ([] if width < 4 else ["navigate:"] if width < 11
                                   else ["navigate:", "navigate:教务"]))
 
     def test_query_titles_include_academic_entity(self):
         for entity, label in (("college", "学院"), ("major", "专业"), ("class", "班级")):
-            self.assertEqual(terminal_ui._command_title(["acad", entity, "ls"]), f"教务 / {label} / 列表")
+            self.assertEqual(terminal_ui._command_title([entity, "ls"]), f"教务 / {label} / 列表")
 
 
 class TerminalSurfaceTests(unittest.TestCase):

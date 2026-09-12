@@ -70,8 +70,7 @@ def run_command(
     clear()
     args = ([] if db_path is None else ["--db", str(db_path)]) + argv
     # Only capture read-only commands: form prompts must remain visible.
-    action_index = 2 if argv[0] == "acad" else 1
-    paginate = len(argv) > action_index and argv[action_index] in {"ls", "show", "stats"}
+    paginate = len(argv) > 1 and argv[1] in {"ls", "show", "stats"}
     output = StringIO()
     try:
         if paginate:
@@ -106,14 +105,19 @@ def run_action(action: Callable[[], None], clear: Callable[[], None], *, interac
 
 
 def _command_title(argv: list[str]) -> str:
-    groups = {"stu": "学生", "acad": "教务", "course": "课程", "grade": "成绩", "data": "数据"}
+    groups = {
+        "stu": "学生",
+        "college": "教务 / 学院",
+        "major": "教务 / 专业",
+        "class": "教务 / 班级",
+        "course": "课程",
+        "grade": "成绩",
+        "data": "数据",
+    }
     actions = {"ls": "列表", "show": "详情", "stats": "统计", "add": "新建", "edit": "编辑",
                "rm": "删除", "import": "导入", "export": "导出", "seed": "演示数据"}
-    action = argv[2] if argv[0] == "acad" else argv[1]
+    action = argv[1]
     group = groups.get(argv[0], argv[0])
-    if argv[0] == "acad":
-        entities = {"college": "学院", "major": "专业", "class": "班级"}
-        group += f" / {entities.get(argv[1], argv[1])}"
     return f"{group} / {actions.get(action, action)}"
 
 

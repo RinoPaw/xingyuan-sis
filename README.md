@@ -2,7 +2,7 @@
 
 星原大学学生信息系统。
 
-这是一个 Python 课程设计项目。数据保存在本地 SQLite 中。默认使用轻量即时键盘菜单；在方向键等终端交互不可靠时，可切换到数字输入的基础菜单；CLI 用于结构化查询、脚本和精确控制。
+这是一个 Python 课程设计项目。数据保存在本地 SQLite 中。默认使用轻量即时键盘菜单；启动时会检测终端是否具备 TTY、ANSI 输出和即时按键输入能力，不满足时自动切换到数字输入的基础菜单；CLI 用于结构化查询、脚本和精确控制。
 
 ## 技术栈
 
@@ -40,7 +40,16 @@ pip install -e .
 xy
 ```
 
-默认进入“星原教务台”即时键盘菜单。首页、子菜单和查询结果页共用低对比度深灰背景、浅色文字与柔和的选中态，底栏采用灰色提示。首页背景空白处有缓慢闪烁的星光，配合动态球面与双环轨道；文字和可点击区域保持清晰。宽屏采用导航与动画分栏，并显示当前数据库文件名；窄屏改为上下布局和两列导航。
+默认先检测当前终端能力。支持 TTY、ANSI 输出和即时按键读取时进入“星原教务台”即时键盘菜单；否则自动进入基础菜单。也可以显式指定：
+
+```bash
+xy --tui
+xy --basic
+```
+
+`--tui` 强制进入即时键盘界面，`--basic` 强制进入数字输入菜单。
+
+首页、子菜单和查询结果页共用低对比度深灰背景、浅色文字与柔和的选中态，底栏采用灰色提示。首页背景空白处有缓慢闪烁的星光，配合动态球面与双环轨道；文字和可点击区域保持清晰。宽屏采用导航与动画分栏，并显示当前数据库文件名；窄屏改为上下布局和两列导航。
 
 ```text
 ✦ 星原 / 教务台
@@ -81,12 +90,6 @@ xy
 - **就地纠错**：编辑年份、学分、课时、成绩时，输入无效数字会提示重填；留空保持原值，成绩可输入 `-` 清空。
 - **基础菜单提示**：输入不存在的编号会提示重选，也可以输入 `q` 返回。基础菜单的数据页同样提供演示数据入口。
 
-如果当前终端的方向键、转义序列或即时按键读取不可靠，可以显式使用基础菜单：
-
-```bash
-xy --basic
-```
-
 基础菜单采用最朴素的 `while True + 清屏 + 输入数字`：
 
 ```text
@@ -107,7 +110,7 @@ xy --basic
 
 ## CLI
 
-CLI 使用业务编号，不要求用户接触数据库内部 ID。
+CLI 使用业务编号，不要求用户接触数据库内部 ID。学院、专业、班级与学生、课程、成绩一样，都是一级命令：
 
 ```bash
 xy stu ls
@@ -116,9 +119,9 @@ xy stu add
 xy stu edit 20260001 --status 休学
 xy stu rm 20260001
 
-xy acad college ls
-xy acad major ls
-xy acad class ls
+xy college ls
+xy major ls
+xy class ls
 
 xy course ls
 xy course show ELS101
@@ -173,6 +176,7 @@ xy stu ls --major 元素 --format csv -o students.csv
 ```bash
 xy --db data/demo.db
 xy --db data/demo.db --basic
+xy --db data/demo.db --tui
 xy --db data/demo.db stu ls
 ```
 
@@ -202,7 +206,7 @@ Basic Menu ──────────┼── XingyuanService ── Reposi
 CLI ─────────────────┘
 ```
 
-两个菜单都不会启动子进程；它们只是把用户操作转换成项目本身的 CLI / service 调用。学生结构化查询由独立的 `student_filters` 查询层处理。
+入口层先检测终端能力并选择交互界面。CLI 的 argparse 语法树与命令执行已经分离；菜单只负责把用户操作转换为服务或 CLI 调用。学生结构化查询由独立的 `student_filters` 查询层处理。
 
 ## 测试
 
@@ -215,22 +219,25 @@ python -m unittest discover -s tests
 ```text
 xingyuan-sis/
 ├── src/xingyuan_sis/
-│   ├── __main__.py        # python -m 入口
-│   ├── entry.py           # 统一入口与学生结构化查询分流
-│   ├── tui/               # 终端首页、工作台、布局、输入与动画
-│   ├── basic_ui.py        # while True + 清屏 + 数字输入备用菜单
-│   ├── terminal_ui.py     # 两种菜单共用的分页、搜索与输入辅助
-│   ├── terminal_input.py  # 菜单表单主题与原生逐行输入
-│   ├── cli.py             # CLI 命令实现
-│   ├── student_filters.py # 学生结构化过滤
-│   ├── seed_data.py       # 默认演示数据
-│   ├── service.py         # 业务接口
-│   ├── repository.py      # SQLite 数据访问层
-│   ├── database.py        # 连接与表结构初始化
-│   ├── reports.py         # 统计查询
-│   └── csv_io.py          # CSV 导入导出
+│   ├── __main__.py              # python -m 入口
+│   ├── entry.py                 # 统一入口、终端模式选择与学生查询分流
+│   ├── terminal_capabilities.py # TTY / ANSI / 即时输入能力检测
+│   ├── cli.py                   # CLI 初始化、分发和错误处理
+│   ├── cli_schema.py            # argparse 命令树
+│   ├── cli_commands.py          # CLI 命令执行
+│   ├── tui/                     # 终端首页、工作台、布局、输入与动画
+│   ├── basic_ui.py              # while True + 清屏 + 数字输入备用菜单
+│   ├── terminal_ui.py           # 两种菜单共用的分页、搜索与输入辅助
+│   ├── terminal_input.py        # 菜单表单主题与原生逐行输入
+│   ├── student_filters.py       # 学生结构化过滤
+│   ├── seed_data.py             # 默认演示数据
+│   ├── service.py               # 业务接口
+│   ├── repository.py            # SQLite 数据访问层
+│   ├── database.py              # 连接与表结构初始化
+│   ├── reports.py               # 统计查询
+│   └── csv_io.py                # CSV 导入导出
 ├── docs/
-│   ├── architecture.md   # 模块职责、数据流与扩展约定
+│   ├── architecture.md          # 模块职责、数据流与扩展约定
 │   └── data-model.md
 ├── tests/
 ├── CONTRIBUTING.md
