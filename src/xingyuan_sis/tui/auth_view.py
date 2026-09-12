@@ -159,28 +159,35 @@ def frame(
     if subtitle and top + 1 < height - 1:
         board.put(left, top + 1, subtitle, screen._TEXT_SECONDARY, width=field_width)
 
-    field_top = top + 3
+    field_top = top + (3 if subtitle else 2)
+    label_width = min(_LABEL_WIDTH, max(1, field_width // 3))
+    box_width = max(4, field_width - label_width - 2)
     for index, (key, label, secret) in enumerate(fields):
         row = field_top + index * 2
         if row >= height - 1:
             break
         value = values.get(key, "")
         if secret and value:
-            shown = "•" * min(len(value), max(1, field_width - _LABEL_WIDTH - 2))
+            shown = "•" * min(len(value), box_width - 2)
         elif value:
-            shown = value
+            shown = str(value)
         elif key == "username" and mode == "login":
-            shown = f"[{ADMIN_USERNAME}]"
+            shown = ADMIN_USERNAME
         else:
             shown = ""
-        label_text = screen._pad_cells(label, min(_LABEL_WIDTH, max(1, field_width // 3)))
-        line = screen._pad_cells(f"{label_text}  {shown}", field_width)
-        style = (
-            screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
-            if key == active
-            else screen._TEXT_PRIMARY
+
+        label_text = screen._ansi(
+            screen._pad_cells(label, label_width),
+            screen._TEXT_PRIMARY if key == active else screen._TEXT_SECONDARY,
         )
-        board.put(left, row, line, style, width=field_width)
+        box_text = screen._pad_cells(screen._clip_cells(f" {shown}", box_width), box_width)
+        box_style = (
+            screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
+            if key == active
+            else screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
+        )
+        line = label_text + "  " + screen._ansi(box_text, box_style)
+        board.put(left, row, line, width=field_width)
 
     message_row = field_top + len(fields) * 2
     if message and message_row < height - 1:
@@ -192,7 +199,7 @@ def frame(
 def _initialize_admin(db_path: Path | str | None) -> bool:
     message = ""
     while True:
-        values = {"password": "", "confirm": ""}
+        values = {"username": ADMIN_USERNAME, "password": "", "confirm": ""}
         password = _read_field(
             "initialize", values, "password", "密码", secret=True,
             database=_database_name(db_path), message=message,
@@ -235,10 +242,12 @@ def _read_field(
     width, height = max(1, screen._terminal_size().columns - 1), max(5, screen._terminal_size().lines)
     fields = _fields(mode)
     left, top, field_width = _layout(width, height, len(fields))
+    subtitle = _copy(mode)[1]
+    field_top = top + (3 if subtitle else 2)
     field_index = next(index for index, field in enumerate(fields) if field[0] == key)
-    row = min(height - 2, top + 3 + field_index * 2)
+    row = min(height - 2, field_top + field_index * 2)
     label_width = min(_LABEL_WIDTH, max(1, field_width // 3))
-    prompt = " " * max(0, left - 2) + screen._pad_cells(label, label_width) + "  "
+    prompt = " " * max(0, left - 2) + screen._pad_cells(label, label_width) + "  │ "
 
     try:
         if sys.stdout.isatty():
@@ -271,6 +280,7 @@ def _wait_message(
 def _fields(mode: str) -> tuple[tuple[str, str, bool], ...]:
     if mode == "initialize":
         return (
+            ("username", "账号", False),
             ("password", "密码", True),
             ("confirm", "确认", True),
         )
@@ -293,7 +303,7 @@ def _fields(mode: str) -> tuple[tuple[str, str, bool], ...]:
 
 def _copy(mode: str) -> tuple[str, str]:
     if mode == "initialize":
-        return "设置管理员密码", ADMIN_USERNAME
+        return "设置管理员密码", ""
     if mode == "login":
         return "登录", ""
     if mode == "forced-password":
@@ -304,7 +314,7 @@ def _copy(mode: str) -> tuple[str, str]:
 def _layout(width: int, height: int, field_count: int) -> tuple[int, int, int]:
     field_width = min(_FIELD_WIDTH, max(12, width - 4))
     left = max(0, (width - field_width) // 2)
-    body_height = 4 + field_count * 2 + 1
+    body_height = 3 + field_count * 2
     top = max(1, (height - 1 - body_height) // 2)
     return left, top, field_width
 
