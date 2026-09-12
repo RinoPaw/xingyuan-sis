@@ -41,6 +41,18 @@ def _section_heading(text: str) -> str:
     return screen._ansi(text, screen._BOLD + screen._TEXT_PRIMARY)
 
 
+def _roster_window(state: Workspace, row_count: int, capacity: int) -> int:
+    """Keep the current selection visible without moving an already valid viewport."""
+    max_first = max(0, row_count - capacity)
+    first = min(max(0, state.roster_scroll), max_first)
+    if state.selected < first:
+        first = state.selected
+    elif state.selected >= first + capacity:
+        first = state.selected - capacity + 1
+    state.roster_scroll = min(max(0, first), max_first)
+    return state.roster_scroll
+
+
 class Board:
     def __init__(self, width: int, height: int):
         self.width, self.height = width, height
@@ -284,7 +296,7 @@ def _editor(board: Board, state: Workspace, catalog: Catalog, x: int, width: int
 def _roster(board: Board, state: Workspace, catalog: Catalog, width: int) -> None:
     rows = state.rows(catalog)
     capacity = max(1, board.height - 12)
-    first = min(max(0, state.selected - capacity + 1), max(0, len(rows) - capacity))
+    first = _roster_window(state, len(rows), capacity)
     heading_style = screen._BOLD + (screen._TEXT_ACCENT if not state.details else screen._TEXT_SECONDARY)
     heading = screen._ansi("名册", heading_style)
     range_text = f"  {len(rows):02d}" + (
