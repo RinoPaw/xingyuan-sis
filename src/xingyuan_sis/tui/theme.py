@@ -226,7 +226,7 @@ _MODULES = (
 
 def home_footer(width: int, height: int, animate: bool) -> tuple[str, list[screen.HitRegion]]:
     motion = "暂停动画" if animate else "播放动画"
-    return footer(width, (("↑↓ 移动", "↑↓移动", "down"),
-                           ("Enter 打开", "Enter打开", "select"),
-                           (f"p {motion}", f"p{motion}", "pause"),
-                           ("Esc 退出", "Esc退出", "back")), height)
+    return footer(width, (("↑↓ 移动", "↑↓", "down"),
+                           ("Enter 打开", "↵", "select"),
+                           (f"p {motion}", "p", "pause"),
+                           ("Esc 退出", "Esc退", "back")), height)
