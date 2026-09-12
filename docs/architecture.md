@@ -1,32 +1,47 @@
 # 项目结构
 
-项目保留 Python 标准库与 SQLite。CLI、基础菜单和交互工作台共享业务服务；终端布局不参与数据库操作。
+项目保留 Python 标准库与 SQLite。CLI、基础菜单和交互工作台共享业务服务；终端布局不参与数据库操作。入口层先检测终端能力，再决定进入即时键盘工作台还是基础菜单。
 
 ```text
 src/xingyuan_sis/
-├── entry.py             # xy 入口、模式分发和全局错误处理
-├── cli.py               # 命令行参数、脚本输出
-├── basic_ui.py          # 数字输入的兼容菜单
-├── terminal_input.py    # CLI 输入与 TUI 单行编辑器
-├── terminal_ui.py       # 基础菜单 / CLI 输出、分页和输入辅助
-├── service.py           # 业务编号解析、关联校验、业务操作
-├── repository.py        # SQL 查询与持久化
-├── database.py          # Schema、连接和事务
-├── reports.py           # 汇总查询
-├── csv_io.py            # CSV 导入 / 导出
-├── seed_data.py         # 演示数据
-├── student_filters.py   # 学生结构化筛选
+├── entry.py                  # xy 入口、终端模式选择和全局错误处理
+├── terminal_capabilities.py  # TTY / ANSI / 即时输入能力检测
+├── cli.py                    # CLI 初始化、分发和统一错误处理
+├── cli_schema.py             # argparse 命令树与参数定义
+├── cli_commands.py           # CLI 命令执行与文本输出
+├── basic_ui.py               # 数字输入的兼容菜单
+├── terminal_input.py         # CLI 输入与 TUI 单行编辑器
+├── terminal_ui.py            # 基础菜单 / CLI 输出、分页和输入辅助
+├── service.py                # 业务编号解析、关联校验、业务操作
+├── repository.py             # SQL 查询与持久化
+├── database.py               # Schema、连接和事务
+├── reports.py                # 汇总查询
+├── csv_io.py                 # CSV 导入 / 导出
+├── seed_data.py              # 演示数据
+├── student_filters.py        # 学生结构化筛选
 └── tui/
-    ├── app.py           # 首页、动画调度、工作台入口
-    ├── keys.py          # 键盘与鼠标协议、输入模式恢复
-    ├── screen.py        # 字符宽度、点击区域、路径、全屏绘制
-    ├── theme.py         # 颜色、按钮、页头、底栏、首页布局
-    ├── animation.py     # 首页星球与星光
-    ├── workspace.py     # 页面状态、事件循环、编辑草稿与保存
-    ├── workspace_view.py # 名册、档案、编辑器、概览的响应式布局
-    ├── workspace_data.py # 集合定义、字段转换、数据快照与关联
-    └── viewer.py        # 共享输出辅助中的只读长文本阅读器
+    ├── app.py                # 首页、动画调度、工作台入口
+    ├── keys.py               # 键盘与鼠标协议、输入模式恢复
+    ├── screen.py             # 字符宽度、点击区域、路径、全屏绘制
+    ├── theme.py              # 颜色、按钮、页头、底栏、首页布局
+    ├── animation.py          # 首页星球与星光
+    ├── workspace.py          # 页面状态、事件循环、编辑草稿与保存
+    ├── workspace_view.py     # 名册、档案、编辑器、概览的响应式布局
+    ├── workspace_data.py     # 集合定义、字段转换、数据快照与关联
+    └── viewer.py             # 共享输出辅助中的只读长文本阅读器
 ```
+
+## 入口与 CLI
+
+`entry` 负责三种使用方式的分流：无子命令时先检测终端能力；具备 TTY、ANSI 输出和即时按键输入时进入 TUI，否则进入基础菜单。`--tui` 与 `--basic` 可以显式覆盖自动选择。带业务子命令时进入 CLI。
+
+CLI 的参数定义与执行逻辑分开：
+
+`entry → cli → cli_schema + cli_commands → service → repository → SQLite`
+
+学院、专业、班级都是一级 CLI 实体，与学生、课程、成绩保持一致：`xy college ...`、`xy major ...`、`xy class ...`。CLI 不保留额外的教务 namespace。
+
+后续继续拆分 CLI 时，优先把 `cli_commands.py` 按业务域拆成独立 command 模块；`cli.py` 保持只做初始化和分发。
 
 ## 工作台的数据流
 
@@ -53,10 +68,11 @@ src/xingyuan_sis/
 - 视图数量直接附着在对应筛选项；
 - 学生档案遵循“摘要 → 选课与成绩 → 详细信息”，不重复数据库字段，也不出现“即时预览 / 阅读中”；
 - 默认 TUI 的返回/取消提示只展示 `Esc`，文本输入中的 `q`、`/` 等始终作为普通字符；
-- 学生、学院、专业、班级、课程、成绩、数据页都必须经过同一套工作区回归检查。
+- 学生、学院、专业、班级、课程、成绩、数据页都必须经过同一套工作区回归检查；
+- 自动入口必须在终端能力不足时降级到基础菜单，并允许 `--tui` / `--basic` 显式覆盖。
 
 ## 后续扩展约定
 
 新增业务操作先落在服务层，再接入 CLI 或工作台。新增页面优先扩展集合、字段与关系定义；确实需要不同交互的页面再添加独立渲染组件。通用绘制、输入协议和业务规则不复制到各个页面。
 
-测试按行为覆盖数据写入、取消、关系保持、页面切换、宽度裁剪、缩放与鼠标输入恢复。界面检查使用临时演示数据库，避免修改用户数据。
+测试按行为覆盖数据写入、取消、关系保持、页面切换、宽度裁剪、缩放、鼠标输入恢复、CLI 命令树和终端能力分流。界面检查使用临时演示数据库，避免修改用户数据。
