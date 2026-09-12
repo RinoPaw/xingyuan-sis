@@ -94,7 +94,7 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
             count_text = f" · {count}" if count is not None else ""
             shown = f"{i + 1} {label}{count_text}" if width >= 48 else f"{label}{count_text}"
             if x + screen._display_width(shown) + 4 <= width:
-                x = board.button(x, choice_row, shown, action, selected=selected)
+                x = board.button(x, choice_row, shown, action, current=selected)
 
         if state.key != "data":
             text = f"/ {safe(state.query)}" if state.query else "/ 搜索姓名、编号、班级…"
