@@ -38,6 +38,31 @@ class TuiAuthViewTests(unittest.TestCase):
             self.assertTrue(fields[1][3])
             self.assertTrue(fields[2][3])
 
+    def test_password_fields_keep_equal_surface_width_under_starlight(self):
+        size = os.terminal_size((80, 24))
+        values = {"username": "Administrator", "password": "", "confirm": ""}
+        with patch.object(screen, "_terminal_size", return_value=size), \
+             patch("sys.stdout.isatty", return_value=True), patch.dict(os.environ):
+            os.environ.pop("NO_COLOR", None)
+            frame = auth_view.frame("initialize", values, active="password")
+
+        width = size.columns - 1
+        left, top, field_width = auth_view._layout(width, size.lines, 3)
+        label_width = min(auth_view._LABEL_WIDTH, max(1, field_width // 3))
+        box_width = max(4, field_width - label_width - 2)
+        selected_box = screen._ansi(
+            " " * box_width,
+            screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED,
+        )
+        idle_box = screen._ansi(
+            " " * box_width,
+            screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY,
+        )
+
+        self.assertIn(selected_box, frame.lines[top + 4])
+        self.assertIn(idle_box, frame.lines[top + 6])
+        self.assertEqual(screen._display_width(selected_box), screen._display_width(idle_box))
+
     def test_portal_uses_tui_login_when_session_is_missing(self):
         identity = Identity("Administrator", "admin")
         preferences = {"animate": False}
