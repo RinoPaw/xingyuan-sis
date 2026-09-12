@@ -48,13 +48,15 @@ def apply_form(state: Workspace, catalog: Catalog) -> None:
         catalog.delete(state.key, form.original)
         state.notice = "记录已删除。"
     elif form.mode == "seed":
+        from ..auth import DEMO_STUDENT_PASSWORD, provision_demo_passwords
         from ..seed_data import seed_demo
 
         if any(catalog.records.values()):
             raise ValueError("已有校园记录，请使用空数据库体验演示校园。")
         seed_demo(catalog.service.db_path)
+        provision_demo_passwords(catalog.service.db_path)
         catalog.refresh()
-        state.notice = "演示校园已就绪，可浏览学生、课程和成绩。"
+        state.notice = f"演示校园已就绪；学生初始密码为 {DEMO_STUDENT_PASSWORD}。"
     else:
         path = Path(form.fields[0].parse(form.values.get("path"))).expanduser()
         if form.mode == "export":
