@@ -21,9 +21,7 @@ _SPARKLE_DOTS = ("⠁", "⠂", "⠄", "⠈", "⠐", "⠠", "⡀", "⢀")
 _SPARKLE_FRAME = 0.150
 _SPARKLE_BG = 38
 _SPARKLE_FG = 208
-_SPARKLE_DENSITY_NUMERATOR = 3
-_SPARKLE_DENSITY_DENOMINATOR = 20
-_SPARKLE_DURATION_SCALE = 1.25
+_SPARKLE_DENSITY_DENOMINATOR = 10
 _RING_INNER_SCALE = 1.8
 _RING_OUTER_SCALE = 2.12
 _RING_MINOR_SCALE = 0.48
@@ -208,17 +206,16 @@ def _starlight(
 
         targets: dict[int, str] = {}
         for x in allowed:
-            # Same coordinate hash as Codex, with a 15% candidate density:
-            # 3/20 is exactly one quarter fewer stars than the original 1/5.
+            # Same coordinate hash as Codex, with a 10% candidate density.
             hash_value = ((row - 1) * 65537 + x) & mask
             hash_value = ((hash_value ^ (hash_value >> 16)) * 0x45D9F3B) & mask
             hash_value = ((hash_value ^ (hash_value >> 16)) * 0x45D9F3B) & mask
             hash_value ^= hash_value >> 16
-            if hash_value % _SPARKLE_DENSITY_DENOMINATOR >= _SPARKLE_DENSITY_NUMERATOR:
+            if hash_value % _SPARKLE_DENSITY_DENOMINATOR != 0:
                 continue
 
-            # Stretch each sparkle cycle by 25%, preserving the same phase curve.
-            period = (4.0 + (hash_value % 31) / 10.0) * _SPARKLE_DURATION_SCALE
+            # Keep the same phase curve while varying each cycle from 6.0 to 10.0 seconds.
+            period = 6.0 + (hash_value % 41) / 10.0
             sparkle_phase = (seconds / period + (hash_value % 997) / 997.0) % 1.0
             brightness = math.sin(sparkle_phase * math.pi) ** 12 * 0.55
             if brightness < 0.04:
