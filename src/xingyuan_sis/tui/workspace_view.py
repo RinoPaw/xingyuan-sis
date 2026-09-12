@@ -97,24 +97,43 @@ def _identity(key: str, row: dict[str, Any]) -> tuple[str, str]:
     return safe(row["name"]), safe(identifier)
 
 
-def _details(key: str, row: dict[str, Any], catalog: Catalog, width: int) -> list[tuple[str, str, str]]:
-    title, identifier = _identity(key, row)
-    lines = [
-        (title, screen._BOLD + screen._TEXT_ACCENT, ""),
-        (identifier, screen._TEXT_SECONDARY, ""),
-        ("", "", ""),
+def _detail_field_line(label: str, value: Any) -> str:
+    return (
+        screen._ansi(screen._pad_cells(label, 10), screen._TEXT_SECONDARY)
+        + "  "
+        + screen._ansi(safe(value), screen._TEXT_PRIMARY)
+    )
+
+
+def _student_summary(row: dict[str, Any]) -> list[tuple[str, str, str]]:
+    title = (
+        screen._ansi(safe(row["name"]), screen._BOLD + screen._TEXT_ACCENT)
+        + "  "
+        + screen._ansi(safe(row["student_no"]), screen._TEXT_SECONDARY)
+    )
+    lineage = f"{safe(row['family'])} · {safe(row['branch'])}"
+    enrollment = f"{safe(row['enrollment_year'])}级 · {safe(row['status'])}"
+    element = f"{safe(row['primary_element'])} · {safe(row['primary_affinity'])}"
+    classroom = safe(row["class_name"])
+    department = safe(row["department_name"])
+    return [
+        (title, "", ""),
+        (lineage + "    " + enrollment, screen._TEXT_PRIMARY, ""),
+        (element + "    " + classroom, screen._TEXT_PRIMARY, ""),
+        (department, screen._TEXT_SECONDARY, ""),
     ]
+
+
+def _details(key: str, row: dict[str, Any], catalog: Catalog, width: int) -> list[tuple[str, str, str]]:
     if key == "students":
-        lines.append((
-            f"{safe(row['primary_element'])} · {safe(row['primary_affinity'])}  /  {safe(row['status'])}",
-            screen._TEXT_PRIMARY,
-            "",
-        ))
-        lines.append((
-            safe(row["class_name"]) + " · " + safe(row["department_name"]),
-            screen._TEXT_SECONDARY,
-            "",
-        ))
+        lines = _student_summary(row)
+    else:
+        title, identifier = _identity(key, row)
+        lines = [
+            (title, screen._BOLD + screen._TEXT_ACCENT, ""),
+            (identifier, screen._TEXT_SECONDARY, ""),
+        ]
+
     if key == "courses":
         lines.append((
             "  /  ".join((
@@ -136,9 +155,10 @@ def _details(key: str, row: dict[str, Any], catalog: Catalog, width: int) -> lis
             lines.append(("━" * filled + "·" * (size - filled), screen._TEXT_ACCENT, "edit-field:score"))
 
     related_key, related = catalog.related(key, row)
+    related_title = "选课与成绩" if key == "students" else f"关联{COLLECTIONS[related_key].noun}"
     lines.extend([
         ("", "", ""),
-        (f"关联{COLLECTIONS[related_key].noun}  {len(related):02d}", screen._BOLD + screen._TEXT_PRIMARY, ""),
+        (f"{related_title}  {len(related):02d}", screen._BOLD + screen._TEXT_PRIMARY, ""),
     ])
     if not related:
         lines.append(("暂无关联记录", screen._TEXT_SECONDARY, ""))
@@ -154,12 +174,20 @@ def _details(key: str, row: dict[str, Any], catalog: Catalog, width: int) -> lis
             f"related:{related_key}:{item['id']}",
         ))
 
+    editable = {f.key for f in catalog.fields(key, True)}
+    if key == "students":
+        detail_keys = {"gender", "birth_date", "contact", "dormitory", "notes"}
+        fields = [field for field in COLLECTIONS[key].fields if field.key in detail_keys]
+        detail_title = "详细信息"
+    else:
+        fields = list(COLLECTIONS[key].fields)
+        detail_title = "详细信息"
+
     lines.extend([
         ("", "", ""),
-        ("档案字段  ·  点击编辑", screen._BOLD + screen._TEXT_PRIMARY, ""),
+        (detail_title, screen._BOLD + screen._TEXT_PRIMARY, ""),
     ])
-    editable = {f.key for f in catalog.fields(key, True)}
-    for field in COLLECTIONS[key].fields:
+    for field in fields:
         action = f"edit-field:{field.key}" if field.key in editable else ""
         value = safe(row.get(field.key))
         chunks = _wrap_line(value, max(2, width - 12))
@@ -196,11 +224,7 @@ def detail_targets(
 
 def _inspector(board: Board, state: Workspace, catalog: Catalog, x: int, width: int) -> None:
     top, bottom = 9, board.height - 2
-    panel_title = (
-        _panel_heading("档案", state.details)
-        + screen._ansi(" / " + ("阅读中" if state.details else "即时预览"), screen._TEXT_SECONDARY)
-    )
-    board.put(x, 8, panel_title, action="focus", width=width)
+    board.put(x, 8, _panel_heading("档案", state.details), action="focus", width=width)
     row = state.current(catalog)
     if row is None:
         if state.query or state.view:
@@ -256,8 +280,7 @@ def _inspector(board: Board, state: Workspace, catalog: Catalog, x: int, width: 
         board.put(
             x,
             bottom - 1,
-            f"{state.detail_scroll + 1}–{min(len(lines), state.detail_scroll + capacity)} / {len(lines)}"
-            "  ·  Tab 切换焦点",
+            f"{state.detail_scroll + 1}–{min(len(lines), state.detail_scroll + capacity)} / {len(lines)}",
             screen._TEXT_SECONDARY,
             action="focus",
             width=width,
