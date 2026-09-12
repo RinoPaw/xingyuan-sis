@@ -35,6 +35,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.group is None:
             mode = "tui" if args.tui else "basic" if args.basic else "auto"
             return _run_menu(args.db, mode=mode)
+
+        if args.group != "auth":
+            from .auth_cli import authorize, require_identity
+
+            initialize_database(args.db)
+            identity = require_identity(args.db)
+            authorize(identity, args)
         return run_cli(args, parser)
     except KeyboardInterrupt:
         print("\n已取消。", file=sys.stderr)
