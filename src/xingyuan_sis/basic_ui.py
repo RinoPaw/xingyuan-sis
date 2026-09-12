@@ -84,13 +84,13 @@ def _students(db_path: Path | str | None) -> None:
 
 def _academic_entity(db_path: Path | str | None, entity: str, title: str) -> None:
     def add() -> None:
-        _command(db_path, ["acad", entity, "add"])
+        _command(db_path, [entity, "add"])
 
     def edit() -> None:
         code = _read("编号")
         if not code:
             return
-        argv = ["acad", entity, "edit", code]
+        argv = [entity, "edit", code]
         new_code = _read("新编号（留空不改）")
         name = _read("新名称（留空不改）")
         if new_code:
@@ -113,12 +113,12 @@ def _academic_entity(db_path: Path | str | None, entity: str, title: str) -> Non
     def remove() -> None:
         code = _read("编号")
         if code:
-            _command(db_path, ["acad", entity, "rm", code])
+            _command(db_path, [entity, "rm", code])
 
     _menu(
         title,
         [
-            ("1", "列表", lambda: _command(db_path, ["acad", entity, "ls"])),
+            ("1", "列表", lambda: _command(db_path, [entity, "ls"])),
             ("2", "新建", add),
             ("3", "编辑", edit),
             ("4", "删除", remove),
