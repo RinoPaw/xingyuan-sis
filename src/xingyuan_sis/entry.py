@@ -13,6 +13,7 @@ from .csv_io import STUDENT_FIELDS
 from .database import initialize_database
 from .service import XingyuanService
 from .student_filters import StudentListRecord, query_students
+from .terminal_capabilities import detect_terminal
 
 
 def _student_list_requested(argv: Sequence[str]) -> bool:
@@ -202,14 +203,15 @@ def _run_student_list(argv: Sequence[str]) -> int:
     return 0
 
 
-def _run_menu(argv: Sequence[str], *, basic: bool) -> int:
+def _run_menu(argv: Sequence[str], *, mode: str) -> int:
     db_path = _menu_db(argv)
     initialize_database(db_path)
-    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+    capabilities = detect_terminal()
+    if not capabilities.interactive:
         print("当前环境不是交互终端；请使用 xy <command>。", file=sys.stderr)
         return 2
 
-    if basic:
+    if mode == "basic" or (mode == "auto" and not capabilities.supports_tui):
         from .basic_ui import run
     else:
         from .tui.app import run
@@ -226,9 +228,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         tail = _menu_tail(args)
         if not tail:
-            return _run_menu(args, basic=False)
+            return _run_menu(args, mode="auto")
         if tail == ["--basic"]:
-            return _run_menu(args, basic=True)
+            return _run_menu(args, mode="basic")
+        if tail == ["--tui"]:
+            return _run_menu(args, mode="tui")
 
         return cli_main(args)
     except KeyboardInterrupt:
