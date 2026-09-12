@@ -30,15 +30,36 @@ class TuiRegressionAuditTests(unittest.TestCase):
             environment.pop("NO_COLOR", None)
             return workspace_view.render(state, self.catalog)
 
+    def assert_escape_footer(self, state: workspace.Workspace) -> None:
+        frame = self.render(state)
+        footer = screen._ANSI_RE.sub("", frame.lines[-1])
+        self.assertIn("Esc", footer)
+        self.assertNotIn("Ctrl+C", footer)
+        self.assertNotIn("q/", footer)
+        self.assertNotIn("/q", footer)
+
     def test_every_workspace_footer_uses_the_same_visible_escape_contract(self):
         for key in WORKSPACES:
             with self.subTest(key=key):
-                frame = self.render(workspace.Workspace(key))
-                footer = screen._ANSI_RE.sub("", frame.lines[-1])
-                self.assertIn("Esc", footer)
-                self.assertNotIn("Ctrl+C", footer)
-                self.assertNotIn("q/", footer)
-                self.assertNotIn("/q", footer)
+                self.assert_escape_footer(workspace.Workspace(key))
+
+    def test_every_form_and_confirmation_state_keeps_the_escape_contract(self):
+        for key in RECORD_WORKSPACES:
+            with self.subTest(key=key, mode="edit"):
+                state = workspace.Workspace(key)
+                workspace._open_form(state, self.catalog, "edit")
+                self.assert_escape_footer(state)
+
+            with self.subTest(key=key, mode="delete"):
+                state = workspace.Workspace(key)
+                workspace._open_form(state, self.catalog, "delete")
+                self.assert_escape_footer(state)
+
+        for mode in ("import", "export", "seed"):
+            with self.subTest(key="data", mode=mode):
+                state = workspace.Workspace("data")
+                workspace._open_form(state, self.catalog, mode)
+                self.assert_escape_footer(state)
 
     def test_every_record_workspace_distinguishes_focused_and_context_selection(self):
         for key in RECORD_WORKSPACES:
@@ -103,6 +124,20 @@ class TuiRegressionAuditTests(unittest.TestCase):
 
                 self.assertIsNone(state.form)
                 self.assertEqual(state.current(self.catalog), before)
+
+    def test_escape_cancels_delete_confirmation_without_writing(self):
+        state = workspace.Workspace("students")
+        before = deepcopy(state.current(self.catalog))
+        count = len(self.catalog.records["students"])
+        workspace._open_form(state, self.catalog, "delete")
+
+        with patch.object(keys, "_read_key", side_effect=["back", "back"]), \
+             patch.object(screen, "_paint"), \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+            self.assertIsNone(workspace._interact(state, self.catalog))
+
+        self.assertEqual(len(self.catalog.records["students"]), count)
+        self.assertEqual(state.current(self.catalog), before)
 
     def test_escape_unwinds_detail_focus_before_leaving_workspace(self):
         state = workspace.Workspace("students", details=True)
