@@ -16,7 +16,7 @@
 
 **先决定信息角色，再决定视觉值。**
 
-代码和设计讨论中应使用 `text-primary`、`text-secondary`、`accent`、`surface`、`border-subtle` 这样的语义角色。`xterm 252`、`xterm 245` 等数字只是当前暗色主题的一种实现，不承担语义。
+代码和设计讨论中应使用 `text-primary`、`text-secondary`、`text-accent`、`surface-*`、`border-subtle` 这样的语义角色。`xterm 252`、`xterm 245` 等数字只是当前暗色主题的一种实现，不承担语义。
 
 同一个原始颜色可以服务多个相近角色，但不能因为“看起来差不多”就把不同信息层级合并。反过来，同一个语义 token 将来可以在不同终端能力或主题下映射到不同色值。
 
@@ -75,7 +75,29 @@
 
 因此 `校园概览` 与 `学生 / 班级 / 课程 / 选课` 必须有明显的视觉差异。前者是 section heading，后者是 label。
 
-## 6. 强调色
+## 6. 工作区页面
+
+学生、学院、专业、班级、课程、成绩和数据页共享同一套信息层级：
+
+```text
+学生档案             ← 当前页面，text-accent + bold
+100 学生  92 在读    ← 数值 text-accent + bold；标签 text-secondary
+
+名册                 ← 当前面板焦点可使用 text-accent
+姓名  学号  班级     ← 列标签 text-secondary
+林岚  20260001 ...   ← 普通记录 text-primary
+
+档案 / 即时预览      ← “档案”是 section heading；状态 text-secondary
+林岚                 ← 当前记录标题 text-accent + bold
+20260001             ← identifier text-secondary
+
+档案字段             ← section heading，text-primary + bold
+姓名      林岚        ← label text-secondary；value text-primary
+```
+
+当前面板焦点可以使用强调色，但不能把该面板内部的标题、标签和值全部染成强调色。
+
+## 7. 强调色
 
 强调色用于表达**当前、可操作焦点或真正重要的值**，不能成为“看起来更漂亮”的通用文字颜色。
 
@@ -89,7 +111,9 @@
 
 普通 section heading 使用 `text-primary`，说明文字和字段标签使用 `text-secondary`。如果页面上大面积文字都变成强调色，说明语义层级已经失效。
 
-## 7. 当前暗色主题映射
+确认、删除、待录入等状态首先依赖明确文案和结构表达。当前主题没有单独定义 warning/danger token，因此不得借用 decorative gold 冒充状态色；确有需要时应先新增语义 token，再选择色号。
+
+## 8. 当前暗色主题映射
 
 下面是当前实现映射，只属于实现层，可以在不改变上面语义规则的前提下调整：
 
@@ -104,11 +128,29 @@
 | `text-secondary` | xterm 245 |
 | `text-accent` | xterm 110 |
 | `text-on-selected` | xterm 255 |
+| `border-subtle` | xterm 239 |
 | decorative gold | xterm 180 |
 
 应用只绘制自己的终端单元格，不修改宿主终端客户端的窗口背景、padding 或主题配置。
 
-## 8. 终端约束
+代码中的对应 token 集中在 `src/xingyuan_sis/tui/screen.py`：
+
+```text
+_TEXT_PRIMARY
+_TEXT_SECONDARY
+_TEXT_ACCENT
+_TEXT_ON_SELECTED
+_BORDER_SUBTLE
+_SURFACE_DEFAULT
+_SURFACE_TOPBAR
+_SURFACE_FOOTER
+_SURFACE_INTERACTIVE
+_SURFACE_SELECTED
+```
+
+组件和页面不得再定义第二套“看起来差不多”的正文/强调颜色。
+
+## 9. 终端约束
 
 星原 SIS 当前以 ANSI 256 色作为稳定基线。不要假设所有用户都有 TrueColor，也不要要求用户修改 Windows Terminal、Termux 或其他宿主终端的主题。
 
@@ -116,7 +158,7 @@
 
 窄屏可以重新排布布局，但语义层级保持不变：页面标题仍高于区块标题，区块标题仍高于字段标签。
 
-## 9. 实现约束
+## 10. 实现约束
 
 布局代码不得为了临时视觉效果散落新的 ANSI 色号。新增样式时按以下顺序处理：
 

@@ -6,10 +6,10 @@ from typing import Sequence
 from . import screen, animation
 
 
-_BUTTON = "\x1b[48;5;237m\x1b[38;5;252m"
-_BAR_SURFACE = "\x1b[48;5;236m\x1b[38;5;250m"
-_TOPBAR = "\x1b[48;5;234m\x1b[38;5;110m\x1b[1m"
-_SECTION_HEADING = "\x1b[38;5;252m\x1b[1m"
+_BUTTON = screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
+_BAR_SURFACE = screen._SURFACE_FOOTER + screen._TEXT_PRIMARY
+_TOPBAR = screen._SURFACE_TOPBAR + screen._TEXT_ACCENT + screen._BOLD
+_SECTION_HEADING = screen._TEXT_PRIMARY + screen._BOLD
 
 
 def bar_space(count: int) -> str:
@@ -20,7 +20,8 @@ def button(label: str, *, selected: bool = False, width: int | None = None) -> s
     shown = f"[ {label} ]"
     if width is not None:
         shown = screen._pad_cells(screen._clip_cells(shown, width), width)
-    return screen._ansi(shown, screen._SELECTED if selected else _BUTTON)
+    style = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED if selected else _BUTTON
+    return screen._ansi(shown, style)
 
 
 def nav_item(label: str, *, selected: bool = False, width: int | None = None) -> str:
@@ -32,9 +33,8 @@ def nav_item(label: str, *, selected: bool = False, width: int | None = None) ->
     shown = f"{'▌' if selected else ' '} {label}"
     if width is not None:
         shown = screen._pad_cells(screen._clip_cells(shown, width), width)
-    if selected:
-        return screen._ansi(shown, screen._BOLD + screen._ACCENT)
-    return shown
+    style = screen._BOLD + screen._TEXT_ACCENT if selected else screen._TEXT_PRIMARY
+    return screen._ansi(shown, style)
 
 
 def overview_row(
@@ -45,13 +45,13 @@ def overview_row(
 ) -> str:
     """Render one compact two-column campus overview row."""
     return (
-        screen._ansi(left_label, screen._DIM)
+        screen._ansi(left_label, screen._TEXT_SECONDARY)
         + " "
-        + screen._ansi(str(left_value), screen._BOLD + screen._ACCENT)
+        + screen._ansi(str(left_value), screen._BOLD + screen._TEXT_ACCENT)
         + "  "
-        + screen._ansi(right_label, screen._DIM)
+        + screen._ansi(right_label, screen._TEXT_SECONDARY)
         + " "
-        + screen._ansi(str(right_value), screen._BOLD + screen._ACCENT)
+        + screen._ansi(str(right_value), screen._BOLD + screen._TEXT_ACCENT)
     )
 
 
@@ -139,7 +139,7 @@ def home_frame(
         columns = 2 if width >= 28 else 1
         nav_rows = (len(labels) + columns - 1) // columns
         graph_height = max(0, body_height - nav_rows - 1)
-        body = [screen._ansi(title, screen._BOLD + screen._ACCENT)]
+        body = [screen._ansi(title, screen._BOLD + screen._TEXT_ACCENT)]
         if graph_height:
             body.extend(animation._orbit(width, graph_height, angle, selected))
             orbit_row_offset = len(top) + 1
@@ -173,7 +173,7 @@ def home_frame(
 
     nav_width = min(22, max(14, width // 5))
     graph_width = max(1, width - nav_width - 3)
-    left: list[str] = [screen._ansi("首页", screen._DIM)]
+    left: list[str] = [screen._ansi("首页", screen._TEXT_SECONDARY)]
 
     # Keep navigation density fixed at every height; the earlier blank rows
     # made Termux visibly jump as the IME changed the reported line count.
@@ -192,9 +192,9 @@ def home_frame(
         if len(left) < body_height:
             left.append(line)
 
-    right = [screen._ansi(f"{selected + 1:02d} / {title}", screen._BOLD + screen._ACCENT)]
+    right = [screen._ansi(f"{selected + 1:02d} / {title}", screen._BOLD + screen._TEXT_ACCENT)]
     if graph_width >= 28 and body_height >= 8:
-        right.extend([screen._ansi(description, screen._DIM), ""])
+        right.extend([screen._ansi(description, screen._TEXT_SECONDARY), ""])
     orbit_row_offset = len(top) + len(right)
     graph_height = max(1, body_height - len(right))
     right.extend(animation._orbit(graph_width, graph_height, angle, selected))
@@ -210,7 +210,7 @@ def home_frame(
         right_line = right[row] if row < len(right) else ""
         body.append(
             screen._pad_cells(screen._clip_cells(left_line, nav_width), nav_width)
-            + screen._ansi(" │ ", screen._DIM)
+            + screen._ansi(" │ ", screen._BORDER_SUBTLE)
             + screen._clip_cells(right_line, graph_width)
         )
 

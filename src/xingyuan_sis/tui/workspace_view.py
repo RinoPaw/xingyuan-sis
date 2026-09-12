@@ -11,15 +11,34 @@ if TYPE_CHECKING:
     from .workspace import Workspace
 
 
-_TEAL = "\x1b[38;5;109m"
-
-
 def safe(value: Any) -> str:
     if value is None or value == "":
         return "—"
     if isinstance(value, float):
         return f"{value:g}"
     return " ".join("".join(char for char in str(value) if char.isprintable() or char == "\n").split())
+
+
+def _metric_summary(metrics: list[tuple[str, str]]) -> str:
+    """Render compact metrics as emphasized values with secondary labels."""
+    return "    ".join(
+        screen._ansi(value, screen._BOLD + screen._TEXT_ACCENT)
+        + " "
+        + screen._ansi(label, screen._TEXT_SECONDARY)
+        for label, value in metrics
+    )
+
+
+def _metric_pair(label: str, value: object) -> str:
+    return (
+        screen._ansi(str(value), screen._BOLD + screen._TEXT_ACCENT)
+        + " "
+        + screen._ansi(label, screen._TEXT_SECONDARY)
+    )
+
+
+def _section_heading(text: str) -> str:
+    return screen._ansi(text, screen._BOLD + screen._TEXT_PRIMARY)
 
 
 class Board:
@@ -62,56 +81,102 @@ def _identity(key: str, row: dict[str, Any]) -> tuple[str, str]:
 
 def _details(key: str, row: dict[str, Any], catalog: Catalog, width: int) -> list[tuple[str, str, str]]:
     title, identifier = _identity(key, row)
-    lines = [(title, screen._BOLD + screen._ACCENT, ""), (identifier, screen._DIM, ""), ("", "", "")]
+    lines = [
+        (title, screen._BOLD + screen._TEXT_ACCENT, ""),
+        (identifier, screen._TEXT_SECONDARY, ""),
+        ("", "", ""),
+    ]
     if key == "students":
-        lines.append((f"{safe(row['primary_element'])} · {safe(row['primary_affinity'])}  /  {safe(row['status'])}", _TEAL, ""))
-        lines.append((safe(row["class_name"]) + " · " + safe(row["department_name"]), screen._DIM, ""))
+        lines.append((
+            f"{safe(row['primary_element'])} · {safe(row['primary_affinity'])}  /  {safe(row['status'])}",
+            screen._TEXT_PRIMARY,
+            "",
+        ))
+        lines.append((
+            safe(row["class_name"]) + " · " + safe(row["department_name"]),
+            screen._TEXT_SECONDARY,
+            "",
+        ))
     if key == "courses":
-        lines.append((f"{safe(row['credits'])} 学分  /  {row['hours']} 课时  /  {row['enrolled']} 次选课", _TEAL, ""))
+        lines.append((
+            "  /  ".join((
+                _metric_pair("学分", safe(row["credits"])),
+                _metric_pair("课时", row["hours"]),
+                _metric_pair("次选课", row["enrolled"]),
+            )),
+            "",
+            "",
+        ))
     if key == "grades":
         score = row["score"]
-        lines.append(("待录入成绩" if score is None else f"{score:g} / 100", screen._GOLD if score is None else _TEAL, "edit-field:score"))
-        if score is not None:
+        if score is None:
+            lines.append(("待录入成绩", screen._BOLD + screen._TEXT_SECONDARY, "edit-field:score"))
+        else:
+            lines.append((f"{score:g} / 100", screen._BOLD + screen._TEXT_ACCENT, "edit-field:score"))
             size = min(30, max(1, width - 2))
             filled = round(score / 100 * size)
-            lines.append(("━" * filled + "·" * (size - filled), _TEAL, "edit-field:score"))
+            lines.append(("━" * filled + "·" * (size - filled), screen._TEXT_ACCENT, "edit-field:score"))
+
     related_key, related = catalog.related(key, row)
-    lines.extend([("", "", ""), (f"关联{COLLECTIONS[related_key].noun}  {len(related):02d}", screen._BOLD + _TEAL, "")])
+    lines.extend([
+        ("", "", ""),
+        (f"关联{COLLECTIONS[related_key].noun}  {len(related):02d}", screen._BOLD + screen._TEXT_PRIMARY, ""),
+    ])
     if not related:
-        lines.append(("暂无关联记录", screen._DIM, ""))
+        lines.append(("暂无关联记录", screen._TEXT_SECONDARY, ""))
     for item in related:
         if related_key == "grades":
             label = item["course_name"] if key == "students" else item["student_name"]
             label = f"{label}  ·  {safe(item['score']) if item['score'] is not None else '待录入'}"
         else:
             label = item["name"]
-        lines.append(("↗ " + safe(label), screen._ACCENT + "\x1b[4m", f"related:{related_key}:{item['id']}"))
-    lines.extend([("", "", ""), ("档案字段  ·  点击编辑", screen._BOLD + _TEAL, "")])
+        lines.append((
+            "↗ " + safe(label),
+            screen._TEXT_ACCENT + "\x1b[4m",
+            f"related:{related_key}:{item['id']}",
+        ))
+
+    lines.extend([
+        ("", "", ""),
+        ("档案字段  ·  点击编辑", screen._BOLD + screen._TEXT_PRIMARY, ""),
+    ])
     editable = {f.key for f in catalog.fields(key, True)}
     for field in COLLECTIONS[key].fields:
         action = f"edit-field:{field.key}" if field.key in editable else ""
-        prefix = screen._pad_cells(field.label, 10)
         value = safe(row.get(field.key))
-        # Wrap long fields instead of silently losing contacts or notes.
         chunks = _wrap_line(value, max(2, width - 12))
-        lines.append((prefix + "  " + chunks[0], "", action))
-        lines.extend((" " * 12 + part, "", action) for part in chunks[1:])
+        prefix = screen._pad_cells(field.label, 10)
+        first_line = (
+            screen._ansi(prefix, screen._TEXT_SECONDARY)
+            + "  "
+            + screen._ansi(chunks[0], screen._TEXT_PRIMARY)
+        )
+        lines.append((first_line, "", action))
+        lines.extend((
+            " " * 12 + screen._ansi(part, screen._TEXT_PRIMARY),
+            "",
+            action,
+        ) for part in chunks[1:])
     return lines
 
 
 def _inspector(board: Board, state: Workspace, catalog: Catalog, x: int, width: int) -> None:
     top, bottom = 9, board.height - 2
-    board.put(x, 8, "档案 / " + ("阅读中" if state.details else "即时预览"), _TEAL, action="focus", width=width)
+    panel_title = (
+        _section_heading("档案")
+        + screen._ansi(" / " + ("阅读中" if state.details else "即时预览"), screen._TEXT_SECONDARY)
+    )
+    board.put(x, 8, panel_title, action="focus", width=width)
     row = state.current(catalog)
     if row is None:
         if state.query or state.view:
-            board.put(x, top + 1, "当前条件下没有记录", screen._ACCENT, width=width)
-            board.put(x, top + 3, "清除搜索或切换上方视图。", screen._DIM, width=width)
+            board.put(x, top + 1, "当前条件下没有记录", screen._BOLD + screen._TEXT_PRIMARY, width=width)
+            board.put(x, top + 3, "清除搜索或切换上方视图。", screen._TEXT_SECONDARY, width=width)
             if state.query:
                 board.button(x, top + 5, "清除搜索", "reset-search")
             return
-        board.put(x, top + 1, "从第一份档案开始", screen._BOLD + screen._ACCENT, width=width)
-        board.put(x, top + 3, "新建记录后，名册与档案会在这里展开。", screen._DIM, width=width)
+        board.put(x, top + 1, "从第一份档案开始", screen._BOLD + screen._TEXT_PRIMARY, width=width)
+        board.put(x, top + 3, "新建记录后，名册与档案会在这里展开。", screen._TEXT_SECONDARY, width=width)
         board.button(x, top + 5, "a 新建", "create")
         if not any(catalog.records.values()):
             board.button(x, top + 7, "体验演示校园", "seed")
@@ -122,56 +187,110 @@ def _inspector(board: Board, state: Workspace, catalog: Catalog, x: int, width: 
     for index, (text, style, action) in enumerate(lines[state.detail_scroll:state.detail_scroll + capacity]):
         board.put(x, top + index, text, style, action, width)
     if len(lines) > capacity:
-        board.put(x, bottom - 1, f"{state.detail_scroll + 1}–{min(len(lines), state.detail_scroll + capacity)} / {len(lines)}  ·  Tab 切换区域后滚动", screen._DIM, action="focus", width=width)
-    # These fallback hit regions also identify the panel under the mouse wheel.
-    board.regions.extend(screen.HitRegion(x + 1, y + 1, width, "focus-details") for y in range(top, bottom))
+        board.put(
+            x,
+            bottom - 1,
+            f"{state.detail_scroll + 1}–{min(len(lines), state.detail_scroll + capacity)} / {len(lines)}"
+            "  ·  Tab 切换区域后滚动",
+            screen._TEXT_SECONDARY,
+            action="focus",
+            width=width,
+        )
+    board.regions.extend(
+        screen.HitRegion(x + 1, y + 1, width, "focus-details")
+        for y in range(top, bottom)
+    )
 
 
 def _editor(board: Board, state: Workspace, catalog: Catalog, x: int, width: int) -> None:
     form = state.form
     if form.options is not None:
-        board.put(x, 8, "选择 / " + form.fields[form.position].label, screen._BOLD + screen._ACCENT, width=width)
+        board.put(
+            x, 8, "选择 / " + form.fields[form.position].label,
+            screen._BOLD + screen._TEXT_ACCENT, width=width,
+        )
         capacity = max(1, board.height - 13)
         first = min(max(0, form.option_index - capacity + 1), max(0, len(form.options) - capacity))
         for i, (_, label) in enumerate(form.options[first:first + capacity], start=first):
             text = screen._pad_cells(screen._clip_cells(safe(label), width), width)
-            board.put(x, 10 + i - first, text, screen._SELECTED if i == form.option_index else "", f"option:{i}", width)
+            selected_style = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED if i == form.option_index else ""
+            board.put(x, 10 + i - first, text, selected_style, f"option:{i}", width)
         if not form.options:
-            board.put(x, 10, "暂无可选记录，请先创建。", screen._DIM, width=width)
+            board.put(x, 10, "暂无可选记录，请先创建。", screen._TEXT_SECONDARY, width=width)
         return
-    titles = {"create": "新建档案", "edit": "编辑档案", "delete": "删除记录", "import": "导入学生 CSV",
-              "export": "导出学生 CSV", "seed": "建立演示校园"}
-    board.put(x, 8, titles[form.mode], screen._BOLD + screen._ACCENT, width=width)
+
+    titles = {
+        "create": "新建档案",
+        "edit": "编辑档案",
+        "delete": "删除记录",
+        "import": "导入学生 CSV",
+        "export": "导出学生 CSV",
+        "seed": "建立演示校园",
+    }
+    board.put(x, 8, titles[form.mode], screen._BOLD + screen._TEXT_ACCENT, width=width)
+
     if form.mode in {"delete", "seed"}:
-        messages = ["将写入一组完整的演示数据。", "仅支持空数据库，已有记录会保留。"]
+        messages: list[tuple[str, str]] = [
+            ("将写入一组完整的演示数据。", screen._TEXT_PRIMARY),
+            ("仅支持空数据库，已有记录会保留。", screen._TEXT_SECONDARY),
+        ]
         if form.mode == "delete":
             title, identifier = _identity(state.key, form.original)
-            messages = [f"确认删除 {title}？", identifier, "删除后无法撤销。"]
+            messages = [
+                (f"确认删除 {title}？", screen._BOLD + screen._TEXT_PRIMARY),
+                (identifier, screen._TEXT_SECONDARY),
+                ("删除后无法撤销。", screen._BOLD + screen._TEXT_PRIMARY),
+            ]
             if state.key in {"students", "courses"}:
                 _, related = catalog.related(state.key, form.original)
-                messages.append(f"同时移除 {len(related)} 条关联选课。")
-        for index, message in enumerate(messages):
-            board.put(x, 10 + index * 2, message, screen._GOLD, width=width)
+                messages.append((f"同时移除 {len(related)} 条关联选课。", screen._TEXT_PRIMARY))
+        for index, (message, style) in enumerate(messages):
+            board.put(x, 10 + index * 2, message, style, width=width)
     else:
-        board.put(x, 9, "* 必填  ·  更改暂存，保存后生效", screen._DIM, width=width)
+        board.put(x, 9, "* 必填  ·  更改暂存，保存后生效", screen._TEXT_SECONDARY, width=width)
         capacity = max(1, board.height - 15)
         first = min(max(0, form.position - capacity + 1), max(0, len(form.fields) - capacity))
         for i, field in enumerate(form.fields[first:first + capacity], start=first):
-            mark = "›" if i == form.position else " "
-            label = f"{mark} {field.label}{'*' if field.required else ''}  {safe(form.values.get(field.key))}"
-            text = screen._pad_cells(screen._clip_cells(label, width), width)
-            board.put(x, 11 + i - first, text, screen._SELECTED if i == form.position else "", f"field:{i}", width)
+            value = safe(form.values.get(field.key))
+            if i == form.position:
+                label = f"› {field.label}{'*' if field.required else ''}  {value}"
+                text = screen._pad_cells(screen._clip_cells(label, width), width)
+                board.put(
+                    x, 11 + i - first, text,
+                    screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED,
+                    f"field:{i}", width,
+                )
+            else:
+                label = f"  {field.label}{'*' if field.required else ''}"
+                text = (
+                    screen._ansi(label, screen._TEXT_SECONDARY)
+                    + "  "
+                    + screen._ansi(value, screen._TEXT_PRIMARY)
+                )
+                board.put(x, 11 + i - first, text, action=f"field:{i}", width=width)
         if len(form.fields) > capacity:
-            board.put(x, board.height - 4, f"字段 {form.position + 1}/{len(form.fields)}  ·  ↑↓ 切换", screen._DIM, width=width)
-    board.put(x, board.height - 3, "s 保存 / 确认   ·   q 取消", _TEAL, width=width)
+            board.put(
+                x, board.height - 4,
+                f"字段 {form.position + 1}/{len(form.fields)}  ·  ↑↓ 切换",
+                screen._TEXT_SECONDARY, width=width,
+            )
+
+    board.put(
+        x, board.height - 3, "s 保存 / 确认   ·   q 取消",
+        screen._TEXT_SECONDARY, width=width,
+    )
 
 
 def _roster(board: Board, state: Workspace, catalog: Catalog, width: int) -> None:
     rows = state.rows(catalog)
     capacity = max(1, board.height - 12)
     first = min(max(0, state.selected - capacity + 1), max(0, len(rows) - capacity))
-    board.put(1, 8, f"名册  {len(rows):02d}  " + (f"/  {first + 1}–{min(first + capacity, len(rows))}" if rows else ""),
-              screen._ACCENT if not state.details else screen._DIM, width=width - 1)
+    heading_style = screen._BOLD + (screen._TEXT_ACCENT if not state.details else screen._TEXT_SECONDARY)
+    heading = screen._ansi("名册", heading_style)
+    range_text = f"  {len(rows):02d}" + (
+        f"  /  {first + 1}–{min(first + capacity, len(rows))}" if rows else ""
+    )
+    board.put(1, 8, heading + screen._ansi(range_text, screen._TEXT_SECONDARY), width=width - 1)
 
     definitions = COLLECTIONS[state.key].columns
     available = max(1, width - 2)
@@ -184,9 +303,6 @@ def _roster(board: Board, state: Workspace, catalog: Catalog, width: int) -> Non
         columns.append([key, label, size])
         remaining -= size + 1
 
-    # Base widths are only minimums. On a roomy terminal, grow columns to the
-    # widest value they actually need instead of dumping all spare cells into
-    # the final column. This keeps long student names intact on wide screens.
     if columns and remaining > 0:
         for column in columns:
             key, label, size = column
@@ -202,15 +318,27 @@ def _roster(board: Board, state: Workspace, catalog: Catalog, width: int) -> Non
                 break
 
     header = " ".join(screen._pad_cells(label, size) for _, label, size in columns)
-    board.put(1, 9, header, screen._DIM, width=width - 1)
+    board.put(1, 9, header, screen._TEXT_SECONDARY, width=width - 1)
     for index, row in enumerate(rows[first:first + capacity], start=first):
-        text = " ".join(screen._pad_cells(screen._clip_cells(safe(row.get(key)), size), size) for key, _, size in columns)
+        text = " ".join(
+            screen._pad_cells(screen._clip_cells(safe(row.get(key)), size), size)
+            for key, _, size in columns
+        )
         text = screen._pad_cells(screen._clip_cells(text, width - 1), width - 1)
-        board.put(1, 10 + index - first, text, screen._SELECTED if index == state.selected else "", f"row:{index}", width - 1)
+        selected_style = (
+            screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
+            if index == state.selected else screen._TEXT_PRIMARY
+        )
+        board.put(1, 10 + index - first, text, selected_style, f"row:{index}", width - 1)
+
     if not rows:
-        board.put(1, 11, "没有匹配的记录" if state.query or state.view else "名册还是空白的", screen._ACCENT, width=width - 1)
+        board.put(
+            1, 11,
+            "没有匹配的记录" if state.query or state.view else "名册还是空白的",
+            screen._BOLD + screen._TEXT_PRIMARY, width=width - 1,
+        )
         if state.query or state.view:
-            board.put(1, 13, "切换视图或清除搜索条件。", screen._DIM, width=width - 1)
+            board.put(1, 13, "切换视图或清除搜索条件。", screen._TEXT_SECONDARY, width=width - 1)
         else:
             board.button(1, 13, "a 新建", "create")
             if state.key == "students":
@@ -223,38 +351,90 @@ def _dashboard(board: Board, state: Workspace, catalog: Catalog) -> None:
     width = board.width
     split = width // 2 if width >= 76 else width
     lines: list[tuple[str, str, str]] = []
-    lines.append(("校园脉络 / 学生元素分布", screen._BOLD + _TEAL, ""))
+
+    lines.append(("校园脉络 / 学生元素分布", screen._BOLD + screen._TEXT_PRIMARY, ""))
     distribution = catalog.distribution()
     maximum = max((count for _, count in distribution), default=1)
     for label, count in distribution:
         bar = "━" * max(1, round(count / maximum * max(1, split - 20)))
-        lines.append((f"{safe(label):<4} {bar} {count}", screen._ACCENT, "collection:students"))
+        text = (
+            screen._ansi(f"{safe(label):<4}", screen._TEXT_SECONDARY)
+            + " "
+            + screen._ansi(bar, screen._TEXT_ACCENT)
+            + " "
+            + screen._ansi(str(count), screen._BOLD + screen._TEXT_ACCENT)
+        )
+        lines.append((text, "", "collection:students"))
     if not distribution:
-        lines.extend([("", "", ""), ("校园尚未建立第一份学生档案。", screen._DIM, ""),
-                      ("[ 导入学生 CSV ]", screen._ACCENT, "import"),
-                      ("[ 体验演示校园 ]", screen._ACCENT, "seed")])
-    lines.extend([("", "", ""), ("班级 / 学生人数", screen._BOLD + _TEAL, "")])
+        lines.extend([
+            ("", "", ""),
+            ("校园尚未建立第一份学生档案。", screen._TEXT_SECONDARY, ""),
+            ("[ 导入学生 CSV ]", screen._TEXT_ACCENT, "import"),
+            ("[ 体验演示校园 ]", screen._TEXT_ACCENT, "seed"),
+        ])
+
+    lines.extend([("", "", ""), ("班级 / 学生人数", screen._BOLD + screen._TEXT_PRIMARY, "")])
     for row in catalog.records["classes"]:
-        lines.append((f"{safe(row['name'])}  {row['enrolled']} 人", "", f"related:classes:{row['id']}"))
+        text = (
+            screen._ansi(safe(row["name"]), screen._TEXT_PRIMARY)
+            + "  "
+            + screen._ansi(str(row["enrolled"]), screen._BOLD + screen._TEXT_ACCENT)
+            + screen._ansi(" 人", screen._TEXT_SECONDARY)
+        )
+        lines.append((text, "", f"related:classes:{row['id']}"))
+
     grades = catalog.records["grades"]
     scores = [r["score"] for r in grades if r["score"] is not None]
-    right = [("成绩进度", screen._BOLD + _TEAL, ""), ("", "", ""),
-             (f"已录入 {len(scores)} / {len(grades)}", screen._ACCENT, "collection:grades")]
-    right.extend((f"{label}  {sum(low <= score < high for score in scores)}", "", "collection:grades")
-                 for label, low, high in (("90–100", 90, 101), ("80–89", 80, 90), ("60–79", 60, 80), ("60 以下", 0, 60)))
-    right.extend([("", "", ""), ("导入记录", screen._BOLD + _TEAL, "")])
+    right = [
+        ("成绩进度", screen._BOLD + screen._TEXT_PRIMARY, ""),
+        ("", "", ""),
+        (
+            screen._ansi("已录入 ", screen._TEXT_SECONDARY)
+            + screen._ansi(f"{len(scores)} / {len(grades)}", screen._BOLD + screen._TEXT_ACCENT),
+            "",
+            "collection:grades",
+        ),
+    ]
+    for label, low, high in (
+        ("90–100", 90, 101),
+        ("80–89", 80, 90),
+        ("60–79", 60, 80),
+        ("60 以下", 0, 60),
+    ):
+        count = sum(low <= score < high for score in scores)
+        right.append((
+            screen._ansi(label, screen._TEXT_SECONDARY)
+            + "  "
+            + screen._ansi(str(count), screen._TEXT_PRIMARY),
+            "",
+            "collection:grades",
+        ))
+
+    right.extend([("", "", ""), ("导入记录", screen._BOLD + screen._TEXT_PRIMARY, "")])
     report_width = max(2, width - split - 3 if width >= 76 else width - 2)
-    right.extend((part, screen._GOLD, "") for line in state.report or ["本次还没有导入错误。"]
-                 for part in _wrap_line(safe(line), report_width))
+    report_lines = state.report or ["本次还没有导入错误。"]
+    report_style = screen._TEXT_PRIMARY if state.report else screen._TEXT_SECONDARY
+    right.extend(
+        (part, report_style, "")
+        for line in report_lines
+        for part in _wrap_line(safe(line), report_width)
+    )
+
     if width < 76:
         lines.extend([("", "", ""), *right])
         panels = [(1, width - 2, lines)]
     else:
         panels = [(1, split - 3, lines), (split + 2, width - split - 3, right)]
+
     capacity = max(1, board.height - 11)
-    state.detail_scroll = min(state.detail_scroll, max(0, max(len(panel[2]) for panel in panels) - capacity))
+    state.detail_scroll = min(
+        state.detail_scroll,
+        max(0, max(len(panel[2]) for panel in panels) - capacity),
+    )
     for x, panel_width, content in panels:
-        for index, (text, style, action) in enumerate(content[state.detail_scroll:state.detail_scroll + capacity]):
+        for index, (text, style, action) in enumerate(
+            content[state.detail_scroll:state.detail_scroll + capacity]
+        ):
             board.put(x, 9 + index, text, style, action, panel_width)
 
 
@@ -263,66 +443,120 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
     width, height = max(1, terminal.columns - 1), max(4, terminal.lines)
     board = Board(width, height)
     title = COLLECTIONS[state.key].title if state.key != "data" else "数据"
+
     board.put(0, 0, theme.topbar(width))
     breadcrumb, regions = screen._breadcrumb(title, width)
     board.put(0, 1, breadcrumb)
     board.regions.extend(regions)
+
     if height < 20 or width < 24:
-        # Keep record navigation usable while an IME or resize leaves little room.
         row = state.current(catalog)
-        board.put(0, 3, safe(_identity(state.key, row)[0]) if row else title, screen._ACCENT,
-                  action="focus" if row else "")
+        board.put(
+            0, 3, safe(_identity(state.key, row)[0]) if row else title,
+            screen._BOLD + screen._TEXT_ACCENT,
+            action="focus" if row else "",
+        )
         if state.form:
             form = state.form
             if form.options is not None:
                 if form.options:
-                    board.put(0, 4, safe(form.options[form.option_index][1]), action=f"option:{form.option_index}")
+                    board.put(
+                        0, 4, safe(form.options[form.option_index][1]),
+                        action=f"option:{form.option_index}",
+                    )
                 else:
-                    board.put(0, 4, "暂无可选记录，请先创建。", screen._DIM)
+                    board.put(0, 4, "暂无可选记录，请先创建。", screen._TEXT_SECONDARY)
             elif form.fields:
                 f = form.fields[form.position]
-                board.put(0, 4, f.label + "  " + safe(form.values.get(f.key)), action=f"field:{form.position}")
+                field_line = (
+                    screen._ansi(f.label, screen._TEXT_SECONDARY)
+                    + "  "
+                    + screen._ansi(safe(form.values.get(f.key)), screen._TEXT_PRIMARY)
+                )
+                board.put(0, 4, field_line, action=f"field:{form.position}")
             else:
-                board.put(0, 4, "确认执行？s 确认 / q 取消", screen._GOLD)
+                board.put(0, 4, "确认执行？s 确认 / q 取消", screen._BOLD + screen._TEXT_PRIMARY)
         elif row:
             content = _details(state.key, row, catalog, width)[1:]
             capacity = max(1, height - 6)
             state.detail_scroll = min(state.detail_scroll, max(0, len(content) - capacity))
-            for i, (text, style, action) in enumerate(content[state.detail_scroll:state.detail_scroll + capacity]):
+            for i, (text, style, action) in enumerate(
+                content[state.detail_scroll:state.detail_scroll + capacity]
+            ):
                 board.put(0, 4 + i, text, style, action, width)
         elif state.key == "data":
-            for i, (label, key) in enumerate((("学生", "students"), ("课程", "courses"), ("选课", "grades"))):
+            for i, (label, key) in enumerate((
+                ("学生", "students"),
+                ("课程", "courses"),
+                ("选课", "grades"),
+            )):
                 if 4 + i < height - 2:
-                    board.put(0, 4 + i, f"{len(catalog.records[key])} {label}", _TEAL, f"collection:{key}")
+                    board.put(
+                        0, 4 + i,
+                        _metric_pair(label, len(catalog.records[key])),
+                        action=f"collection:{key}",
+                    )
+
         board.rows[height - 2] = []
-        board.put(0, height - 2, screen._clip_cells(safe(state.notice) if state.notice else "", width), screen._DIM)
-        buttons = (("s 保存", "s", "save"), ("q 取消", "q", "cancel")) if state.form else (
-            ("↑↓ 浏览", "↑↓", "down"), ("a 新建", "a", "create"), ("e 编辑", "e", "edit"), ("q 返回", "q", "back"))
+        board.put(
+            0, height - 2,
+            screen._clip_cells(safe(state.notice) if state.notice else "", width),
+            screen._TEXT_SECONDARY,
+        )
+        buttons = (
+            (("s 保存", "s", "save"), ("q 取消", "q", "cancel"))
+            if state.form else
+            (("↑↓ 浏览", "↑↓", "down"), ("a 新建", "a", "create"),
+             ("e 编辑", "e", "edit"), ("q 返回", "q", "back"))
+        )
         if state.key == "data" and not state.form:
-            buttons = (("i 导入", "i", "import"), ("o 导出", "o", "export"),
-                       ("g 演示", "g", "seed"), ("q 返回", "q", "back"))
+            buttons = (
+                ("i 导入", "i", "import"),
+                ("o 导出", "o", "export"),
+                ("g 演示", "g", "seed"),
+                ("q 返回", "q", "back"),
+            )
     else:
         noun = COLLECTIONS[state.key].noun if state.key != "data" else "校园概览"
-        board.put(1, 3, noun, screen._BOLD + screen._ACCENT)
+        board.put(1, 3, noun, screen._BOLD + screen._TEXT_ACCENT)
+
         metrics = catalog.metrics(state.key)
         if state.key == "data":
-            metrics = [("学生", str(len(catalog.records["students"]))), ("课程", str(len(catalog.records["courses"]))),
-                       ("选课", str(len(catalog.records["grades"])))]
-        board.put(1, 4, "    ".join(value + " " + label for label, value in metrics), _TEAL)
+            metrics = [
+                ("学生", str(len(catalog.records["students"]))),
+                ("课程", str(len(catalog.records["courses"]))),
+                ("选课", str(len(catalog.records["grades"]))),
+            ]
+        board.put(1, 4, _metric_summary(metrics))
+
         x = 1
-        choices = [(COLLECTIONS[k].noun, f"collection:{k}", k == state.key) for k in ACADEMICS] if state.key in ACADEMICS else (
-            [(label, f"collection:{key}", False) for label, key in (("学生", "students"), ("课程", "courses"), ("成绩", "grades"), ("教务", "departments"))]
-            if state.key == "data" else [(label, f"view:{i}", i == state.view) for i, label in enumerate(COLLECTIONS[state.key].views)])
+        choices = (
+            [(COLLECTIONS[k].noun, f"collection:{k}", k == state.key) for k in ACADEMICS]
+            if state.key in ACADEMICS else
+            (
+                [(label, f"collection:{key}", False) for label, key in (
+                    ("学生", "students"), ("课程", "courses"),
+                    ("成绩", "grades"), ("教务", "departments"),
+                )]
+                if state.key == "data" else
+                [(label, f"view:{i}", i == state.view)
+                 for i, label in enumerate(COLLECTIONS[state.key].views)]
+            )
+        )
         for i, (label, action, selected) in enumerate(choices):
             shown = f"{i + 1} {label}" if width >= 48 else label
             if x + screen._display_width(shown) + 4 <= width:
                 x = board.button(x, 5, shown, action, selected=selected)
+
         if state.key != "data":
             text = f"/ {safe(state.query)}" if state.query else "/ 搜索姓名、编号、班级…"
-            board.put(1, 6, text, screen._DIM, "search", max(1, width - 12))
+            board.put(1, 6, text, screen._TEXT_SECONDARY, "search", max(1, width - 12))
             if state.query and width >= 40:
-                board.put(width - 10, 6, "[ 清除 ]", screen._ACCENT, "reset-search")
-        board.put(0, 7, "─" * width, screen._DIM)
+                clear = theme.button("清除")
+                board.put(width - 10, 6, clear, action="reset-search")
+
+        board.put(0, 7, "─" * width, screen._BORDER_SUBTLE)
+
         if state.key == "data" and not state.form:
             _dashboard(board, state, catalog)
         else:
@@ -331,29 +565,58 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
                 if state.key != "data":
                     _roster(board, state, catalog, split - 1)
                 for y in range(8, height - 2):
-                    board.put(split, y, "│", screen._DIM)
+                    board.put(split, y, "│", screen._BORDER_SUBTLE)
                 x, panel_width = split + 3, width - split - 4
             else:
                 x, panel_width = 1, width - 2
                 if not state.details and not state.form:
                     _roster(board, state, catalog, width - 1)
+
             if state.form:
                 _editor(board, state, catalog, x, panel_width)
             elif width >= 76 or state.details:
                 _inspector(board, state, catalog, x, panel_width)
-        board.put(0, height - 2, safe(state.notice) if state.notice else "点击记录即预览 · 点击关联记录继续浏览 · r 刷新", screen._DIM, width=width)
+
+        board.put(
+            0, height - 2,
+            safe(state.notice) if state.notice else "点击记录即预览 · 点击关联记录继续浏览 · r 刷新",
+            screen._TEXT_SECONDARY, width=width,
+        )
+
         if state.form:
-            buttons = (("Enter 编辑字段", "↵编辑", "select"), ("s 保存 / 确认", "s保存", "save"), ("q 取消", "q取消", "cancel"))
+            buttons = (
+                ("Enter 编辑字段", "↵编辑", "select"),
+                ("s 保存 / 确认", "s保存", "save"),
+                ("q 取消", "q取消", "cancel"),
+            )
         elif state.key == "data":
-            buttons = (("i 导入 CSV", "i导入", "import"), ("o 导出 CSV", "o导出", "export"),
-                       ("g 演示校园", "g演示", "seed"), ("q 返回", "q返回", "back"))
+            buttons = (
+                ("i 导入 CSV", "i导入", "import"),
+                ("o 导出 CSV", "o导出", "export"),
+                ("g 演示校园", "g演示", "seed"),
+                ("q 返回", "q返回", "back"),
+            )
         else:
-            buttons = (("↑↓ 浏览", "↑↓", "down"), ("a 新建", "a新增", "create"), ("e 编辑", "e编辑", "edit"),
-                       ("d 删除", "d删除", "delete"), ("Tab 详情", "Tab", "focus"), ("q 返回", "q返回", "back"))
+            buttons = (
+                ("↑↓ 浏览", "↑↓", "down"),
+                ("a 新建", "a新增", "create"),
+                ("e 编辑", "e编辑", "edit"),
+                ("d 删除", "d删除", "delete"),
+                ("Tab 详情", "Tab", "focus"),
+                ("q 返回", "q返回", "back"),
+            )
+
     if state.form and state.form.options is not None:
-        buttons = (("↑↓ 选择", "↑↓", "down"), ("Enter 确定", "↵", "select"), ("q 返回编辑", "q返回", "cancel"))
+        buttons = (
+            ("↑↓ 选择", "↑↓", "down"),
+            ("Enter 确定", "↵", "select"),
+            ("q 返回编辑", "q返回", "cancel"),
+        )
+
     footer, regions = theme.footer(width, buttons, height)
-    # Footer and status always own their rows, even in a tiny terminal.
     board.rows[-1] = [(0, footer)]
-    board.regions = [r for r in board.regions if r.y < height - 1 and r.x + r.width - 1 <= width] + regions
+    board.regions = [
+        r for r in board.regions
+        if r.y < height - 1 and r.x + r.width - 1 <= width
+    ] + regions
     return board.frame()

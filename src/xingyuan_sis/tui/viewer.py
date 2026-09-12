@@ -28,15 +28,22 @@ def show(text: str, title: str) -> None:
             page_size = max(1, height - 4)
             last = min(len(records), first + page_size)
             breadcrumb, navigation = screen._breadcrumb(title, width)
-            lines = [screen._ansi("✦ 星原 / 教务台", screen._BOLD + screen._ACCENT),
-                     breadcrumb, screen._ansi(f"第 {first + 1}–{last} / {len(records)} 行", screen._DIM),
-                     *records[first:last]]
+            lines = [
+                theme.topbar(width),
+                breadcrumb,
+                screen._ansi(f"第 {first + 1}–{last} / {len(records)} 行", screen._TEXT_SECONDARY),
+                *records[first:last],
+            ]
             while len(lines) < height - 1:
                 lines.append("")
             next_text = "Enter 返回" if last == len(records) else "Enter 下一页"
-            footer, regions = theme.footer(width, (("p 上一页", "p上页", "prev"),
-                                                    (next_text, "Enter", "next"),
-                                                    ("q 返回", "q返回", "back")), height)
+            footer, regions = theme.footer(
+                width,
+                (("p 上一页", "p上页", "prev"),
+                 (next_text, "Enter", "next"),
+                 ("q 返回", "q返回", "back")),
+                height,
+            )
             lines.append(footer)
             lines = [screen._clip_cells(line, width) for line in lines]
             if lines != previous:

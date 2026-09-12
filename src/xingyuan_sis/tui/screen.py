@@ -12,24 +12,32 @@ from .keys import MouseClick
 
 
 _RESET = "\x1b[0m"
-
-
 _BOLD = "\x1b[1m"
 
+# Semantic color tokens. Layout code should use these roles instead of
+# inventing component-local ANSI colors.
+_TEXT_PRIMARY = "\x1b[38;5;252m"
+_TEXT_SECONDARY = "\x1b[38;5;245m"
+_TEXT_ACCENT = "\x1b[38;5;110m"
+_TEXT_ON_SELECTED = "\x1b[38;5;255m"
+_BORDER_SUBTLE = "\x1b[38;5;239m"
 
-_ACCENT = "\x1b[38;5;110m"
+_SURFACE_DEFAULT = "\x1b[48;5;235m"
+_SURFACE_TOPBAR = "\x1b[48;5;234m"
+_SURFACE_FOOTER = "\x1b[48;5;236m"
+_SURFACE_INTERACTIVE = "\x1b[48;5;237m"
+_SURFACE_SELECTED = "\x1b[48;5;238m"
 
+# Decoration is deliberately separate from semantic information colors.
+_DECORATIVE_GOLD = "\x1b[38;5;180m"
 
-_DIM = "\x1b[38;5;245m"
-
-
-_SELECTED = "\x1b[48;5;238m\x1b[38;5;255m"
-
-
-_GOLD = "\x1b[38;5;180m"
-
-
-_SURFACE = "\x1b[48;5;235m\x1b[38;5;252m"
+# Compatibility aliases for animation and older helpers. New UI code should
+# prefer the semantic tokens above.
+_ACCENT = _TEXT_ACCENT
+_DIM = _TEXT_SECONDARY
+_SELECTED = _SURFACE_SELECTED + _TEXT_ON_SELECTED
+_GOLD = _DECORATIVE_GOLD
+_SURFACE = _SURFACE_DEFAULT + _TEXT_PRIMARY
 
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
@@ -118,13 +126,13 @@ def _breadcrumb(title: str, width: int, row: int = 2) -> tuple[str, list[HitRegi
     regions = []
     for index, label in enumerate(parts):
         if index:
-            text += _ansi(" / ", _DIM)
+            text += _ansi(" / ", _BORDER_SUBTLE)
         cell = _display_width(text)
         clickable = index < len(parts) - 1 and cell + _display_width(label) <= width
         if clickable:
             path = " / ".join(parts[1:index + 1])
             regions.append(HitRegion(cell + 1, row, _display_width(label), f"navigate:{path}"))
-        text += _ansi(label, _ACCENT + "\x1b[4m" if clickable else _DIM)
+        text += _ansi(label, _TEXT_ACCENT + "\x1b[4m" if clickable else _TEXT_SECONDARY)
     return _clip_cells(text, width), regions
 
 
