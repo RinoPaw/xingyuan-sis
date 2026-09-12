@@ -160,6 +160,7 @@ def frame(
     field_top = top + 2
     label_width = min(_LABEL_WIDTH, max(1, field_width // 3))
     box_width = max(4, field_width - label_width - 2)
+    protected_cells: set[tuple[int, int]] = set()
     for index, (key, label, secret, editable) in enumerate(fields):
         row = field_top + index * 2
         if row >= height - 1:
@@ -184,6 +185,8 @@ def frame(
                 else screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
             )
             line = label_text + "  " + screen._ansi(box_text, box_style)
+            box_x = left + label_width + 2
+            protected_cells.update((row, box_x + offset) for offset in range(box_width))
         else:
             value_text = screen._ansi(screen._clip_cells(shown, box_width), screen._TEXT_PRIMARY)
             line = label_text + "  " + value_text
@@ -193,7 +196,7 @@ def frame(
     if message and message_row < height - 1:
         board.put(left, message_row, message, screen._TEXT_ACCENT, width=field_width)
 
-    return animation._starlight(board.frame(), width, 0.35)
+    return animation._starlight(board.frame(), width, 0.35, protected_cells)
 
 
 def _initialize_admin(db_path: Path | str | None) -> bool:
