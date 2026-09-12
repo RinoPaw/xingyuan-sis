@@ -9,3 +9,5 @@ htmlcov/
 .idea/
 data/*.db
 data/*.sqlite*
+data/admin.json
+data/session.json
