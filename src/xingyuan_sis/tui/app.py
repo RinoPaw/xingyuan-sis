@@ -55,13 +55,18 @@ def _home(
     labels: Sequence[str],
     *,
     selected: int = 0,
-    preferences: dict[str, bool] | None = None,
+    preferences: dict[str, object] | None = None,
 ) -> int | None:
     from ..service import XingyuanService
 
     stats = dict(XingyuanService(db_path).stats())
     preferences = preferences if preferences is not None else {"animate": True}
-    angle = time.monotonic() * 0.85
+    saved_angle = preferences.get("angle")
+    if isinstance(saved_angle, (int, float)):
+        angle = float(saved_angle)
+    else:
+        angle = time.monotonic() * 0.85
+        preferences["angle"] = angle
     previous_lines: list[str] = []
     screen._clear()
     if sys.stdout.isatty():
@@ -79,12 +84,20 @@ def _home(
 
 def _home_loop(
     labels: Sequence[str], stats: dict[str, object], db_path: Path | str | None,
-    selected: int, preferences: dict[str, bool], angle: float, previous_lines: list[str],
+    selected: int, preferences: dict[str, object], angle: float, previous_lines: list[str],
 ) -> int | None:
+    # Advance from the stored phase instead of deriving the phase from the wall
+    # clock. While paused, ``last_tick`` still follows the clock so elapsed pause
+    # time is never added when playback resumes.
+    last_tick = time.monotonic()
     while True:
-        animate = preferences.get("animate", True)
+        animate = bool(preferences.get("animate", True))
+        now = time.monotonic()
         if animate:
-            angle = time.monotonic() * 0.85
+            angle += max(0.0, now - last_tick) * 0.85
+        last_tick = now
+        preferences["angle"] = angle
+
         frame = _home_frame(labels, selected, stats, angle, animate=animate,
                             database=Path(db_path).name if db_path else "xingyuan.db")
         lines = frame.lines
@@ -130,7 +143,7 @@ def run(db_path: Path | str | None = None) -> None:
     labels = ("学生", "教务", "课程", "成绩", "数据", "退出")
 
     selected = 0
-    preferences = {"animate": True}
+    preferences: dict[str, object] = {"animate": True}
     with screen._terminal_session():
         try:
             while True:
