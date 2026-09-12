@@ -98,6 +98,7 @@ def home_frame(
     body_height = max(0, height - 2)
     footer_line, controls = home_footer(width, height, animate)
     regions: list[screen.HitRegion] = []
+    protected_cells: set[tuple[int, int]] = set()
 
     # The layout mode depends only on width. Soft-keyboard height changes
     # therefore cannot make the whole home screen oscillate between modes.
@@ -108,6 +109,11 @@ def home_frame(
         body = [screen._ansi(title, screen._BOLD + screen._ACCENT)]
         if graph_height:
             body.extend(animation._orbit(width, graph_height, angle, selected))
+            orbit_row_offset = len(top) + 1
+            protected_cells.update(
+                (orbit_row_offset + row, col)
+                for row, col in animation._orbit_exclusion_mask(width, graph_height, angle)
+            )
         cell_width = max(1, width // columns)
         for row in range(nav_rows):
             parts: list[str] = []
@@ -130,7 +136,7 @@ def home_frame(
             [screen._clip_cells(line, width) for line in [*top, *body, footer_line]],
             regions + controls,
         )
-        return animation._starlight(frame, width, angle)
+        return animation._starlight(frame, width, angle, protected_cells)
 
     nav_width = min(22, max(14, width // 5))
     graph_width = max(1, width - nav_width - 3)
@@ -156,8 +162,14 @@ def home_frame(
     right = [screen._ansi(f"{selected + 1:02d} / {title}", screen._BOLD + screen._ACCENT)]
     if graph_width >= 28 and body_height >= 8:
         right.extend([screen._ansi(description, screen._DIM), ""])
+    orbit_row_offset = len(top) + len(right)
     graph_height = max(1, body_height - len(right))
     right.extend(animation._orbit(graph_width, graph_height, angle, selected))
+    orbit_col_offset = nav_width + 3
+    protected_cells.update(
+        (orbit_row_offset + row, orbit_col_offset + col)
+        for row, col in animation._orbit_exclusion_mask(graph_width, graph_height, angle)
+    )
 
     body: list[str] = []
     for row in range(body_height):
@@ -173,7 +185,7 @@ def home_frame(
         [screen._clip_cells(line, width) for line in [*top, *body, footer_line]],
         regions + controls,
     )
-    return animation._starlight(frame, width, angle)
+    return animation._starlight(frame, width, angle, protected_cells)
 
 
 _MODULES = (
