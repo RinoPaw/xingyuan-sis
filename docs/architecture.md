@@ -32,7 +32,10 @@ src/xingyuan_sis/
     ├── screen.py             # 字符宽度、点击区域、路径、全屏绘制
     ├── theme.py              # 颜色、按钮、页头、底栏、首页布局
     ├── animation.py          # 首页星球与星光
-    ├── workspace.py          # 页面状态、事件循环、编辑草稿与保存
+    ├── workspace.py          # 工作台控制器循环
+    ├── workspace_state.py    # Workspace / Form 状态模型
+    ├── workspace_events.py   # 键鼠事件状态机与详情导航
+    ├── workspace_forms.py    # 表单打开、输入、保存、导入导出
     ├── workspace_data.py     # 集合定义、字段转换、数据快照与关联
     ├── workspace_view.py     # 响应式布局编排
     ├── view_common.py        # Board、值格式化和通用视图原语
@@ -57,9 +60,11 @@ CLI 的参数定义、领域分发和业务执行分开：
 
 ## 工作台的数据流
 
-`app → workspace → workspace_data → service → repository → SQLite`
+`app → workspace(controller) → workspace_events / workspace_forms / workspace_state → workspace_data → service → repository → SQLite`
 
-`workspace_view` 只负责窗口尺寸、响应式分栏、顶部导航和底部操作栏，并把具体内容交给 roster/detail/editor/dashboard 面板。各面板根据页面状态和已读取的数据构建 `Board` 内容，由 `screen` 最终绘制；渲染过程中不写数据库，也不执行用户动作。`keys` 将终端事件解码，工作台按点击区域或快捷键更新状态。
+`workspace.py` 只负责工作台生命周期：创建 Catalog 与 Workspace、进入鼠标跟踪、接收事件结果、执行保存/刷新以及统一错误处理。`workspace_events` 管键鼠事件状态机，`workspace_forms` 管草稿、原生文本输入和写操作，`workspace_state` 只保存状态与局部状态转换。
+
+`workspace_view` 只负责窗口尺寸、响应式分栏、顶部导航和底部操作栏，并把具体内容交给 roster/detail/editor/dashboard 面板。各面板根据页面状态和已读取的数据构建 `Board` 内容，由 `screen` 最终绘制；渲染过程中不写数据库，也不执行用户动作。
 
 - 数据只在进入页面、手动刷新和保存后重新读取，不在每次重绘时查询数据库。
 - 学生、课程、成绩、学院、专业、班级共用名册与编辑机制。集合差异集中在 `Collection` / `Field` 定义和服务适配中。
@@ -67,6 +72,7 @@ CLI 的参数定义、领域分发和业务执行分开：
 - 外键选择显示名称和业务编号。记录身份使用稳定 ID 保持选中位置，用户无需输入内部 ID。
 - 关联浏览记录来源位置，返回时恢复查询、视图、选中项和名册视口。
 - `view_common.Board` 只负责按坐标组装文本和点击区域；领域面板不直接操作终端输入模式。
+- `workspace_events` 不直接写数据库；需要保存、搜索输入或刷新时返回控制事件给 `workspace.py`。
 - 默认 TUI 的文本输入使用标准库实现的单行编辑器：保留 UTF-8/中文输入、粘贴、左右移动、Home/End 和退格，同时由应用直接处理 `Esc`，保证它始终取消最内层输入。Tab 在文本输入中不触发 shell/readline 补全，因此不会把目录列表泄漏到全屏界面。
 - 基础菜单与直接 CLI 继续使用普通 `input()`；它们不共享默认 TUI 的即时按键语义。
 
@@ -88,6 +94,6 @@ CLI 的参数定义、领域分发和业务执行分开：
 
 新增业务操作先落在服务层，再接入 CLI 或工作台。新增页面优先扩展集合、字段与关系定义；确实需要不同交互的页面再添加独立面板。通用绘制、输入协议和业务规则不复制到各个页面。
 
-当前剩余的主要大模块是 `workspace.py`、`service.py` 和 `repository.py`。后续拆分应以职责边界为依据：先分离工作台状态转移/表单操作，再考虑按业务域细分 service 与 repository，避免为了文件变小而制造跨模块循环依赖。
+工作台和 CLI 的主要职责已经拆开。后续最大的结构性模块是 `service.py` 与 `repository.py`；是否继续按业务域拆分，应以领域边界和查询复用情况为依据，避免为了文件变小而制造跨模块循环依赖。
 
 测试按行为覆盖数据写入、取消、关系保持、页面切换、宽度裁剪、缩放、鼠标输入恢复、CLI 命令树和终端能力分流。界面检查使用临时演示数据库，避免修改用户数据。
