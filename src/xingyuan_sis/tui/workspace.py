@@ -256,6 +256,13 @@ def _interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             field_key = key.split(":")[1]
             state.form.position = next(i for i, f in enumerate(state.form.fields) if f.key == field_key)
             return "field", state.form.position
+        elif key == "right":
+            if state.key != "data":
+                state.details = True
+                _reveal_detail_selection(state, catalog)
+        elif key == "left":
+            if state.key != "data":
+                state.details = False
         elif key == "focus-details":
             state.details = True
             _reveal_detail_selection(state, catalog)
