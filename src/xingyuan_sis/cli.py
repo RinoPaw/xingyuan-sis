@@ -22,6 +22,11 @@ def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
         parser.error("--basic / --tui 不能与 CLI 子命令同时使用")
 
     initialize_database(args.db)
+    if args.group == "auth":
+        from .auth_cli import run as run_auth
+
+        return run_auth(args.db, args)
+
     service = XingyuanService(args.db)
     return run_group(service, args)
 
@@ -43,4 +48,6 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    from .entry import main as entry_main
+
+    raise SystemExit(entry_main())
