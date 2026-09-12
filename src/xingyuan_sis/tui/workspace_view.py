@@ -276,7 +276,7 @@ def _editor(board: Board, state: Workspace, catalog: Catalog, x: int, width: int
             )
 
     board.put(
-        x, board.height - 3, "s 保存 / 确认   ·   q 取消",
+        x, board.height - 3, "Esc 取消",
         screen._TEXT_SECONDARY, width=width,
     )
 
@@ -475,7 +475,7 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
                 )
                 board.put(0, 4, field_line, action=f"field:{form.position}")
             else:
-                board.put(0, 4, "确认执行？s 确认 / q 取消", screen._BOLD + screen._TEXT_PRIMARY)
+                board.put(0, 4, "确认执行？  Esc 取消", screen._BOLD + screen._TEXT_PRIMARY)
         elif row:
             content = _details(state.key, row, catalog, width)[1:]
             capacity = max(1, height - 6)
@@ -504,17 +504,17 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
             screen._TEXT_SECONDARY,
         )
         buttons = (
-            (("s 保存", "s", "save"), ("q 取消", "q", "cancel"))
+            (("s 保存", "s", "save"), ("Esc", "Esc", "cancel"))
             if state.form else
             (("↑↓ 浏览", "↑↓", "down"), ("a 新建", "a", "create"),
-             ("e 编辑", "e", "edit"), ("q 返回", "q", "back"))
+             ("e 编辑", "e", "edit"), ("Esc", "Esc", "back"))
         )
         if state.key == "data" and not state.form:
             buttons = (
                 ("i 导入", "i", "import"),
                 ("o 导出", "o", "export"),
                 ("g 演示", "g", "seed"),
-                ("q 返回", "q", "back"),
+                ("Esc", "Esc", "back"),
             )
     else:
         noun = COLLECTIONS[state.key].noun if state.key != "data" else "校园概览"
@@ -603,14 +603,14 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
             buttons = (
                 ("Enter 编辑字段", "↵编辑", "select"),
                 ("s 保存 / 确认", "s保存", "save"),
-                ("q 取消", "q取消", "cancel"),
+                ("Esc", "Esc", "cancel"),
             )
         elif state.key == "data":
             buttons = (
                 ("i 导入 CSV", "i导入", "import"),
                 ("o 导出 CSV", "o导出", "export"),
                 ("g 演示校园", "g演示", "seed"),
-                ("q 返回", "q返回", "back"),
+                ("Esc", "Esc", "back"),
             )
         else:
             buttons = (
@@ -619,14 +619,14 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
                 ("e 编辑", "e编辑", "edit"),
                 ("d 删除", "d删除", "delete"),
                 ("Tab 详情", "Tab", "focus"),
-                ("q 返回", "q返回", "back"),
+                ("Esc", "Esc", "back"),
             )
 
     if state.form and state.form.options is not None:
         buttons = (
             ("↑↓ 选择", "↑↓", "down"),
             ("Enter 确定", "↵", "select"),
-            ("q 返回编辑", "q返回", "cancel"),
+            ("Esc", "Esc", "cancel"),
         )
 
     footer, regions = theme.footer(width, buttons, height)
