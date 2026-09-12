@@ -15,6 +15,7 @@ import unicodedata
 
 _ACTIVE = ContextVar("menu_input_style", default=False)
 _SURFACE = "\x1b[48;5;235m\x1b[38;5;252m"
+_FIELD_SURFACE = "\x1b[48;5;238m\x1b[38;5;255m"
 _RESET = "\x1b[0m"
 
 
@@ -75,13 +76,29 @@ def _redraw_line(
     *,
     colored: bool,
     secret: bool = False,
+    field_width: int | None = None,
 ) -> None:
     prefix = f"  {prompt}" if colored else prompt
-    available = max(1, _terminal_columns() - _display_width(prefix) - 1)
-    visible, cursor_cells = _visible_input(chars, cursor, available, secret=secret)
-    style = _SURFACE if colored else ""
-    sys.stdout.write("\r" + style + "\x1b[2K" + prefix + visible)
-    tail = _display_width(visible) - cursor_cells
+    if field_width is None:
+        available = max(1, _terminal_columns() - _display_width(prefix) - 1)
+        visible, cursor_cells = _visible_input(chars, cursor, available, secret=secret)
+        style = _SURFACE if colored else ""
+        sys.stdout.write("\r" + style + "\x1b[2K" + prefix + visible)
+        tail = _display_width(visible) - cursor_cells
+        if tail > 0:
+            sys.stdout.write(f"\x1b[{tail}D")
+        sys.stdout.flush()
+        return
+
+    box_width = max(3, field_width)
+    inner_width = max(1, box_width - 2)
+    visible, cursor_cells = _visible_input(chars, cursor, inner_width, secret=secret)
+    content = " " + visible
+    content += " " * max(0, box_width - _display_width(content))
+    surface = _SURFACE if colored else ""
+    field_surface = _FIELD_SURFACE if colored else ""
+    sys.stdout.write("\r" + surface + "\x1b[2K" + prefix + field_surface + content + surface)
+    tail = box_width - 1 - cursor_cells
     if tail > 0:
         sys.stdout.write(f"\x1b[{tail}D")
     sys.stdout.flush()
@@ -133,13 +150,16 @@ def _apply_navigation(sequence: bytes, chars: list[str], cursor: int) -> tuple[i
     if sequence == b"[3~" and cursor < len(chars):
         del chars[cursor]
         return cursor, True
-    # Bracketed-paste markers and unknown terminal sequences are ignored. In
-    # particular they must never turn a bare Esc cancellation into shell-like
-    # completion or navigation behaviour.
     return cursor, False
 
 
-def _read_line_posix(prompt: str, *, colored: bool, secret: bool = False) -> str:
+def _read_line_posix(
+    prompt: str,
+    *,
+    colored: bool,
+    secret: bool = False,
+    field_width: int | None = None,
+) -> str:
     import termios
     import tty
 
@@ -149,7 +169,9 @@ def _read_line_posix(prompt: str, *, colored: bool, secret: bool = False) -> str
     cursor = 0
     try:
         tty.setcbreak(fd, termios.TCSANOW)
-        _redraw_line(prompt, chars, cursor, colored=colored, secret=secret)
+        _redraw_line(
+            prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
+        )
         while True:
             raw = os.read(fd, 1)
             if not raw:
@@ -160,7 +182,9 @@ def _read_line_posix(prompt: str, *, colored: bool, secret: bool = False) -> str
                     raise KeyboardInterrupt
                 cursor, changed = _apply_navigation(sequence, chars, cursor)
                 if changed:
-                    _redraw_line(prompt, chars, cursor, colored=colored, secret=secret)
+                    _redraw_line(
+                        prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
+                    )
                 continue
             if raw in {b"\r", b"\n"}:
                 return "".join(chars)
@@ -170,46 +194,63 @@ def _read_line_posix(prompt: str, *, colored: bool, secret: bool = False) -> str
                 if cursor:
                     cursor -= 1
                     del chars[cursor]
-                    _redraw_line(prompt, chars, cursor, colored=colored, secret=secret)
+                    _redraw_line(
+                        prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
+                    )
                 continue
-            if raw == b"\x01":  # Ctrl+A
+            if raw == b"\x01":
                 cursor = 0
-                _redraw_line(prompt, chars, cursor, colored=colored, secret=secret)
+                _redraw_line(
+                    prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
+                )
                 continue
-            if raw == b"\x05":  # Ctrl+E
+            if raw == b"\x05":
                 cursor = len(chars)
-                _redraw_line(prompt, chars, cursor, colored=colored, secret=secret)
+                _redraw_line(
+                    prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
+                )
                 continue
-            if raw == b"\x15":  # Ctrl+U
+            if raw == b"\x15":
                 chars.clear()
                 cursor = 0
-                _redraw_line(prompt, chars, cursor, colored=colored, secret=secret)
+                _redraw_line(
+                    prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
+                )
                 continue
-            if raw == b"\x0b":  # Ctrl+K
+            if raw == b"\x0b":
                 del chars[cursor:]
-                _redraw_line(prompt, chars, cursor, colored=colored, secret=secret)
+                _redraw_line(
+                    prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
+                )
                 continue
             if raw == b"\t":
-                # Text fields never use shell/readline completion. Ignoring Tab
-                # here also prevents the directory listings that used to leak
-                # over the alternate-screen UI.
                 continue
 
             char = _read_utf8_char(fd, raw)
             if char and all(part.isprintable() for part in char):
                 chars[cursor:cursor] = list(char)
                 cursor += len(char)
-                _redraw_line(prompt, chars, cursor, colored=colored, secret=secret)
+                _redraw_line(
+                    prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
+                )
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, previous)
 
 
-def _read_line_windows(prompt: str, *, colored: bool, secret: bool = False) -> str:
+def _read_line_windows(
+    prompt: str,
+    *,
+    colored: bool,
+    secret: bool = False,
+    field_width: int | None = None,
+) -> str:
     import msvcrt
 
     chars: list[str] = []
     cursor = 0
-    _redraw_line(prompt, chars, cursor, colored=colored, secret=secret)
+    _redraw_line(
+        prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
+    )
     while True:
         char = msvcrt.getwch()
         if char in {"\x00", "\xe0"}:
@@ -224,7 +265,9 @@ def _read_line_windows(prompt: str, *, colored: bool, secret: bool = False) -> s
                 cursor = len(chars)
             elif code == "S" and cursor < len(chars):
                 del chars[cursor]
-            _redraw_line(prompt, chars, cursor, colored=colored, secret=secret)
+            _redraw_line(
+                prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
+            )
             continue
         if char == "\x1b" or char in {"\x03", "\x04"}:
             raise KeyboardInterrupt
@@ -234,32 +277,55 @@ def _read_line_windows(prompt: str, *, colored: bool, secret: bool = False) -> s
             if cursor:
                 cursor -= 1
                 del chars[cursor]
-                _redraw_line(prompt, chars, cursor, colored=colored, secret=secret)
+                _redraw_line(
+                    prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
+                )
             continue
         if char == "\t":
             continue
         if char and char.isprintable():
             chars.insert(cursor, char)
             cursor += 1
-            _redraw_line(prompt, chars, cursor, colored=colored, secret=secret)
+            _redraw_line(
+                prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
+            )
 
 
-def _read_interactive_line(prompt: str, *, colored: bool, secret: bool = False) -> str:
+def _read_interactive_line(
+    prompt: str,
+    *,
+    colored: bool,
+    secret: bool = False,
+    field_width: int | None = None,
+) -> str:
     if os.name == "nt":
-        return _read_line_windows(prompt, colored=colored, secret=secret)
-    return _read_line_posix(prompt, colored=colored, secret=secret)
+        return _read_line_windows(
+            prompt, colored=colored, secret=secret, field_width=field_width
+        )
+    return _read_line_posix(
+        prompt, colored=colored, secret=secret, field_width=field_width
+    )
 
 
-def read_input(prompt: str, *, secret: bool = False) -> str:
+def read_input(
+    prompt: str,
+    *,
+    secret: bool = False,
+    field_width: int | None = None,
+) -> str:
     interactive = _ACTIVE.get() and sys.stdin.isatty() and sys.stdout.isatty()
     if not interactive:
         return getpass.getpass(prompt) if secret else input(prompt)
 
     colored = os.environ.get("NO_COLOR") is None
     try:
-        if secret:
-            return _read_interactive_line(prompt, colored=colored, secret=True)
-        return _read_interactive_line(prompt, colored=colored)
+        if field_width is None:
+            if secret:
+                return _read_interactive_line(prompt, colored=colored, secret=True)
+            return _read_interactive_line(prompt, colored=colored)
+        return _read_interactive_line(
+            prompt, colored=colored, secret=secret, field_width=field_width
+        )
     finally:
         if colored:
             sys.stdout.write(_RESET)
