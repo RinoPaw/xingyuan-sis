@@ -37,21 +37,12 @@ def nav_item(label: str, *, selected: bool = False, width: int | None = None) ->
     return screen._ansi(shown, style)
 
 
-def overview_row(
-    left_label: str,
-    left_value: object,
-    right_label: str,
-    right_value: object,
-) -> str:
-    """Render one compact two-column campus overview row."""
+def overview_item(label: str, value: object) -> str:
+    """Render one campus overview metric on its own line."""
     return (
-        screen._ansi(left_label, screen._TEXT_SECONDARY)
-        + " "
-        + screen._ansi(str(left_value), screen._BOLD + screen._TEXT_ACCENT)
+        screen._ansi(label, screen._TEXT_SECONDARY)
         + "  "
-        + screen._ansi(right_label, screen._TEXT_SECONDARY)
-        + " "
-        + screen._ansi(str(right_value), screen._BOLD + screen._TEXT_ACCENT)
+        + screen._ansi(str(value), screen._BOLD + screen._TEXT_ACCENT)
     )
 
 
@@ -72,13 +63,10 @@ def footer(
     row: int,
 ) -> tuple[str, list[screen.HitRegion]]:
     def labels(use_short: bool) -> list[tuple[str, str]]:
-        result: list[tuple[str, str]] = []
-        for long, short, action in buttons:
-            # Back/cancel has one universal visible hint. Legacy q/0 aliases
-            # can remain functional without competing for UI space.
-            label = "Esc" if action in {"back", "cancel"} else (short if use_short else long)
-            result.append((f"[ {label} ]", action))
-        return result
+        return [
+            (f"[ {short if use_short else long} ]", action)
+            for long, short, action in buttons
+        ]
 
     chosen = labels(False)
     minimum = sum(screen._display_width(text) for text, _ in chosen) + max(0, len(chosen) - 1)
@@ -189,8 +177,10 @@ def home_frame(
     for line in (
         "",
         screen._ansi("校园概览", _SECTION_HEADING),
-        overview_row("学生", stats.get("students", 0), "班级", stats.get("classes", 0)),
-        overview_row("课程", stats.get("courses", 0), "选课", stats.get("enrollments", 0)),
+        overview_item("学生", stats.get("students", 0)),
+        overview_item("班级", stats.get("classes", 0)),
+        overview_item("课程", stats.get("courses", 0)),
+        overview_item("选课", stats.get("enrollments", 0)),
     ):
         if len(left) < body_height:
             left.append(line)
@@ -235,8 +225,8 @@ _MODULES = (
 
 
 def home_footer(width: int, height: int, animate: bool) -> tuple[str, list[screen.HitRegion]]:
-    motion = "暂停" if animate else "播放"
-    return footer(width, (("↑↓/滚轮 移动", "↑↓", "down"),
-                           ("Enter/点击 打开", "↵", "select"),
-                           (f"p {motion}", "p", "pause"),
-                           ("Esc", "Esc", "back")), height)
+    motion = "暂停动画" if animate else "播放动画"
+    return footer(width, (("↑↓ 移动", "↑↓移动", "down"),
+                           ("Enter 打开", "Enter打开", "select"),
+                           (f"p {motion}", f"p{motion}", "pause"),
+                           ("Esc 退出", "Esc退出", "back")), height)
