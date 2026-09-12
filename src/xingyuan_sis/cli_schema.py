@@ -16,6 +16,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     groups = parser.add_subparsers(dest="group")
 
+    auth = groups.add_parser("auth", help="认证")
+    auth_cmd = auth.add_subparsers(dest="action")
+    auth_login = auth_cmd.add_parser("login", help="登录")
+    auth_login.add_argument("username", nargs="?", help="账号；省略时交互输入")
+    auth_cmd.add_parser("logout", help="退出登录")
+    auth_cmd.add_parser("status", help="查看当前身份")
+    auth_cmd.add_parser("passwd", help="修改当前账户密码")
+
     stu = groups.add_parser("stu", aliases=["student"], help="学生")
     stu_cmd = stu.add_subparsers(dest="action", required=True)
     stu_ls = stu_cmd.add_parser(
@@ -39,6 +47,8 @@ def build_parser() -> argparse.ArgumentParser:
     stu_rm = stu_cmd.add_parser("rm", aliases=["remove", "delete"], help="删除学生")
     stu_rm.add_argument("student_no", help="学号")
     stu_rm.add_argument("-y", "--yes", action="store_true", help="跳过确认")
+    stu_reset = stu_cmd.add_parser("reset-password", help="重置学生登录密码")
+    stu_reset.add_argument("student_no", help="学号")
 
     _build_college_parser(groups)
     _build_major_parser(groups)
