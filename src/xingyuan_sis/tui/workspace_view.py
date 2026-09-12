@@ -41,6 +41,12 @@ def _section_heading(text: str) -> str:
     return screen._ansi(text, screen._BOLD + screen._TEXT_PRIMARY)
 
 
+def _panel_heading(text: str, focused: bool) -> str:
+    marker = "▌ " if focused else "  "
+    style = screen._BOLD + (screen._TEXT_ACCENT if focused else screen._TEXT_PRIMARY)
+    return screen._ansi(marker + text, style)
+
+
 def _roster_window(state: Workspace, row_count: int, capacity: int) -> int:
     """Keep the current selection visible without moving an already valid viewport."""
     max_first = max(0, row_count - capacity)
@@ -172,10 +178,26 @@ def _details(key: str, row: dict[str, Any], catalog: Catalog, width: int) -> lis
     return lines
 
 
+def detail_targets(
+    key: str,
+    row: dict[str, Any],
+    catalog: Catalog,
+    width: int,
+) -> list[tuple[int, str]]:
+    """Return each keyboard-selectable detail action once, with its first line."""
+    result: list[tuple[int, str]] = []
+    seen: set[str] = set()
+    for index, (_, _, action) in enumerate(_details(key, row, catalog, width)):
+        if action and action not in seen:
+            result.append((index, action))
+            seen.add(action)
+    return result
+
+
 def _inspector(board: Board, state: Workspace, catalog: Catalog, x: int, width: int) -> None:
     top, bottom = 9, board.height - 2
     panel_title = (
-        _section_heading("档案")
+        _panel_heading("档案", state.details)
         + screen._ansi(" / " + ("阅读中" if state.details else "即时预览"), screen._TEXT_SECONDARY)
     )
     board.put(x, 8, panel_title, action="focus", width=width)
@@ -193,17 +215,49 @@ def _inspector(board: Board, state: Workspace, catalog: Catalog, x: int, width: 
         if not any(catalog.records.values()):
             board.button(x, top + 7, "体验演示校园", "seed")
         return
+
     lines = _details(state.key, row, catalog, width)
+    targets = detail_targets(state.key, row, catalog, width)
+    if targets:
+        state.detail_selected = min(max(0, state.detail_selected), len(targets) - 1)
+        selected_line = targets[state.detail_selected][0]
+    else:
+        state.detail_selected = 0
+        selected_line = -1
+
     capacity = max(1, bottom - top - 1)
-    state.detail_scroll = min(state.detail_scroll, max(0, len(lines) - capacity))
-    for index, (text, style, action) in enumerate(lines[state.detail_scroll:state.detail_scroll + capacity]):
-        board.put(x, top + index, text, style, action, width)
+    max_scroll = max(0, len(lines) - capacity)
+    state.detail_scroll = min(max(0, state.detail_scroll), max_scroll)
+    if state.details and selected_line >= 0:
+        if selected_line < state.detail_scroll:
+            state.detail_scroll = selected_line
+        elif selected_line >= state.detail_scroll + capacity:
+            state.detail_scroll = selected_line - capacity + 1
+        state.detail_scroll = min(max(0, state.detail_scroll), max_scroll)
+
+    visible = lines[state.detail_scroll:state.detail_scroll + capacity]
+    for offset, (text, style, action) in enumerate(visible):
+        line_index = state.detail_scroll + offset
+        if state.details and line_index == selected_line:
+            plain = screen._ANSI_RE.sub("", text)
+            plain = screen._pad_cells(screen._clip_cells(plain, width), width)
+            board.put(
+                x,
+                top + offset,
+                plain,
+                screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED,
+                action,
+                width,
+            )
+        else:
+            board.put(x, top + offset, text, style, action, width)
+
     if len(lines) > capacity:
         board.put(
             x,
             bottom - 1,
             f"{state.detail_scroll + 1}–{min(len(lines), state.detail_scroll + capacity)} / {len(lines)}"
-            "  ·  Tab 切换区域后滚动",
+            "  ·  Tab 切换焦点",
             screen._TEXT_SECONDARY,
             action="focus",
             width=width,
@@ -297,8 +351,7 @@ def _roster(board: Board, state: Workspace, catalog: Catalog, width: int) -> Non
     rows = state.rows(catalog)
     capacity = max(1, board.height - 12)
     first = _roster_window(state, len(rows), capacity)
-    heading_style = screen._BOLD + (screen._TEXT_ACCENT if not state.details else screen._TEXT_SECONDARY)
-    heading = screen._ansi("名册", heading_style)
+    heading = _panel_heading("名册", not state.details)
     range_text = f"  {len(rows):02d}" + (
         f"  /  {first + 1}–{min(first + capacity, len(rows))}" if rows else ""
     )
@@ -630,7 +683,7 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
                 ("a 新建", "a新增", "create"),
                 ("e 编辑", "e编辑", "edit"),
                 ("d 删除", "d删除", "delete"),
-                ("Tab 详情", "Tab", "focus"),
+                ("Tab 切换", "Tab", "focus"),
                 ("Esc", "Esc", "back"),
             )
 
