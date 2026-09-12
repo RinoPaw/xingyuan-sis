@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from xingyuan_sis.csv_io import STUDENT_FIELDS
-from xingyuan_sis.entry import main as entry_main
+from xingyuan_sis.cli import main as cli_main
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
 
@@ -24,7 +24,7 @@ class StudentFilterCliTests(unittest.TestCase):
     def run_xy(self, *args: str) -> str:
         output = StringIO()
         with redirect_stdout(output):
-            code = entry_main(["--db", str(self.db_path), *args])
+            code = cli_main(["--db", str(self.db_path), *args])
         self.assertEqual(code, 0)
         return output.getvalue()
 
