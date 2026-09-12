@@ -1,21 +1,13 @@
 """Top-level TUI navigation and workspace dispatch."""
 from __future__ import annotations
 
-import getpass
 from pathlib import Path
 import sys
 import time
 from typing import Callable, Sequence
 
-from ..auth import (
-    Identity,
-    authenticate,
-    change_password,
-    clear_session,
-    read_session,
-    write_session,
-)
-from . import keys, portal, screen
+from ..auth import Identity, clear_session, read_session
+from . import auth_view, keys, portal, screen
 
 
 def _students(db_path: Path | str | None) -> None:
@@ -148,7 +140,6 @@ def _portal_home(
     selected: int,
     preferences: dict[str, object] | None,
 ) -> str | None:
-    from ..auth_cli import login
     from ..service import XingyuanService
 
     preferences = preferences if preferences is not None else {"animate": True}
@@ -156,7 +147,9 @@ def _portal_home(
     if not isinstance(identity, Identity):
         identity = read_session(db_path)
     if identity is None:
-        identity = login(db_path)
+        identity = auth_view.login(db_path)
+    if identity is None:
+        return None
     preferences["identity"] = identity
 
     selected = int(preferences.get("portal_selected", selected))
@@ -330,32 +323,7 @@ def _change_password_screen(
     db_path: Path | str | None,
     identity: Identity,
 ) -> Identity:
-    screen._clear()
-    print("✦ 星原 / 个人中心 / 修改密码\n")
-    try:
-        current = getpass.getpass("当前密码: ")
-        if authenticate(db_path, identity.username, current) is None:
-            print("\n当前密码错误。")
-            input("\n按 Enter 返回…")
-            return identity
-
-        while True:
-            password = getpass.getpass("新密码: ")
-            confirm = getpass.getpass("确认新密码: ")
-            if password != confirm:
-                print("两次输入的密码不一致，请重试。\n")
-                continue
-            try:
-                updated = change_password(db_path, identity, password)
-            except ValueError as error:
-                print(f"{error}\n")
-                continue
-            write_session(updated, db_path)
-            print("\n✓ 密码已修改")
-            input("\n按 Enter 返回…")
-            return updated
-    except (KeyboardInterrupt, EOFError):
-        return identity
+    return auth_view.change_password(db_path, identity) or identity
 
 
 def _execute_portal_action(
