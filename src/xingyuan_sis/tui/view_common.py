@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import screen, theme
+from . import screen
+from .board import Board
 
 
 def safe(value: Any) -> str:
@@ -34,37 +35,6 @@ def panel_heading(text: str, focused: bool) -> str:
     marker = "▌ " if focused else "  "
     style = screen._BOLD + (screen._TEXT_ACCENT if focused else screen._TEXT_PRIMARY)
     return screen._ansi(marker + text, style)
-
-
-class Board:
-    def __init__(self, width: int, height: int):
-        self.width, self.height = width, height
-        self.rows: list[list[tuple[int, str]]] = [[] for _ in range(height)]
-        self.regions: list[screen.HitRegion] = []
-
-    def put(self, x: int, y: int, text: str, style: str = "", action: str = "", width: int | None = None) -> None:
-        if not (0 <= y < self.height and 0 <= x < self.width):
-            return
-        text = screen._clip_cells(text, min(width if width is not None else self.width - x, self.width - x))
-        if style:
-            text = screen._ansi(text, style)
-        self.rows[y].append((x, text))
-        if action and text:
-            self.regions.append(screen.HitRegion(x + 1, y + 1, screen._display_width(text), action))
-
-    def button(self, x: int, y: int, label: str, action: str, *, selected: bool = False) -> int:
-        text = theme.button(label, selected=selected)
-        self.put(x, y, text, action=action)
-        return x + screen._display_width(text) + 1
-
-    def frame(self) -> screen.ScreenFrame:
-        lines = []
-        for parts in self.rows:
-            text = ""
-            for x, part in sorted(parts, key=lambda part: part[0]):
-                text = screen._pad_cells(text, x) + part
-            lines.append(screen._pad_cells(screen._clip_cells(text, self.width), self.width))
-        return screen.ScreenFrame(lines, self.regions)
 
 
 def identity(key: str, row: dict[str, Any]) -> tuple[str, str]:
