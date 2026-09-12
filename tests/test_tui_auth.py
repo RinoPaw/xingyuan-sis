@@ -16,7 +16,7 @@ class TuiAuthViewTests(unittest.TestCase):
                 login = auth_view.frame("login", {"username": "", "password": ""})
                 setup = auth_view.frame(
                     "initialize",
-                    {"password": "", "confirm": ""},
+                    {"username": "Administrator", "password": "", "confirm": ""},
                 )
             self.assertEqual(len(login.lines), size[1])
             self.assertEqual(len(setup.lines), size[1])
@@ -28,10 +28,14 @@ class TuiAuthViewTests(unittest.TestCase):
             self.assertIn("账号", login_text)
             self.assertIn("密码", login_text)
             self.assertIn("设置管理员密码", setup_text)
+            self.assertIn("账号", setup_text)
             self.assertIn("Administrator", setup_text)
             self.assertNotIn("管理员账号", setup_text)
             self.assertNotIn("创建唯一管理员", setup_text)
-            self.assertEqual([field[1] for field in auth_view._fields("initialize")], ["密码", "确认"])
+            self.assertEqual(
+                [field[1] for field in auth_view._fields("initialize")],
+                ["账号", "密码", "确认"],
+            )
 
     def test_portal_uses_tui_login_when_session_is_missing(self):
         identity = Identity("Administrator", "admin")
