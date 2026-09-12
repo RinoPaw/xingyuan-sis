@@ -29,9 +29,9 @@ _SELECTED = "\x1b[48;5;238m\x1b[38;5;255m"
 _GOLD = "\x1b[38;5;180m"
 
 
-# Keep the host terminal background aligned with the surrounding window frame,
-# while the application itself retains its original dark page surface.
-_TERMINAL_BG = "#666769"
+# Keep the host terminal background identical to the application's dark page
+# surface so terminal padding cannot appear as a bright frame around the TUI.
+_TERMINAL_BG = "#262626"
 _SURFACE = "\x1b[48;5;235m\x1b[38;5;252m"
 
 
