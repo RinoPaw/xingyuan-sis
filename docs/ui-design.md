@@ -77,25 +77,32 @@
 
 ## 6. 工作区页面
 
-学生、学院、专业、班级、课程、成绩和数据页共享同一套信息层级：
+学生、学院、专业、班级、课程、成绩和数据页共享同一套信息层级。
+
+当一个统计数字与某个筛选/视图是一一对应关系时，**数字应直接附着在该交互项上，不再复制一行独立统计摘要**。这样数量既说明当前数据规模，也直接解释“点击这个选项会看到多少条记录”。例如学生页：
 
 ```text
-学生档案             ← 当前页面，text-accent + bold
-100 学生  92 在读    ← 数值 text-accent + bold；标签 text-secondary
+学生档案                         ← 当前页面，text-accent + bold
+[ 1 全部档案 · 100 ]
+[ 2 在读学生 · 92  ]
+[ 3 未分班 · 0     ]             ← 数量与对应筛选保持在同一控件中
+/ 搜索姓名、编号、班级…
 
-名册                 ← 当前面板焦点可使用 text-accent
-姓名  学号  班级     ← 列标签 text-secondary
-林岚  20260001 ...   ← 普通记录 text-primary
+名册                             ← 当前面板焦点可使用 text-accent
+姓名  学号  班级                 ← 列标签 text-secondary
+林岚  20260001 ...               ← 普通记录 text-primary
 
-档案 / 即时预览      ← “档案”是 section heading；状态 text-secondary
-林岚                 ← 当前记录标题 text-accent + bold
-20260001             ← identifier text-secondary
+档案 / 即时预览                  ← “档案”是 section heading；状态 text-secondary
+林岚                             ← 当前记录标题 text-accent + bold
+20260001                         ← identifier text-secondary
 
-档案字段             ← section heading，text-primary + bold
-姓名      林岚        ← label text-secondary；value text-primary
+档案字段                         ← section heading，text-primary + bold
+姓名      林岚                   ← label text-secondary；value text-primary
 ```
 
-当前面板焦点可以使用强调色，但不能把该面板内部的标题、标签和值全部染成强调色。
+课程页和成绩页的视图数量同样直接放进各自筛选项；学院 / 专业 / 班级导航的记录数也与对应导航项绑定。若某项统计没有一一对应的交互目标，例如数据总览中的学生数、课程数和选课数，则可以保留独立统计摘要。
+
+筛选数量应反映当前搜索条件下切换到该视图后实际会得到的记录数。当前面板焦点可以使用强调色，但不能把该面板内部的标题、标签和值全部染成强调色。
 
 ## 7. 强调色
 
