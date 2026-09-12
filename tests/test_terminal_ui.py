@@ -28,7 +28,6 @@ class KeyboardMenuTests(unittest.TestCase):
         with self.assertRaises(EOFError):
             keys._plain_key("")
 
-
     def test_home_remembers_selection_after_return(self) -> None:
         with patch.object(menu.sys.stdin, "isatty", return_value=True), \
              patch.object(menu.sys.stdout, "isatty", return_value=True), \
@@ -81,7 +80,8 @@ class KeyboardMenuTests(unittest.TestCase):
                 self.assertTrue(any(0x2800 < ord(char) <= 0x28ff for line in first for char in line))
                 self.assertEqual(first[-1], second[-1])
                 self.assertIn("p", first[-1])
-                self.assertIn("q", first[-1])
+                self.assertIn("Esc", first[-1])
+                self.assertNotIn("q/0", first[-1])
                 self.assertNotIn("\n", first[-1])
                 self.assertLess(screen._display_width(first[-1]), size[0])
 
@@ -111,6 +111,27 @@ class KeyboardMenuTests(unittest.TestCase):
         self.assertFalse(preferences["animate"])
         self.assertTrue(output.getvalue().endswith("\x1b[?25h"))
 
+    def test_animation_resume_continues_from_paused_phase(self) -> None:
+        preferences = {"animate": True, "angle": 10.0}
+        angles = []
+
+        def frame(*args, **kwargs):
+            angles.append(args[3])
+            return screen.ScreenFrame([""], [])
+
+        with patch.object(menu.time, "monotonic", side_effect=[0.0, 1.0, 5.0, 6.0, 7.0]), \
+             patch.object(menu, "_home_frame", side_effect=frame), \
+             patch.object(keys, "_read_key", side_effect=["pause", None, "pause", "back"]), \
+             patch.object(screen, "_paint"):
+            result = menu._home_loop(LABELS, {}, None, 0, preferences, 10.0, [])
+
+        self.assertIsNone(result)
+        self.assertEqual(len(angles), 4)
+        self.assertAlmostEqual(angles[0], 10.85)
+        self.assertAlmostEqual(angles[1], 10.85)
+        self.assertAlmostEqual(angles[2], 10.85)
+        self.assertAlmostEqual(angles[3], 11.70)
+
     @unittest.skipIf(os.name == "nt", "POSIX terminal sequences")
     def test_key_typed_before_read_is_preserved(self) -> None:
         import pty
@@ -135,8 +156,10 @@ class KeyboardMenuTests(unittest.TestCase):
         # tty imports termios functions by value; load it before mocking them.
         import tty
 
-        for sequence, expected in ((b"[A", "up"), (b"OB", "down"), (b"[H", "home"),
-                                   (b"[4~", "end"), (b"[3~", "other"), (b"", "back")):
+        for sequence, expected in ((b"[A", "up"), (b"OB", "down"),
+                                   (b"[D", "left"), (b"OC", "right"),
+                                   (b"[H", "home"), (b"[4~", "end"),
+                                   (b"[3~", "other"), (b"", "back")):
             with self.subTest(sequence=sequence), patch("sys.stdin.fileno", return_value=10), \
                  patch("termios.tcgetattr", return_value=[1, 2, 3]), patch("tty.setcbreak") as cbreak, \
                  patch("termios.tcsetattr") as restore, patch("os.read", return_value=b"\x1b"), \
