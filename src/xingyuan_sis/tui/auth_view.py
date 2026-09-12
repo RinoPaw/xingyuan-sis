@@ -20,7 +20,8 @@ from . import animation, keys, screen, theme
 from .board import Board
 
 
-_FIELD_WIDTH = 42
+_FIELD_WIDTH = 36
+_LABEL_WIDTH = 8
 
 
 def login(db_path: Path | str | None) -> Identity | None:
@@ -31,7 +32,7 @@ def login(db_path: Path | str | None) -> Identity | None:
             return None
         initialized = True
 
-    message = "管理员初始化完成，请登录。" if initialized else ""
+    message = "管理员已创建。" if initialized else ""
     while True:
         values = {"username": "", "password": ""}
         username = _read_field(
@@ -56,7 +57,7 @@ def login(db_path: Path | str | None) -> Identity | None:
         if identity.must_change_password:
             updated = change_password(db_path, identity, forced=True)
             if updated is None:
-                message = "首次登录必须修改密码。"
+                message = "请先修改密码。"
                 continue
             identity = updated
 
@@ -73,7 +74,7 @@ def change_password(
     """Change a password inside the TUI; forced mode is used on first login."""
     mode = "forced-password" if forced else "password"
     values = {"current": "", "password": "", "confirm": ""}
-    message = "首次登录需要设置新的密码。" if forced else ""
+    message = "首次登录，请设置新密码。" if forced else ""
 
     if not forced:
         while True:
@@ -98,7 +99,7 @@ def change_password(
         values["password"] = password
 
         confirm = _read_field(
-            mode, values, "confirm", "确认新密码", secret=True,
+            mode, values, "confirm", "确认", secret=True,
             database=_database_name(db_path), message="",
         )
         if confirm is None:
@@ -107,7 +108,7 @@ def change_password(
         if password != confirm:
             values["password"] = ""
             values["confirm"] = ""
-            message = "两次输入的密码不一致。"
+            message = "两次密码不一致。"
             continue
 
         try:
@@ -155,31 +156,29 @@ def frame(
 
     title, subtitle = _copy(mode)
     board.put(left, top, title, screen._BOLD + screen._TEXT_ACCENT, width=field_width)
-    if top + 1 < height - 1:
+    if subtitle and top + 1 < height - 1:
         board.put(left, top + 1, subtitle, screen._TEXT_SECONDARY, width=field_width)
 
     field_top = top + 3
-    for index, (key, label, secret, fixed) in enumerate(fields):
+    for index, (key, label, secret) in enumerate(fields):
         row = field_top + index * 2
         if row >= height - 1:
             break
         value = values.get(key, "")
-        if fixed:
-            shown = value
-        elif secret and value:
-            shown = "•" * min(len(value), max(1, field_width - 14))
+        if secret and value:
+            shown = "•" * min(len(value), max(1, field_width - _LABEL_WIDTH - 2))
         elif value:
             shown = value
         elif key == "username" and mode == "login":
             shown = f"[{ADMIN_USERNAME}]"
         else:
             shown = ""
-        label_text = screen._pad_cells(label, min(12, max(1, field_width // 3)))
+        label_text = screen._pad_cells(label, min(_LABEL_WIDTH, max(1, field_width // 3)))
         line = screen._pad_cells(f"{label_text}  {shown}", field_width)
         style = (
-            screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
+            screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
             if key == active
-            else screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
+            else screen._TEXT_PRIMARY
         )
         board.put(left, row, line, style, width=field_width)
 
@@ -193,9 +192,9 @@ def frame(
 def _initialize_admin(db_path: Path | str | None) -> bool:
     message = ""
     while True:
-        values = {"username": ADMIN_USERNAME, "password": "", "confirm": ""}
+        values = {"password": "", "confirm": ""}
         password = _read_field(
-            "initialize", values, "password", "设置密码", secret=True,
+            "initialize", values, "password", "密码", secret=True,
             database=_database_name(db_path), message=message,
         )
         if password is None:
@@ -203,13 +202,13 @@ def _initialize_admin(db_path: Path | str | None) -> bool:
         values["password"] = password
 
         confirm = _read_field(
-            "initialize", values, "confirm", "确认密码", secret=True,
+            "initialize", values, "confirm", "确认", secret=True,
             database=_database_name(db_path), message="",
         )
         if confirm is None:
             return False
         if password != confirm:
-            message = "两次输入的密码不一致。"
+            message = "两次密码不一致。"
             continue
         try:
             initialize_admin(password)
@@ -238,7 +237,7 @@ def _read_field(
     left, top, field_width = _layout(width, height, len(fields))
     field_index = next(index for index, field in enumerate(fields) if field[0] == key)
     row = min(height - 2, top + 3 + field_index * 2)
-    label_width = min(12, max(1, field_width // 3))
+    label_width = min(_LABEL_WIDTH, max(1, field_width // 3))
     prompt = " " * max(0, left - 2) + screen._pad_cells(label, label_width) + "  "
 
     try:
@@ -269,38 +268,37 @@ def _wait_message(
             return
 
 
-def _fields(mode: str) -> tuple[tuple[str, str, bool, bool], ...]:
+def _fields(mode: str) -> tuple[tuple[str, str, bool], ...]:
     if mode == "initialize":
         return (
-            ("username", "管理员账号", False, True),
-            ("password", "设置密码", True, False),
-            ("confirm", "确认密码", True, False),
+            ("password", "密码", True),
+            ("confirm", "确认", True),
         )
     if mode == "login":
         return (
-            ("username", "账号", False, False),
-            ("password", "密码", True, False),
+            ("username", "账号", False),
+            ("password", "密码", True),
         )
     if mode == "forced-password":
         return (
-            ("password", "新密码", True, False),
-            ("confirm", "确认新密码", True, False),
+            ("password", "新密码", True),
+            ("confirm", "确认", True),
         )
     return (
-        ("current", "当前密码", True, False),
-        ("password", "新密码", True, False),
-        ("confirm", "确认新密码", True, False),
+        ("current", "当前密码", True),
+        ("password", "新密码", True),
+        ("confirm", "确认", True),
     )
 
 
 def _copy(mode: str) -> tuple[str, str]:
     if mode == "initialize":
-        return "首次初始化", "创建唯一管理员 Administrator"
+        return "设置管理员密码", ADMIN_USERNAME
     if mode == "login":
-        return "登录星原", "使用管理员账号或学生学号登录"
+        return "登录", ""
     if mode == "forced-password":
-        return "首次登录 · 修改密码", "设置新密码后即可进入星原 SIS"
-    return "个人中心 · 修改密码", "更新当前账户的登录密码"
+        return "设置新密码", ""
+    return "修改密码", ""
 
 
 def _layout(width: int, height: int, field_count: int) -> tuple[int, int, int]:
