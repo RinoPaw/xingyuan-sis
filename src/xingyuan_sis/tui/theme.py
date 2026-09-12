@@ -8,6 +8,7 @@ from .board import Board
 
 
 _BUTTON = screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
+_BUTTON_CURRENT = screen._SURFACE_SELECTED + screen._TEXT_ACCENT
 _BAR_SURFACE = screen._SURFACE_FOOTER + screen._TEXT_PRIMARY
 _TOPBAR = screen._SURFACE_TOPBAR + screen._TEXT_ACCENT + screen._BOLD
 _SECTION_HEADING = screen._TEXT_PRIMARY + screen._BOLD
@@ -17,20 +18,44 @@ def bar_space(count: int) -> str:
     return screen._ansi(" " * max(0, count), _BAR_SURFACE)
 
 
-def button(label: str, *, selected: bool = False, width: int | None = None) -> str:
+def button(
+    label: str,
+    *,
+    selected: bool = False,
+    current: bool = False,
+    width: int | None = None,
+) -> str:
+    """Render an action button with separate focus and current-location states."""
     shown = f"[ {label} ]"
     if width is not None:
         shown = screen._pad_cells(screen._clip_cells(shown, width), width)
-    style = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED if selected else _BUTTON
+    if selected:
+        style = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
+    elif current:
+        style = _BUTTON_CURRENT
+    else:
+        style = _BUTTON
     return screen._ansi(shown, style)
 
 
-def nav_item(label: str, *, selected: bool = False, width: int | None = None) -> str:
-    """Render a lightweight home navigation row."""
-    shown = f"{'▌' if selected else ' '} {label}"
+def nav_item(
+    label: str,
+    *,
+    selected: bool = False,
+    current: bool = False,
+    width: int | None = None,
+) -> str:
+    """Render navigation with strong focus and weak current-location states."""
+    marker = "▌" if selected else "▏" if current else " "
+    shown = f"{marker} {label}"
     if width is not None:
         shown = screen._pad_cells(screen._clip_cells(shown, width), width)
-    style = screen._BOLD + screen._TEXT_ACCENT if selected else screen._TEXT_PRIMARY
+    if selected:
+        style = screen._BOLD + screen._TEXT_ACCENT
+    elif current:
+        style = screen._TEXT_ACCENT
+    else:
+        style = screen._TEXT_PRIMARY
     return screen._ansi(shown, style)
 
 
