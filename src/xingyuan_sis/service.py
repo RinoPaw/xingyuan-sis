@@ -19,8 +19,33 @@ class XingyuanService:
     def db_path(self) -> Path | str | None:
         return self.repository.db_path
 
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self.repository, name)
+    # ----- read models ----------------------------------------------------
+    # Keep repository access behind an explicit application-facing surface.
+    # Callers should never acquire arbitrary persistence methods through the
+    # service object simply because Repository happens to implement them.
+    def list_departments(self) -> list[sqlite3.Row]:
+        return self.repository.list_departments()
+
+    def list_majors(self) -> list[sqlite3.Row]:
+        return self.repository.list_majors()
+
+    def list_classes(self) -> list[sqlite3.Row]:
+        return self.repository.list_classes()
+
+    def list_species_families(self) -> list[sqlite3.Row]:
+        return self.repository.list_species_families()
+
+    def list_species_branches(self) -> list[sqlite3.Row]:
+        return self.repository.list_species_branches()
+
+    def list_students(self, keyword: str = "") -> list[sqlite3.Row]:
+        return self.repository.list_students(keyword)
+
+    def list_courses(self) -> list[sqlite3.Row]:
+        return self.repository.list_courses()
+
+    def list_enrollments(self) -> list[sqlite3.Row]:
+        return self.repository.list_enrollments()
 
     # ----- lookup helpers -------------------------------------------------
     def student_by_no(self, student_no: str) -> sqlite3.Row | None:
