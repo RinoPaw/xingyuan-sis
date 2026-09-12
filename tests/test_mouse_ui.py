@@ -60,7 +60,6 @@ class MouseAndLayoutTests(unittest.TestCase):
             else:
                 self.assertNotEqual(items[0].y, items[1].y)
 
-
     def test_starlight_preserves_text_and_clickable_regions(self):
         base = [" " * 79 for _ in range(20)]
         base[5] = "学生姓名 林岚" + " " * 60
@@ -120,20 +119,56 @@ class ViewerAndInputTests(unittest.TestCase):
 
     def test_native_input_keeps_chinese_and_resets_color_on_cancel(self):
         with patch("sys.stdin.isatty", return_value=True), patch("sys.stdout.isatty", return_value=True), \
-             patch("builtins.input", return_value="林岚") as read, redirect_stdout(StringIO()) as output, \
-             patch.dict(os.environ):
+             patch.object(terminal_input, "_read_interactive_line", return_value="林岚") as read, \
+             redirect_stdout(StringIO()) as output, patch.dict(os.environ):
             os.environ.pop("NO_COLOR", None)
-            with patch("sys.stdout.isatty", return_value=True):
-                with terminal_input.input_style(True):
-                    self.assertEqual(terminal_input.read_input("姓名: "), "林岚")
-            self.assertIn("48;5;235m", read.call_args.args[0])
+            with terminal_input.input_style(True):
+                self.assertEqual(terminal_input.read_input("姓名: "), "林岚")
+            read.assert_called_once_with("姓名: ", colored=True)
             self.assertTrue(output.getvalue().endswith("\x1b[0m"))
-        with patch("builtins.input", side_effect=KeyboardInterrupt):
+
+        with patch("sys.stdin.isatty", return_value=True), patch("sys.stdout.isatty", return_value=True), \
+             patch.object(terminal_input, "_read_interactive_line", side_effect=KeyboardInterrupt), \
+             patch.dict(os.environ, {"NO_COLOR": "1"}):
             with self.assertRaises(KeyboardInterrupt), terminal_input.input_style(True):
                 terminal_input.read_input("姓名: ")
         self.assertFalse(terminal_input._ACTIVE.get())
+
+    @unittest.skipIf(os.name == "nt", "POSIX line editor")
+    def test_tui_line_editor_bare_escape_cancels_and_tab_never_completes(self):
+        import termios
+        import tty
+
+        with patch("sys.stdin.fileno", return_value=10), \
+             patch("termios.tcgetattr", return_value=[1, 2, 3]), \
+             patch("tty.setcbreak") as cbreak, patch("termios.tcsetattr") as restore, \
+             patch("os.read", side_effect=[b"\t", b"\x1b"]), \
+             patch.object(terminal_input, "_read_escape_sequence", return_value=b""), \
+             redirect_stdout(StringIO()):
+            with self.assertRaises(KeyboardInterrupt):
+                terminal_input._read_line_posix("备注 > ", colored=False)
+        cbreak.assert_called_once_with(10, termios.TCSANOW)
+        restore.assert_called_once()
+
+    @unittest.skipIf(os.name == "nt", "POSIX line editor")
+    def test_tui_line_editor_accepts_utf8_and_cursor_navigation(self):
+        import termios
+
+        chinese = list("林岚".encode("utf-8"))
+        reads = [bytes([byte]) for byte in chinese] + [b"\x1b", b"X", b"\r"]
+        with patch("sys.stdin.fileno", return_value=10), \
+             patch("termios.tcgetattr", return_value=[1, 2, 3]), patch("tty.setcbreak"), \
+             patch("termios.tcsetattr"), patch("os.read", side_effect=reads), \
+             patch.object(terminal_input, "_read_escape_sequence", return_value=b"[D"), \
+             redirect_stdout(StringIO()):
+            value = terminal_input._read_line_posix("姓名 > ", colored=False)
+        self.assertEqual(value, "林X岚")
 
     def test_cli_prompts_remain_plain(self):
         with patch("builtins.input", return_value="林岚") as read:
             self.assertEqual(terminal_input.read_input("姓名: "), "林岚")
         read.assert_called_once_with("姓名: ")
+
+
+if __name__ == "__main__":
+    unittest.main()
