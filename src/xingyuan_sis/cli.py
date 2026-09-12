@@ -4,8 +4,8 @@ import sqlite3
 import sys
 from typing import Sequence
 
-from .cli_commands import print_table, run_group
 from .cli_schema import build_parser
+from .commands import print_table, run_group
 from .database import initialize_database
 from .service import XingyuanService
 
