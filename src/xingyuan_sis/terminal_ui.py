@@ -30,7 +30,7 @@ def _wrap_line(line: str, width: int) -> list[str]:
 
 def show_output(text: str, clear: Callable[[], None], *, interactive: bool = False, title: str = "查询结果") -> None:
     if interactive and sys.stdin.isatty() and sys.stdout.isatty():
-        from .terminal_viewer import show
+        from .tui.viewer import show
         show(text, title)
         return
     terminal = shutil.get_terminal_size((80, 24))
@@ -110,7 +110,11 @@ def _command_title(argv: list[str]) -> str:
     actions = {"ls": "列表", "show": "详情", "stats": "统计", "add": "新建", "edit": "编辑",
                "rm": "删除", "import": "导入", "export": "导出", "seed": "演示数据"}
     action = argv[2] if argv[0] == "acad" else argv[1]
-    return f"{groups.get(argv[0], argv[0])} / {actions.get(action, action)}"
+    group = groups.get(argv[0], argv[0])
+    if argv[0] == "acad":
+        entities = {"college": "学院", "major": "专业", "class": "班级"}
+        group += f" / {entities.get(argv[1], argv[1])}"
+    return f"{group} / {actions.get(action, action)}"
 
 
 def search_students(command: Callable[[list[str]], None]) -> None:

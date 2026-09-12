@@ -1,7 +1,7 @@
 """Resize-aware, mouse-enabled viewer for menu query results."""
 from bisect import bisect_right
-from . import menu
-from .terminal_ui import _wrap_line
+from . import screen, keys, theme
+from ..terminal_ui import _wrap_line
 
 
 def show(text: str, title: str) -> None:
@@ -10,9 +10,9 @@ def show(text: str, title: str) -> None:
     records = []
     positions = []
     previous = []
-    with menu._mouse_tracking():
+    with keys._mouse_tracking():
         while True:
-            terminal = menu._terminal_size()
+            terminal = screen._terminal_size()
             width, height = max(2, terminal.columns - 1), max(5, terminal.lines)
             if width != cached_width:
                 records, positions = [], []
@@ -27,23 +27,28 @@ def show(text: str, title: str) -> None:
             first = max(0, bisect_right(positions, anchor) - 1)
             page_size = max(1, height - 4)
             last = min(len(records), first + page_size)
-            lines = [menu._ansi(f"✦ 星原 / {title}", menu._BOLD + menu._ACCENT),
-                     menu._ansi(f"第 {first + 1}–{last} / {len(records)} 行", menu._DIM),
-                     menu._ansi("─" * width, menu._DIM), *records[first:last]]
+            breadcrumb, navigation = screen._breadcrumb(title, width)
+            lines = [screen._ansi("✦ 星原 / 教务台", screen._BOLD + screen._ACCENT),
+                     breadcrumb, screen._ansi(f"第 {first + 1}–{last} / {len(records)} 行", screen._DIM),
+                     *records[first:last]]
             while len(lines) < height - 1:
                 lines.append("")
             next_text = "Enter 返回" if last == len(records) else "Enter 下一页"
-            footer, regions = menu._footer(width, (("p 上一页", "p上页", "prev"),
+            footer, regions = theme.footer(width, (("p 上一页", "p上页", "prev"),
                                                     (next_text, "Enter", "next"),
                                                     ("q 返回", "q返回", "back")), height)
             lines.append(footer)
-            lines = [menu._clip_cells(line, width) for line in lines]
+            lines = [screen._clip_cells(line, width) for line in lines]
             if lines != previous:
-                menu._paint(lines, previous)
+                screen._paint(lines, previous)
                 previous = lines
-            key = menu._read_key(0.15)
-            if isinstance(key, menu.MouseClick):
-                key = menu._hit_action(key, regions)
+            key = keys._read_key(0.15)
+            if isinstance(key, keys.MouseScroll):
+                key = key.direction
+            if isinstance(key, screen.MouseClick):
+                key = screen._hit_action(key, navigation + regions)
+                if key and key.startswith("navigate:"):
+                    raise screen.NavigateTo(key.removeprefix("navigate:"))
             if key == "back":
                 return
             if key in {"select", "next", "page_down"}:
