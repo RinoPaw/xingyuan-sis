@@ -9,8 +9,17 @@ from .board import Board as CoordinateBoard
 class Board(CoordinateBoard):
     """Workspace board with the shared themed-button convenience."""
 
-    def button(self, x: int, y: int, label: str, action: str, *, selected: bool = False) -> int:
-        text = theme.button(label, selected=selected)
+    def button(
+        self,
+        x: int,
+        y: int,
+        label: str,
+        action: str,
+        *,
+        selected: bool = False,
+        current: bool = False,
+    ) -> int:
+        text = theme.button(label, selected=selected, current=current)
         self.put(x, y, text, action=action)
         return x + screen._display_width(text) + 1
 
