@@ -390,10 +390,14 @@ def _roster(board: Board, state: Workspace, catalog: Catalog, width: int) -> Non
             for key, _, size in columns
         )
         text = screen._pad_cells(screen._clip_cells(text, width - 1), width - 1)
-        selected_style = (
-            screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
-            if index == state.selected else screen._TEXT_PRIMARY
-        )
+        if index == state.selected:
+            selected_style = (
+                screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
+                if not state.details
+                else screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
+            )
+        else:
+            selected_style = screen._TEXT_PRIMARY
         board.put(1, 10 + index - first, text, selected_style, f"row:{index}", width - 1)
 
     if not rows:
