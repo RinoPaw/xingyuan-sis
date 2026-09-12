@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from types import ModuleType
 from typing import Sequence
 
@@ -7,6 +8,10 @@ from typing import Sequence
 _BUTTON = "\x1b[48;5;237m\x1b[38;5;252m"
 _BAR_SURFACE = "\x1b[48;5;236m\x1b[38;5;250m"
 _TOPBAR = "\x1b[48;5;234m\x1b[38;5;110m\x1b[1m"
+_SPARKLE_DOTS = ("⠁", "⠂", "⠄", "⠈", "⠐", "⠠", "⡀", "⢀")
+_SPARKLE_FRAME = 0.150
+_SPARKLE_BG = 38
+_SPARKLE_FG = 208
 
 
 def install(menu: ModuleType) -> None:
@@ -83,6 +88,93 @@ def install(menu: ModuleType) -> None:
             cell += gaps[index + 1]
 
         return "".join(parts), regions
+
+    def sparkle(frame, width: int, phase: float):
+        """Render the Codex-style stable sparkle field over untouched space.
+
+        Coordinates decide whether a star exists and also choose its Braille dot,
+        period and phase. Nothing is born, moved or destroyed while the layout is
+        stable; only brightness changes. That makes the field feel quiet instead
+        of like particles popping around the screen.
+        """
+        # ``phase`` is the globe angle (monotonic seconds * 0.85). Convert it
+        # back to seconds and quantize to Codex's 150 ms sparkle cadence.
+        seconds = max(0.0, phase / 0.85)
+        seconds = math.floor(seconds / _SPARKLE_FRAME) * _SPARKLE_FRAME
+        mask = (1 << 64) - 1
+        truecolor = menu.os.environ.get("COLORTERM", "").lower() in {"truecolor", "24bit"}
+
+        for row in range(1, len(frame.lines) - 1):
+            original = frame.lines[row]
+            plain = menu._ANSI_RE.sub("", original)
+
+            # Treat only the interior of genuinely empty runs as sky. This is
+            # our equivalent of Codex's protected composer text area, and keeps
+            # dots out of labels, prose and clickable controls.
+            allowed: set[int] = set()
+            cell = 0
+            run_start: int | None = None
+            for char in plain + "x":
+                if char == " " and run_start is None:
+                    run_start = cell
+                elif char != " " and run_start is not None:
+                    start = run_start + 2
+                    stop = min(cell - 2, width)
+                    for x in range(start, stop):
+                        if menu._hit_action(menu.MouseClick(x + 1, row + 1), frame.regions) is None:
+                            allowed.add(x)
+                    run_start = None
+                cell += menu._cell_width(char)
+
+            if not allowed:
+                continue
+
+            targets: dict[int, str] = {}
+            for x in allowed:
+                # Same coordinate hash used by Codex's sparkle.rs.
+                hash_value = ((row - 1) * 65537 + x) & mask
+                hash_value = ((hash_value ^ (hash_value >> 16)) * 0x45D9F3B) & mask
+                hash_value = ((hash_value ^ (hash_value >> 16)) * 0x45D9F3B) & mask
+                hash_value ^= hash_value >> 16
+                if hash_value % 5 != 0:
+                    continue
+
+                period = 4.0 + (hash_value % 31) / 10.0
+                sparkle_phase = (
+                    seconds / period + (hash_value % 997) / 997.0
+                ) % 1.0
+                brightness = (
+                    math.sin(sparkle_phase * math.pi) ** 12
+                    * 0.55
+                )
+                if brightness < 0.04:
+                    continue
+
+                glyph = _SPARKLE_DOTS[(hash_value // 161) % len(_SPARKLE_DOTS)]
+                level = round(_SPARKLE_BG + (_SPARKLE_FG - _SPARKLE_BG) * brightness)
+                if truecolor:
+                    style = f"\x1b[38;2;{level};{level};{level}m"
+                else:
+                    # xterm's grayscale ramp is close enough to the same blend.
+                    gray = max(235, min(244, 232 + round((level - 8) / 10)))
+                    style = f"\x1b[38;5;{gray}m"
+                targets[x] = menu._ansi(glyph, style)
+
+            if not targets:
+                continue
+
+            parts: list[str] = []
+            cell = 0
+            for token in menu.re.split(f"({menu._ANSI_RE.pattern})", original):
+                if menu._ANSI_RE.fullmatch(token):
+                    parts.append(token)
+                    continue
+                for char in token:
+                    parts.append(targets.get(cell, char) if char == " " else char)
+                    cell += menu._cell_width(char)
+            frame.lines[row] = "".join(parts)
+
+        return frame
 
     def selection_frame(
         title: str,
@@ -244,5 +336,6 @@ def install(menu: ModuleType) -> None:
 
     menu._footer = footer
     menu._selection_frame = selection_frame
+    menu._starlight = sparkle
     menu._home_frame = home_frame
     menu._paint = paint
