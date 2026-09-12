@@ -4,6 +4,7 @@ The default TUI uses a tiny stdlib line editor so Esc has deterministic
 "cancel the innermost interaction" semantics. Plain CLI prompts still use
 Python's normal ``input()`` unchanged.
 """
+from collections.abc import Callable
 from contextlib import contextmanager
 from contextvars import ContextVar
 import getpass
@@ -11,6 +12,7 @@ import os
 import select
 import shutil
 import sys
+import time
 import unicodedata
 
 _ACTIVE = ContextVar("menu_input_style", default=False)
@@ -159,6 +161,8 @@ def _read_line_posix(
     colored: bool,
     secret: bool = False,
     field_width: int | None = None,
+    on_idle: Callable[[str], None] | None = None,
+    idle_interval: float = 0.15,
 ) -> str:
     import termios
     import tty
@@ -173,6 +177,15 @@ def _read_line_posix(
             prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
         )
         while True:
+            if on_idle is not None:
+                ready, _, _ = select.select([fd], [], [], max(0.01, idle_interval))
+                if not ready:
+                    on_idle("".join(chars))
+                    _redraw_line(
+                        prompt, chars, cursor,
+                        colored=colored, secret=secret, field_width=field_width,
+                    )
+                    continue
             raw = os.read(fd, 1)
             if not raw:
                 raise KeyboardInterrupt
@@ -243,6 +256,8 @@ def _read_line_windows(
     colored: bool,
     secret: bool = False,
     field_width: int | None = None,
+    on_idle: Callable[[str], None] | None = None,
+    idle_interval: float = 0.15,
 ) -> str:
     import msvcrt
 
@@ -251,7 +266,19 @@ def _read_line_windows(
     _redraw_line(
         prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
     )
+    next_idle = time.monotonic() + max(0.01, idle_interval)
     while True:
+        if on_idle is not None:
+            while not msvcrt.kbhit():
+                now = time.monotonic()
+                if now >= next_idle:
+                    on_idle("".join(chars))
+                    _redraw_line(
+                        prompt, chars, cursor,
+                        colored=colored, secret=secret, field_width=field_width,
+                    )
+                    next_idle = now + max(0.01, idle_interval)
+                time.sleep(min(0.01, max(0.0, next_idle - now)))
         char = msvcrt.getwch()
         if char in {"\x00", "\xe0"}:
             code = msvcrt.getwch()
@@ -297,14 +324,19 @@ def _read_interactive_line(
     colored: bool,
     secret: bool = False,
     field_width: int | None = None,
+    on_idle: Callable[[str], None] | None = None,
+    idle_interval: float = 0.15,
 ) -> str:
+    kwargs: dict[str, object] = {
+        "colored": colored,
+        "secret": secret,
+        "field_width": field_width,
+        "on_idle": on_idle,
+        "idle_interval": idle_interval,
+    }
     if os.name == "nt":
-        return _read_line_windows(
-            prompt, colored=colored, secret=secret, field_width=field_width
-        )
-    return _read_line_posix(
-        prompt, colored=colored, secret=secret, field_width=field_width
-    )
+        return _read_line_windows(prompt, **kwargs)
+    return _read_line_posix(prompt, **kwargs)
 
 
 def read_input(
@@ -312,20 +344,24 @@ def read_input(
     *,
     secret: bool = False,
     field_width: int | None = None,
+    on_idle: Callable[[str], None] | None = None,
+    idle_interval: float = 0.15,
 ) -> str:
     interactive = _ACTIVE.get() and sys.stdin.isatty() and sys.stdout.isatty()
     if not interactive:
         return getpass.getpass(prompt) if secret else input(prompt)
 
     colored = os.environ.get("NO_COLOR") is None
+    kwargs: dict[str, object] = {"colored": colored}
+    if secret:
+        kwargs["secret"] = True
+    if field_width is not None:
+        kwargs["field_width"] = field_width
+    if on_idle is not None:
+        kwargs["on_idle"] = on_idle
+        kwargs["idle_interval"] = idle_interval
     try:
-        if field_width is None:
-            if secret:
-                return _read_interactive_line(prompt, colored=colored, secret=True)
-            return _read_interactive_line(prompt, colored=colored)
-        return _read_interactive_line(
-            prompt, colored=colored, secret=secret, field_width=field_width
-        )
+        return _read_interactive_line(prompt, **kwargs)
     finally:
         if colored:
             sys.stdout.write(_RESET)
