@@ -29,11 +29,15 @@ def export_students_csv(
     with connect(db_path) as connection:
         rows = connection.execute(
             """
-            SELECT s.student_no, s.name, s.family, s.branch, s.gender,
-                   s.birth_date, s.enrollment_year, c.code AS class_code,
-                   s.status, s.primary_element, s.primary_affinity,
+            SELECT s.student_no, s.name,
+                   f.name AS family, b.name AS branch,
+                   s.gender, s.birth_date, s.enrollment_year,
+                   c.code AS class_code, s.status,
+                   s.primary_element, s.primary_affinity,
                    s.contact, s.dormitory, s.notes
             FROM students AS s
+            JOIN species_branches AS b ON b.id = s.species_branch_id
+            JOIN species_families AS f ON f.id = b.family_id
             LEFT JOIN classes AS c ON c.id = s.class_id
             ORDER BY s.student_no
             """
@@ -75,22 +79,35 @@ def import_students_csv(
                         ).fetchone()
                         if class_row is None:
                             raise ValueError(f"班级编号不存在：{class_code}")
-                        class_id = class_row[0]
+                        class_id = int(class_row[0])
+
+                    family = _required(row, "family")
+                    branch = _required(row, "branch")
+                    branch_row = connection.execute(
+                        """
+                        SELECT b.id
+                        FROM species_branches AS b
+                        JOIN species_families AS f ON f.id = b.family_id
+                        WHERE f.name = ? AND b.name = ?
+                        """,
+                        (family, branch),
+                    ).fetchone()
+                    if branch_row is None:
+                        raise ValueError(f"种族支系不存在：{family} · {branch}")
 
                     connection.execute(
                         """
                         INSERT INTO students(
-                            student_no, name, family, branch, gender, birth_date,
+                            student_no, name, species_branch_id, gender, birth_date,
                             enrollment_year, class_id, status,
                             primary_element, primary_affinity,
                             contact, dormitory, notes
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             _required(row, "student_no"),
                             _required(row, "name"),
-                            _required(row, "family"),
-                            _required(row, "branch"),
+                            int(branch_row[0]),
                             _optional(row.get("gender")),
                             _optional(row.get("birth_date")),
                             int(_required(row, "enrollment_year")),

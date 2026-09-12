@@ -36,12 +36,25 @@ CREATE TABLE IF NOT EXISTS classes (
         ON UPDATE CASCADE ON DELETE RESTRICT
 );
 
+CREATE TABLE IF NOT EXISTS species_families (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS species_branches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    family_id INTEGER NOT NULL,
+    UNIQUE(name, family_id),
+    FOREIGN KEY (family_id) REFERENCES species_families(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
 CREATE TABLE IF NOT EXISTS students (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     student_no TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
-    family TEXT NOT NULL,
-    branch TEXT NOT NULL,
+    species_branch_id INTEGER NOT NULL,
     gender TEXT,
     birth_date TEXT,
     enrollment_year INTEGER NOT NULL CHECK(enrollment_year >= 1900),
@@ -52,6 +65,8 @@ CREATE TABLE IF NOT EXISTS students (
     contact TEXT,
     dormitory TEXT,
     notes TEXT,
+    FOREIGN KEY (species_branch_id) REFERENCES species_branches(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
     FOREIGN KEY (class_id) REFERENCES classes(id)
         ON UPDATE CASCADE ON DELETE SET NULL
 );
@@ -82,9 +97,77 @@ CREATE TABLE IF NOT EXISTS enrollments (
 
 CREATE INDEX IF NOT EXISTS idx_students_name ON students(name);
 CREATE INDEX IF NOT EXISTS idx_students_class_id ON students(class_id);
+CREATE INDEX IF NOT EXISTS idx_students_species_branch_id ON students(species_branch_id);
+CREATE INDEX IF NOT EXISTS idx_species_branches_family_id ON species_branches(family_id);
 CREATE INDEX IF NOT EXISTS idx_courses_name ON courses(name);
 CREATE INDEX IF NOT EXISTS idx_enrollments_student_id ON enrollments(student_id);
 CREATE INDEX IF NOT EXISTS idx_enrollments_course_id ON enrollments(course_id);
+"""
+
+_LEGACY_SPECIES_MIGRATION = """
+PRAGMA foreign_keys = OFF;
+
+CREATE TABLE IF NOT EXISTS species_families (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS species_branches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    family_id INTEGER NOT NULL,
+    UNIQUE(name, family_id),
+    FOREIGN KEY (family_id) REFERENCES species_families(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+INSERT OR IGNORE INTO species_families(name)
+SELECT DISTINCT family FROM students ORDER BY family;
+
+INSERT OR IGNORE INTO species_branches(name, family_id)
+SELECT DISTINCT s.branch, f.id
+FROM students AS s
+JOIN species_families AS f ON f.name = s.family
+ORDER BY s.family, s.branch;
+
+CREATE TABLE students_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_no TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    species_branch_id INTEGER NOT NULL,
+    gender TEXT,
+    birth_date TEXT,
+    enrollment_year INTEGER NOT NULL CHECK(enrollment_year >= 1900),
+    class_id INTEGER,
+    status TEXT NOT NULL DEFAULT '在读',
+    primary_element TEXT,
+    primary_affinity TEXT,
+    contact TEXT,
+    dormitory TEXT,
+    notes TEXT,
+    FOREIGN KEY (species_branch_id) REFERENCES species_branches(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    FOREIGN KEY (class_id) REFERENCES classes(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+);
+
+INSERT INTO students_new(
+    id, student_no, name, species_branch_id, gender, birth_date,
+    enrollment_year, class_id, status, primary_element, primary_affinity,
+    contact, dormitory, notes
+)
+SELECT
+    s.id, s.student_no, s.name, b.id, s.gender, s.birth_date,
+    s.enrollment_year, s.class_id, s.status, s.primary_element,
+    s.primary_affinity, s.contact, s.dormitory, s.notes
+FROM students AS s
+JOIN species_families AS f ON f.name = s.family
+JOIN species_branches AS b ON b.family_id = f.id AND b.name = s.branch;
+
+DROP TABLE students;
+ALTER TABLE students_new RENAME TO students;
+
+PRAGMA foreign_keys = ON;
 """
 
 
@@ -105,4 +188,16 @@ def connect(db_path: Path | str | None = None) -> Iterator[sqlite3.Connection]:
 
 def initialize_database(db_path: Path | str | None = None) -> None:
     with connect(db_path) as connection:
+        if _uses_legacy_species_columns(connection):
+            connection.executescript(_LEGACY_SPECIES_MIGRATION)
         connection.executescript(SCHEMA)
+
+
+def _uses_legacy_species_columns(connection: sqlite3.Connection) -> bool:
+    exists = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'students'"
+    ).fetchone()
+    if exists is None:
+        return False
+    columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(students)")}
+    return {"family", "branch"}.issubset(columns) and "species_branch_id" not in columns

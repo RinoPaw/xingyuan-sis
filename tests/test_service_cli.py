@@ -28,6 +28,8 @@ class ServiceAndCliTests(unittest.TestCase):
             major_code="ELM",
             enrollment_year=2026,
         )
+        self.service.create_species_family(name="猫科")
+        self.service.create_species_branch(name="石虎", family="猫科")
         self.service.create_student(
             student_no="20260001",
             name="林岚",
