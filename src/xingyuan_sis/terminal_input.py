@@ -41,25 +41,23 @@ def _enable_escape_cancel() -> None:
 
 
 def read_input(prompt: str) -> str:
-    styled = (
-        _ACTIVE.get()
-        and sys.stdin.isatty()
-        and sys.stdout.isatty()
-        and os.environ.get("NO_COLOR") is None
-    )
-    if not styled:
+    interactive = _ACTIVE.get() and sys.stdin.isatty() and sys.stdout.isatty()
+    if not interactive:
         return input(prompt)
 
     _enable_escape_cancel()
+    colored = os.environ.get("NO_COLOR") is None
+    shown = f"{_SURFACE}\x1b[2K  {prompt}" if colored else prompt
     try:
-        return input(f"{_SURFACE}\x1b[2K  {prompt}")
+        return input(shown)
     except EOFError as error:
         # In the interactive TUI, EOF is also the portable cancellation path
         # used by the Esc binding above.
         raise KeyboardInterrupt from error
     finally:
-        sys.stdout.write(_RESET)
-        sys.stdout.flush()
+        if colored:
+            sys.stdout.write(_RESET)
+            sys.stdout.flush()
 
 
 def heading(title: str) -> None:
