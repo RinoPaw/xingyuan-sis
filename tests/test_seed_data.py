@@ -25,16 +25,21 @@ class SeedDataTests(unittest.TestCase):
 
         self.assertEqual(result.departments, 4)
         self.assertEqual(result.majors, 10)
-        self.assertEqual(result.classes, 11)
-        self.assertEqual(result.students, 12)
-        self.assertEqual(result.courses, 11)
-        self.assertEqual(result.enrollments, 16)
+        self.assertEqual(result.classes, 26)
+        self.assertEqual(result.students, 100)
+        self.assertEqual(result.courses, 20)
+        self.assertEqual(result.enrollments, 400)
 
         student = self.service.student_by_no("20260001")
         self.assertIsNotNone(student)
         self.assertEqual(student["name"], "林岚")
         self.assertEqual(student["class_name"], "元素学2601班")
         self.assertEqual(student["primary_element"], "风")
+
+        referenced_student = self.service.student_by_no("20260004")
+        self.assertIsNotNone(referenced_student)
+        self.assertEqual(referenced_student["name"], "雷格西")
+        self.assertEqual(referenced_student["branch"], "灰狼")
 
         enrollment = self.service.enrollment(
             "20230002",
@@ -56,7 +61,7 @@ class SeedDataTests(unittest.TestCase):
         seed_demo(self.db_path, reset=True)
 
         self.assertEqual(self.service.student_by_no("20260001")["name"], "林岚")
-        self.assertEqual(len(self.service.list_students()), 12)
+        self.assertEqual(len(self.service.list_students()), 100)
 
     def test_cli_seed_command(self) -> None:
         output = StringIO()
@@ -64,8 +69,8 @@ class SeedDataTests(unittest.TestCase):
             code = cli_main(["--db", str(self.db_path), "data", "seed"])
 
         self.assertEqual(code, 0)
-        self.assertIn("学生 12", output.getvalue())
-        self.assertEqual(len(self.service.list_courses()), 11)
+        self.assertIn("学生 100", output.getvalue())
+        self.assertEqual(len(self.service.list_courses()), 20)
 
         error = StringIO()
         with redirect_stdout(StringIO()), redirect_stderr(error):
