@@ -206,7 +206,7 @@ Basic Menu ──────────┼── XingyuanService ── Reposi
 CLI ─────────────────┘
 ```
 
-入口层先检测终端能力并选择交互界面。CLI 的 argparse 语法树与命令执行已经分离；菜单只负责把用户操作转换为服务或 CLI 调用。学生结构化查询由独立的 `student_filters` 查询层处理。
+入口层先检测终端能力并选择交互界面。CLI 已按业务域拆分命令执行模块；工作台视图也拆成名册、档案、编辑器和数据概览面板，布局编排与具体面板渲染彼此分离。学生结构化查询由独立的 `student_filters` 查询层处理。
 
 ## 测试
 
@@ -224,8 +224,8 @@ xingyuan-sis/
 │   ├── terminal_capabilities.py # TTY / ANSI / 即时输入能力检测
 │   ├── cli.py                   # CLI 初始化、分发和错误处理
 │   ├── cli_schema.py            # argparse 命令树
-│   ├── cli_commands.py          # CLI 命令执行
-│   ├── tui/                     # 终端首页、工作台、布局、输入与动画
+│   ├── commands/                # student / academic / course / grade / data
+│   ├── tui/                     # 首页、工作台状态与拆分后的视图面板
 │   ├── basic_ui.py              # while True + 清屏 + 数字输入备用菜单
 │   ├── terminal_ui.py           # 两种菜单共用的分页、搜索与输入辅助
 │   ├── terminal_input.py        # 菜单表单主题与原生逐行输入
