@@ -8,16 +8,7 @@ from .common import confirm, print_table, prompt, prompt_float
 
 def run(service: XingyuanService, args: argparse.Namespace) -> int:
     if args.action in {"ls", "list"}:
-        keyword = args.search.strip().lower()
-        rows = service.list_enrollments()
-        if keyword:
-            rows = [
-                row for row in rows
-                if keyword in " ".join(
-                    str(row[key] or "")
-                    for key in ("student_no", "student_name", "course_code", "course_name", "semester")
-                ).lower()
-            ]
+        rows = service.list_enrollments(args.search)
         print_table(
             ("学号", "姓名", "课程", "学期", "成绩"),
             ((r["student_no"], r["student_name"], r["course_name"], r["semester"], r["score"]) for r in rows),
@@ -39,10 +30,9 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
         return 0
 
     if args.action == "edit":
-        row = service._require(
-            service.enrollment(args.student_no, args.course_code, args.semester),
-            "找不到这条选课记录",
-        )
+        row = service.enrollment(args.student_no, args.course_code, args.semester)
+        if row is None:
+            raise ValueError("找不到这条选课记录")
         if args.clear_score:
             score = None
         elif args.score is not None:
