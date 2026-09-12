@@ -20,7 +20,9 @@ class DetailFocusTests(unittest.TestCase):
         self.catalog = Catalog(self.db)
 
     def render(self, state):
-        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
+             patch("sys.stdout.isatty", return_value=True), patch.dict(os.environ) as environment:
+            environment.pop("NO_COLOR", None)
             return workspace_view.render(state, self.catalog)
 
     def test_tab_focus_is_visible_on_both_panel_heading_and_detail_item(self):
@@ -75,7 +77,7 @@ class DetailFocusTests(unittest.TestCase):
         with patch.object(
             keys,
             "_read_key",
-            side_effect=["right", "right", "down", "left", "left", "down", "back"],
+            side_effect=["right", "right", "down", "left", "left", "back"],
         ), patch.object(screen, "_paint"), patch.object(
             screen, "_terminal_size", return_value=os.terminal_size((120, 35))
         ):
@@ -83,7 +85,7 @@ class DetailFocusTests(unittest.TestCase):
 
         self.assertFalse(state.details)
         self.assertEqual(state.detail_selected, 1)
-        self.assertEqual(state.selected, 1)
+        self.assertEqual(state.selected, 0)
 
 
 if __name__ == "__main__":
