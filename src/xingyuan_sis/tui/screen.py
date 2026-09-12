@@ -23,30 +23,22 @@ _ACCENT = "\x1b[38;5;110m"
 _DIM = "\x1b[38;5;245m"
 
 
-_BORDER = "\x1b[38;5;235m"
-
-
 _SELECTED = "\x1b[48;5;238m\x1b[38;5;255m"
 
 
 _GOLD = "\x1b[38;5;180m"
 
 
-_SURFACE = "\x1b[48;5;235m\x1b[38;5;252m"
+_TERMINAL_BG = "#666769"
+_SURFACE = "\x1b[48;2;102;103;105m\x1b[38;5;252m"
 
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
-_BORDER_GLYPHS = frozenset("─│┌┐└┘├┤┬┴┼╭╮╰╯")
 
 
 def _ansi(text: str, style: str) -> str:
     if not sys.stdout.isatty() or os.environ.get("NO_COLOR") is not None:
         return text
-    # Structural rules blend into the same xterm 235 / #262626 background
-    # used by the terminal surface. Secondary text keeps its brighter DIM tone.
-    visible = text.strip()
-    if style == _DIM and visible and set(visible) <= _BORDER_GLYPHS:
-        style = _BORDER
     return f"{style}{text}{_RESET}"
 
 
@@ -87,7 +79,7 @@ def _terminal_session():
     """Keep the terminal padding and unused cells on the menu surface."""
     colored = os.environ.get("NO_COLOR") is None
     try:
-        sys.stdout.write("\x1b[?1049h" + ("\x1b]11;#262626\x1b\\" if colored else ""))
+        sys.stdout.write("\x1b[?1049h" + (f"\x1b]11;{_TERMINAL_BG}\x1b\\" if colored else ""))
         _clear()
         yield
     finally:
