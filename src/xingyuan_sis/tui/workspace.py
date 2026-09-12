@@ -174,10 +174,17 @@ def _interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             previous = frame.lines
         key = keys._read_key(0.15)
         wheel = isinstance(key, keys.MouseScroll)
+        wheel_over_details = False
         if wheel:
-            if not state.form and any(r.action == "focus-details" for r in frame.regions):
-                state.details = any(r.action == "focus-details" and r.y == key.y
-                                    and r.x <= key.x < r.x + r.width for r in frame.regions)
+            # Wheel position chooses which pane scrolls. It is deliberately
+            # independent from keyboard focus: hovering the inspector and
+            # scrolling must never behave like Tab/Right or select an item.
+            if not state.form:
+                wheel_over_details = any(
+                    r.action == "focus-details" and r.y == key.y
+                    and r.x <= key.x < r.x + r.width
+                    for r in frame.regions
+                )
             key = key.direction
         if isinstance(key, screen.MouseClick):
             key = screen._hit_action(key, frame.regions)
@@ -296,9 +303,18 @@ def _interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
         elif key in {"up", "down", "page_up", "page_down", "home", "end"}:
             amount = max(1, screen._terminal_size().lines - 11) if key.startswith("page_") else 1
             amount *= -1 if key in {"up", "page_up"} else 1
-            if state.details and state.key != "data":
+            if wheel and state.key != "data":
+                if wheel_over_details:
+                    state.detail_scroll = max(0, state.detail_scroll + amount)
+                    if state.details:
+                        _select_visible_detail_target(state, catalog)
+                else:
+                    state.selected += amount
+                    state.detail_scroll = 0
+                    state.detail_selected = 0
+            elif state.details and state.key != "data":
                 targets = _detail_targets(state, catalog)
-                if wheel or key in {"page_up", "page_down"} or not targets:
+                if key in {"page_up", "page_down"} or not targets:
                     state.detail_scroll = max(0, state.detail_scroll + amount)
                     _select_visible_detail_target(state, catalog)
                 else:
