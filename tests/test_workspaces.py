@@ -190,7 +190,10 @@ class WorkspaceTests(unittest.TestCase):
         self.assertIn(expected_name, "".join(paint.call_args_list[-1].args[0]))
 
     def test_breadcrumb_returns_home_after_resizing_academic_workspace(self):
-        with redirect_stdout(StringIO()), patch.object(keys, "_read_key", side_effect=["2", "3", keys.MouseClick(2, 2), "back"]), \
+        identity = app.Identity("Administrator", "admin")
+        events = ["2", "right", "down", "select", keys.MouseClick(2, 2), "back"]
+        with redirect_stdout(StringIO()), patch.object(keys, "_read_key", side_effect=events), \
+             patch.object(app, "read_session", return_value=identity), \
              patch.object(screen, "_paint") as paint, patch.object(screen, "_clear"), \
              patch.object(keys, "_mouse_tracking", nullcontext), patch.object(screen, "_terminal_session", nullcontext), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 24))), \
