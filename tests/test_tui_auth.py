@@ -27,15 +27,16 @@ class TuiAuthViewTests(unittest.TestCase):
             self.assertIn("登录", login_text)
             self.assertIn("账号", login_text)
             self.assertIn("密码", login_text)
-            self.assertIn("设置管理员密码", setup_text)
+            self.assertIn("管理员设置", setup_text)
             self.assertIn("账号", setup_text)
             self.assertIn("Administrator", setup_text)
-            self.assertNotIn("管理员账号", setup_text)
-            self.assertNotIn("创建唯一管理员", setup_text)
-            self.assertEqual(
-                [field[1] for field in auth_view._fields("initialize")],
-                ["账号", "密码", "确认"],
-            )
+            self.assertIn("设置密码", setup_text)
+            self.assertIn("确认密码", setup_text)
+            fields = auth_view._fields("initialize")
+            self.assertEqual([field[1] for field in fields], ["账号", "设置密码", "确认密码"])
+            self.assertFalse(fields[0][3])
+            self.assertTrue(fields[1][3])
+            self.assertTrue(fields[2][3])
 
     def test_portal_uses_tui_login_when_session_is_missing(self):
         identity = Identity("Administrator", "admin")
