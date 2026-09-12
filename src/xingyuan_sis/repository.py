@@ -28,6 +28,12 @@ class Repository:
     def list_departments(self) -> list[sqlite3.Row]:
         return self._fetch_all("SELECT id, code, name FROM departments ORDER BY code")
 
+    def find_department_by_code(self, code: str) -> sqlite3.Row | None:
+        return self._fetch_one(
+            "SELECT id, code, name FROM departments WHERE code = ?",
+            (code.strip(),),
+        )
+
     def add_department(self, code: str, name: str) -> int:
         return self._execute(
             "INSERT INTO departments(code, name) VALUES (?, ?)",
@@ -52,6 +58,17 @@ class Repository:
             JOIN departments AS d ON d.id = m.department_id
             ORDER BY d.code, m.code
             """
+        )
+
+    def find_major_by_code(self, code: str) -> sqlite3.Row | None:
+        return self._fetch_one(
+            """
+            SELECT m.id, m.code, m.name, m.department_id, d.name AS department_name
+            FROM majors AS m
+            JOIN departments AS d ON d.id = m.department_id
+            WHERE m.code = ?
+            """,
+            (code.strip(),),
         )
 
     def add_major(self, code: str, name: str, department_id: int) -> int:
@@ -80,6 +97,19 @@ class Repository:
             JOIN departments AS d ON d.id = m.department_id
             ORDER BY c.enrollment_year DESC, c.code
             """
+        )
+
+    def find_class_by_code(self, code: str) -> sqlite3.Row | None:
+        return self._fetch_one(
+            """
+            SELECT c.id, c.code, c.name, c.major_id, c.enrollment_year,
+                   m.name AS major_name, d.name AS department_name
+            FROM classes AS c
+            JOIN majors AS m ON m.id = c.major_id
+            JOIN departments AS d ON d.id = m.department_id
+            WHERE c.code = ?
+            """,
+            (code.strip(),),
         )
 
     def add_class(self, code: str, name: str, major_id: int, enrollment_year: int) -> int:
@@ -114,6 +144,12 @@ class Repository:
             "SELECT id, name FROM species_families ORDER BY name"
         )
 
+    def find_species_family_by_name(self, name: str) -> sqlite3.Row | None:
+        return self._fetch_one(
+            "SELECT id, name FROM species_families WHERE name = ?",
+            (name.strip(),),
+        )
+
     def add_species_family(self, name: str) -> int:
         return self._execute(
             "INSERT INTO species_families(name) VALUES (?)",
@@ -138,6 +174,33 @@ class Repository:
             JOIN species_families AS f ON f.id = b.family_id
             ORDER BY f.name, b.name
             """
+        )
+
+    def find_species_branch_by_name(
+        self,
+        name: str,
+        family: str | None = None,
+    ) -> sqlite3.Row | None:
+        if family is None:
+            return self._fetch_one(
+                """
+                SELECT b.id, b.name, b.family_id, f.name AS family_name
+                FROM species_branches AS b
+                JOIN species_families AS f ON f.id = b.family_id
+                WHERE b.name = ?
+                ORDER BY f.name
+                LIMIT 1
+                """,
+                (name.strip(),),
+            )
+        return self._fetch_one(
+            """
+            SELECT b.id, b.name, b.family_id, f.name AS family_name
+            FROM species_branches AS b
+            JOIN species_families AS f ON f.id = b.family_id
+            WHERE b.name = ? AND f.name = ?
+            """,
+            (name.strip(), family.strip()),
         )
 
     def add_species_branch(self, name: str, family_id: int) -> int:
@@ -185,6 +248,27 @@ class Repository:
             ORDER BY s.student_no
             """,
             (pattern,) * 9,
+        )
+
+    def find_student_by_no(self, student_no: str) -> sqlite3.Row | None:
+        return self._fetch_one(
+            """
+            SELECT s.id, s.student_no, s.name, s.species_branch_id,
+                   f.name AS family, b.name AS branch,
+                   s.gender, s.birth_date, s.enrollment_year, s.status,
+                   s.primary_element, s.primary_affinity,
+                   s.contact, s.dormitory, s.notes, s.class_id,
+                   c.name AS class_name, m.name AS major_name,
+                   d.name AS department_name
+            FROM students AS s
+            JOIN species_branches AS b ON b.id = s.species_branch_id
+            JOIN species_families AS f ON f.id = b.family_id
+            LEFT JOIN classes AS c ON c.id = s.class_id
+            LEFT JOIN majors AS m ON m.id = c.major_id
+            LEFT JOIN departments AS d ON d.id = m.department_id
+            WHERE s.student_no = ?
+            """,
+            (student_no.strip(),),
         )
 
     def get_student(self, student_id: int) -> sqlite3.Row | None:
@@ -259,6 +343,18 @@ class Repository:
             """
         )
 
+    def find_course_by_code(self, course_code: str) -> sqlite3.Row | None:
+        return self._fetch_one(
+            """
+            SELECT c.id, c.course_code, c.name, c.department_id,
+                   c.credits, c.hours, d.name AS department_name
+            FROM courses AS c
+            LEFT JOIN departments AS d ON d.id = c.department_id
+            WHERE c.course_code = ?
+            """,
+            (course_code.strip(),),
+        )
+
     def add_course(
         self,
         course_code: str,
@@ -308,6 +404,25 @@ class Repository:
             JOIN courses AS c ON c.id = e.course_id
             ORDER BY e.semester DESC, s.student_no, c.course_code
             """
+        )
+
+    def find_enrollment(
+        self,
+        student_no: str,
+        course_code: str,
+        semester: str,
+    ) -> sqlite3.Row | None:
+        return self._fetch_one(
+            """
+            SELECT e.id, e.student_id, e.course_id, e.semester, e.score,
+                   s.student_no, s.name AS student_name,
+                   c.course_code, c.name AS course_name
+            FROM enrollments AS e
+            JOIN students AS s ON s.id = e.student_id
+            JOIN courses AS c ON c.id = e.course_id
+            WHERE s.student_no = ? AND c.course_code = ? AND e.semester = ?
+            """,
+            (student_no.strip(), course_code.strip(), semester.strip()),
         )
 
     def add_enrollment(

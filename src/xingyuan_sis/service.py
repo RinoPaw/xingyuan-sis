@@ -20,9 +20,6 @@ class XingyuanService:
         return self.repository.db_path
 
     # ----- read models ----------------------------------------------------
-    # Keep repository access behind an explicit application-facing surface.
-    # Callers should never acquire arbitrary persistence methods through the
-    # service object simply because Repository happens to implement them.
     def list_departments(self) -> list[sqlite3.Row]:
         return self.repository.list_departments()
 
@@ -49,63 +46,29 @@ class XingyuanService:
 
     # ----- lookup helpers -------------------------------------------------
     def student_by_no(self, student_no: str) -> sqlite3.Row | None:
-        key = student_no.strip()
-        return next(
-            (row for row in self.repository.list_students(key) if row["student_no"] == key),
-            None,
-        )
+        return self.repository.find_student_by_no(student_no)
 
     def course_by_code(self, course_code: str) -> sqlite3.Row | None:
-        key = course_code.strip()
-        return next(
-            (row for row in self.repository.list_courses() if row["course_code"] == key),
-            None,
-        )
+        return self.repository.find_course_by_code(course_code)
 
     def class_by_code(self, class_code: str) -> sqlite3.Row | None:
-        key = class_code.strip()
-        return next(
-            (row for row in self.repository.list_classes() if row["code"] == key),
-            None,
-        )
+        return self.repository.find_class_by_code(class_code)
 
     def department_by_code(self, department_code: str) -> sqlite3.Row | None:
-        key = department_code.strip()
-        return next(
-            (row for row in self.repository.list_departments() if row["code"] == key),
-            None,
-        )
+        return self.repository.find_department_by_code(department_code)
 
     def major_by_code(self, major_code: str) -> sqlite3.Row | None:
-        key = major_code.strip()
-        return next(
-            (row for row in self.repository.list_majors() if row["code"] == key),
-            None,
-        )
+        return self.repository.find_major_by_code(major_code)
 
     def species_family_by_name(self, name: str) -> sqlite3.Row | None:
-        key = name.strip()
-        return next(
-            (row for row in self.repository.list_species_families() if row["name"] == key),
-            None,
-        )
+        return self.repository.find_species_family_by_name(name)
 
     def species_branch_by_name(
         self,
         branch: str,
         family: str | None = None,
     ) -> sqlite3.Row | None:
-        branch_key = branch.strip()
-        family_key = None if family is None else family.strip()
-        return next(
-            (
-                row
-                for row in self.repository.list_species_branches()
-                if row["name"] == branch_key
-                and (family_key is None or row["family_name"] == family_key)
-            ),
-            None,
-        )
+        return self.repository.find_species_branch_by_name(branch, family)
 
     def enrollment(
         self,
@@ -113,19 +76,7 @@ class XingyuanService:
         course_code: str,
         semester: str,
     ) -> sqlite3.Row | None:
-        student_no = student_no.strip()
-        course_code = course_code.strip()
-        semester = semester.strip()
-        return next(
-            (
-                row
-                for row in self.repository.list_enrollments()
-                if row["student_no"] == student_no
-                and row["course_code"] == course_code
-                and row["semester"] == semester
-            ),
-            None,
-        )
+        return self.repository.find_enrollment(student_no, course_code, semester)
 
     @staticmethod
     def _require(row: sqlite3.Row | None, message: str) -> sqlite3.Row:

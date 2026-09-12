@@ -65,6 +65,34 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(stats["courses"], len(COURSES))
         self.assertIsNotNone(stats["average_score"])
 
+    def test_direct_lookups_return_full_business_rows(self) -> None:
+        department = self.repository.list_departments()[0]
+        major = self.repository.list_majors()[0]
+        class_ = self.repository.list_classes()[0]
+        family = self.repository.list_species_families()[0]
+        branch = self.repository.list_species_branches()[0]
+        student = self.repository.list_students()[0]
+        course = self.repository.list_courses()[0]
+        enrollment = self.repository.list_enrollments()[0]
+
+        self.assertEqual(dict(self.repository.find_department_by_code(department["code"])), dict(department))
+        self.assertEqual(dict(self.repository.find_major_by_code(major["code"])), dict(major))
+        self.assertEqual(dict(self.repository.find_class_by_code(class_["code"])), dict(class_))
+        self.assertEqual(dict(self.repository.find_species_family_by_name(family["name"])), dict(family))
+        self.assertEqual(
+            dict(self.repository.find_species_branch_by_name(branch["name"], branch["family_name"])),
+            dict(branch),
+        )
+        self.assertEqual(dict(self.repository.find_student_by_no(student["student_no"])), dict(student))
+        self.assertEqual(dict(self.repository.find_course_by_code(course["course_code"])), dict(course))
+        self.assertEqual(
+            dict(self.repository.find_enrollment(
+                enrollment["student_no"], enrollment["course_code"], enrollment["semester"]
+            )),
+            dict(enrollment),
+        )
+        self.assertIsNone(self.repository.find_student_by_no("missing"))
+
     def test_student_number_is_unique(self) -> None:
         student = self.repository.list_students()[0]
         with self.assertRaises(sqlite3.IntegrityError):
