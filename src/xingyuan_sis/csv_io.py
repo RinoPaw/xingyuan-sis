@@ -6,6 +6,7 @@ from pathlib import Path
 import sqlite3
 
 from .database import connect
+from .species import parse_species_branch
 
 STUDENT_FIELDS = [
     "student_no", "name", "family", "branch", "gender", "birth_date",
@@ -77,6 +78,7 @@ def import_students_csv(
                             raise ValueError(f"班级编号不存在：{class_code}")
                         class_id = class_row[0]
 
+                    branch = parse_species_branch(_required(row, "branch")).value
                     connection.execute(
                         """
                         INSERT INTO students(
@@ -90,7 +92,7 @@ def import_students_csv(
                             _required(row, "student_no"),
                             _required(row, "name"),
                             _required(row, "family"),
-                            _required(row, "branch"),
+                            branch,
                             _optional(row.get("gender")),
                             _optional(row.get("birth_date")),
                             int(_required(row, "enrollment_year")),
