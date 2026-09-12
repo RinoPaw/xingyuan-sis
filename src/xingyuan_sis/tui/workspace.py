@@ -31,6 +31,7 @@ class Workspace:
     roster_scroll: int = 0
     details: bool = False
     detail_scroll: int = 0
+    detail_selected: int = 0
     notice: str = ""
     form: Form | None = None
     report: list[str] = field(default_factory=list)
@@ -48,7 +49,7 @@ class Workspace:
 
     def switch(self, key: str) -> None:
         self.key, self.view, self.query, self.selected, self.roster_scroll = key, 0, "", 0, 0
-        self.details, self.detail_scroll, self.form = False, 0, None
+        self.details, self.detail_scroll, self.detail_selected, self.form = False, 0, 0, None
 
 
 def _open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
@@ -107,6 +108,61 @@ def _apply_form(state: Workspace, catalog: Catalog) -> None:
     state.detail_scroll = 0
 
 
+def _detail_geometry() -> tuple[int, int]:
+    terminal = screen._terminal_size()
+    width, height = max(1, terminal.columns - 1), max(4, terminal.lines)
+    if width >= 76:
+        split = width // 2
+        panel_width = max(1, width - split - 4)
+    else:
+        panel_width = max(1, width - 2)
+    return panel_width, max(1, height - 12)
+
+
+def _detail_targets(state: Workspace, catalog: Catalog) -> list[tuple[int, str]]:
+    from .workspace_view import detail_targets
+
+    row = state.current(catalog)
+    if row is None:
+        return []
+    width, _ = _detail_geometry()
+    return detail_targets(state.key, row, catalog, width)
+
+
+def _reveal_detail_selection(state: Workspace, catalog: Catalog) -> None:
+    targets = _detail_targets(state, catalog)
+    if not targets:
+        state.detail_selected = 0
+        return
+    state.detail_selected = min(max(0, state.detail_selected), len(targets) - 1)
+    _, capacity = _detail_geometry()
+    line = targets[state.detail_selected][0]
+    if line < state.detail_scroll:
+        state.detail_scroll = line
+    elif line >= state.detail_scroll + capacity:
+        state.detail_scroll = line - capacity + 1
+
+
+def _select_visible_detail_target(state: Workspace, catalog: Catalog) -> None:
+    targets = _detail_targets(state, catalog)
+    if not targets:
+        state.detail_selected = 0
+        return
+    _, capacity = _detail_geometry()
+    first, last = state.detail_scroll, state.detail_scroll + capacity - 1
+    visible = [(index, line) for index, (line, _) in enumerate(targets) if first <= line <= last]
+    if visible:
+        state.detail_selected = min(
+            visible,
+            key=lambda item: abs(item[0] - state.detail_selected),
+        )[0]
+    else:
+        state.detail_selected = min(
+            range(len(targets)),
+            key=lambda index: abs(targets[index][0] - first),
+        )
+
+
 def _interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
     from .workspace_view import render
 
@@ -117,7 +173,8 @@ def _interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             screen._paint(frame.lines, previous)
             previous = frame.lines
         key = keys._read_key(0.15)
-        if isinstance(key, keys.MouseScroll):
+        wheel = isinstance(key, keys.MouseScroll)
+        if wheel:
             if not state.form and any(r.action == "focus-details" for r in frame.regions):
                 state.details = any(r.action == "focus-details" and r.y == key.y
                                     and r.x <= key.x < r.x + r.width for r in frame.regions)
@@ -138,6 +195,7 @@ def _interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             elif state.history:
                 state.key, state.view, state.query, state.selected, state.roster_scroll = state.history.pop()
                 state.detail_scroll = 0
+                state.detail_selected = 0
             else:
                 return None
             continue
@@ -191,6 +249,7 @@ def _interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
         elif key.startswith("row:"):
             state.selected = int(key.split(":")[1])
             state.detail_scroll = 0
+            state.detail_selected = 0
             state.details = screen._terminal_size().columns < 76
         elif key.startswith("edit-field:"):
             _open_form(state, catalog, "edit")
@@ -199,13 +258,52 @@ def _interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             return "field", state.form.position
         elif key == "focus-details":
             state.details = True
-        elif key == "select" or key == "focus":
+            _reveal_detail_selection(state, catalog)
+        elif key == "focus":
             state.details = not state.details
-            state.detail_scroll = 0
+            if state.details:
+                _reveal_detail_selection(state, catalog)
+        elif key == "select":
+            if state.details and state.key != "data":
+                targets = _detail_targets(state, catalog)
+                if targets:
+                    state.detail_selected = min(max(0, state.detail_selected), len(targets) - 1)
+                    key = targets[state.detail_selected][1]
+                else:
+                    continue
+            else:
+                state.details = not state.details
+                if state.details:
+                    _reveal_detail_selection(state, catalog)
+                continue
+            if key.startswith("related:"):
+                _, collection, identifier = key.split(":")
+                state.history.append((state.key, state.view, state.query, state.selected, state.roster_scroll))
+                state.switch(collection)
+                state.selected = next((i for i, row in enumerate(state.rows(catalog)) if str(row["id"]) == identifier), 0)
+            elif key.startswith("edit-field:"):
+                _open_form(state, catalog, "edit")
+                field_key = key.split(":")[1]
+                state.form.position = next(i for i, f in enumerate(state.form.fields) if f.key == field_key)
+                return "field", state.form.position
         elif key in {"up", "down", "page_up", "page_down", "home", "end"}:
             amount = max(1, screen._terminal_size().lines - 11) if key.startswith("page_") else 1
             amount *= -1 if key in {"up", "page_up"} else 1
-            if state.details or state.key == "data":
+            if state.details and state.key != "data":
+                targets = _detail_targets(state, catalog)
+                if wheel or key in {"page_up", "page_down"} or not targets:
+                    state.detail_scroll = max(0, state.detail_scroll + amount)
+                    _select_visible_detail_target(state, catalog)
+                else:
+                    if key == "home":
+                        state.detail_selected = 0
+                    elif key == "end":
+                        state.detail_selected = len(targets) - 1
+                    else:
+                        state.detail_selected += -1 if key == "up" else 1
+                    state.detail_selected = min(max(0, state.detail_selected), len(targets) - 1)
+                    _reveal_detail_selection(state, catalog)
+            elif state.key == "data":
                 state.detail_scroll = max(0, state.detail_scroll + amount)
                 if key == "home":
                     state.detail_scroll = 0
@@ -218,6 +316,7 @@ def _interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 elif key == "end":
                     state.selected = len(state.rows(catalog)) - 1
                 state.detail_scroll = 0
+                state.detail_selected = 0
         elif key.startswith("view:") or key in {"1", "2", "3", "4"}:
             index = int(key.split(":")[1]) if key.startswith("view:") else int(key) - 1
             if state.key == "data":
@@ -225,11 +324,13 @@ def _interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             elif state.key in ACADEMICS and index < len(ACADEMICS):
                 state.switch(ACADEMICS[index])
             elif state.key != "data" and index < len(COLLECTIONS[state.key].views):
-                state.view, state.selected, state.roster_scroll, state.detail_scroll = index, 0, 0, 0
+                state.view, state.selected, state.roster_scroll = index, 0, 0
+                state.detail_scroll, state.detail_selected = 0, 0
         elif key == "search" and state.key != "data":
             return "search", 0
         elif key == "reset-search":
             state.query, state.selected, state.roster_scroll = "", 0, 0
+            state.detail_scroll, state.detail_selected = 0, 0
         elif key == "refresh":
             return "refresh", 0
         elif key in {"create", "edit", "delete"} and state.key != "data":
@@ -270,7 +371,8 @@ def _read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> N
     with input_style(True):
         raw = read_input(screen._clip_cells(label, max(4, screen._terminal_size().columns - 8)) + " > ").strip()
     if kind == "search":
-        state.query, state.selected, state.roster_scroll, state.detail_scroll = raw, 0, 0, 0
+        state.query, state.selected, state.roster_scroll = raw, 0, 0
+        state.detail_scroll, state.detail_selected = 0, 0
         state.notice = f"搜索：{raw}" if raw else "已显示全部记录。"
     elif raw:
         value = None if raw == "-" and not field_.required else raw
