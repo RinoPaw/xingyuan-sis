@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from ..auth import DEMO_STUDENT_PASSWORD, provision_demo_passwords
 from ..seed_data import seed_demo
 from ..service import XingyuanService
 from .common import print_fields
@@ -23,11 +24,14 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
         return 0
     if args.action == "seed":
         result = seed_demo(service.db_path, reset=args.reset)
+        provision_demo_passwords(service.db_path)
         print(
             "✓ 演示数据已写入："
             f"学院 {result.departments}，专业 {result.majors}，班级 {result.classes}，"
             f"学生 {result.students}，课程 {result.courses}，选课 {result.enrollments}"
         )
+        print(f"演示学生初始密码：{DEMO_STUDENT_PASSWORD}")
+        print("首次登录必须修改密码")
         return 0
     if args.action == "export":
         count = service.export_students(args.path)
