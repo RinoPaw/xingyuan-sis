@@ -24,10 +24,28 @@ _SPARKLE_FG = 208
 _SPARKLE_DENSITY_NUMERATOR = 3
 _SPARKLE_DENSITY_DENOMINATOR = 20
 _SPARKLE_DURATION_SCALE = 1.25
+_RING_INNER_SCALE = 1.8
+_RING_OUTER_SCALE = 2.12
+_RING_MINOR_SCALE = 0.48
+
+
+def _ring_band_contains(u: float, v: float, radius: float) -> bool:
+    """Return whether an unrotated point lies in the ring's solid physical band.
+
+    The UI draws only the two boundaries, but the space between them is still
+    treated as ring material for sparkle occlusion.
+    """
+    outer_a = radius * _RING_OUTER_SCALE
+    outer_b = radius * _RING_MINOR_SCALE
+    inner_a = radius * _RING_INNER_SCALE
+    inner_b = radius * _RING_MINOR_SCALE
+    outer = (u / outer_a) ** 2 + (v / outer_b) ** 2
+    inner = (u / inner_a) ** 2 + (v / inner_b) ** 2
+    return outer <= 1.0 and inner >= 1.0
 
 
 def _orbit(width: int, height: int, angle: float, selected: int) -> list[str]:
-    """Draw a rotating globe and tilted rings at 2×4 dots per terminal cell."""
+    """Draw a rotating globe and the outlined edges of a solid tilted ring."""
     width, height = max(1, width), max(1, height)
     pixels_w, pixels_h = width * 2, height * 4
     radius = min(pixels_w / 4.8, pixels_h / 2.5)
@@ -60,22 +78,26 @@ def _orbit(width: int, height: int, angle: float, selected: int) -> list[str]:
         t = step * math.tau / max(90, width * 4)
         point(radius * math.cos(t), radius * math.sin(t), 2)
 
-    # Two gold rings cross the globe; their far halves disappear behind it.
+    # Draw only the inner and outer boundaries. They are the visible outline of
+    # one solid ring; the physical band between them is handled by the sparkle mask.
     tilt = -0.32 + math.sin(angle * 0.18) * 0.1
 
     def ring(t: float, scale: float) -> tuple[float, float]:
-        x, y = radius * scale * math.cos(t), radius * 0.48 * math.sin(t)
+        x = radius * scale * math.cos(t)
+        y = radius * _RING_MINOR_SCALE * math.sin(t)
         return x * math.cos(tilt) - y * math.sin(tilt), x * math.sin(tilt) + y * math.cos(tilt)
 
-    for scale in (1.8, 2.12):
-        for step in range(max(120, width * 10)):
-            t = step * math.tau / max(120, width * 10)
+    for scale in (_RING_INNER_SCALE, _RING_OUTER_SCALE):
+        steps = max(120, width * 10)
+        for step in range(steps):
+            t = step * math.tau / steps
             x, y = ring(t, scale)
             if math.sin(t) < 0 and x * x + y * y < radius * radius:
                 continue
             point(x, y, 3)
+
     t = angle * 0.9 + selected * math.tau / 6
-    x, y = ring(t, 2.12)
+    x, y = ring(t, _RING_OUTER_SCALE)
     for dx, dy in ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)):
         point(x + dx, y + dy, 4)
 
@@ -100,11 +122,11 @@ def _orbit(width: int, height: int, angle: float, selected: int) -> list[str]:
 
 
 def _orbit_exclusion_mask(width: int, height: int, angle: float) -> set[tuple[int, int]]:
-    """Protect the globe interior and the two orbital strokes from sparkles.
+    """Protect the globe interior and the ring's physical band from sparkles.
 
-    The empty sky between the globe and the rings stays available for stars. The
-    rings themselves get a thin protected band so a sparkle cannot visually sit
-    on an orbital stroke even when Braille rasterization leaves nearby blank cells.
+    The ring is rendered as two outlines, but the whole band between the inner
+    and outer boundary is treated as solid. The gap from the globe to the inner
+    ring edge remains ordinary sky and can contain sparkles.
     """
     width, height = max(1, width), max(1, height)
     pixels_w, pixels_h = width * 2, height * 4
@@ -112,15 +134,12 @@ def _orbit_exclusion_mask(width: int, height: int, angle: float) -> set[tuple[in
     cx, cy = pixels_w / 2, pixels_h / 2
     tilt = -0.32 + math.sin(angle * 0.18) * 0.1
     cos_t, sin_t = math.cos(tilt), math.sin(tilt)
-    ring_b = radius * 0.48
-    # About one Braille pixel on either side of the orbital curve.
-    ring_band = 1.25 / max(1.0, ring_b)
     protected: set[tuple[int, int]] = set()
 
     for row in range(height):
         for col in range(width):
             # A terminal cell contains 2×4 Braille pixels. Protect the whole
-            # cell when any subpixel lies in the globe or close to either ring.
+            # cell when any subpixel lies in the globe or in the solid ring band.
             for dy in range(4):
                 for dx in range(2):
                     x = col * 2 + dx - cx
@@ -129,19 +148,9 @@ def _orbit_exclusion_mask(width: int, height: int, angle: float) -> set[tuple[in
                         protected.add((row, col))
                         break
 
-                    # Undo the ring tilt and measure distance from each ellipse
-                    # in normalized coordinates. Only the narrow stroke is
-                    # protected; the ellipse interior remains usable sky.
                     u = x * cos_t + y * sin_t
                     v = -x * sin_t + y * cos_t
-                    on_ring = False
-                    for scale in (1.8, 2.12):
-                        ring_a = radius * scale
-                        ellipse_radius = math.sqrt((u / ring_a) ** 2 + (v / ring_b) ** 2)
-                        if abs(ellipse_radius - 1.0) <= ring_band:
-                            on_ring = True
-                            break
-                    if on_ring:
+                    if _ring_band_contains(u, v, radius):
                         protected.add((row, col))
                         break
                 if (row, col) in protected:
