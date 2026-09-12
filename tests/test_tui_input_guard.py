@@ -83,6 +83,20 @@ class TuiInputGuardTests(unittest.TestCase):
         self.assertIsNotNone(read.call_args.kwargs["on_idle"])
         self.assertEqual(read.call_args.kwargs["idle_interval"], animation._SPARKLE_FRAME)
 
+    def test_idle_refresh_hides_terminal_cursor_until_input_is_redrawn(self):
+        events: list[str] = []
+        with patch("sys.stdout.isatty", return_value=True), \
+             patch("sys.stdout.write") as write, patch("sys.stdout.flush"):
+            terminal_input._refresh_idle(
+                lambda value: events.append(f"paint:{value}"),
+                "abc",
+                lambda: events.append("redraw"),
+            )
+
+        self.assertEqual(events, ["paint:abc", "redraw"])
+        self.assertEqual(write.call_args_list[0].args[0], "\x1b[?25l")
+        self.assertEqual(write.call_args_list[-1].args[0], "\x1b[?25h")
+
 
 if __name__ == "__main__":
     unittest.main()
