@@ -1,0 +1,57 @@
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import os
+import unittest
+from unittest.mock import patch
+
+from xingyuan_sis.database import initialize_database
+from xingyuan_sis.seed_data import seed_demo
+from xingyuan_sis.tui import keys, screen, workspace, workspace_view
+from xingyuan_sis.tui.workspace_data import Catalog
+
+
+class DetailFocusTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.db = Path(self.temp.name) / "test.db"
+        initialize_database(self.db)
+        seed_demo(self.db)
+        self.catalog = Catalog(self.db)
+
+    def render(self, state):
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+            return workspace_view.render(state, self.catalog)
+
+    def test_tab_focus_is_visible_on_both_panel_heading_and_detail_item(self):
+        state = workspace.Workspace("students")
+        roster = self.render(state)
+        plain = screen._ANSI_RE.sub("", "\n".join(roster.lines))
+        self.assertIn("▌ 名册", plain)
+        self.assertIn("  档案 / 即时预览", plain)
+
+        state.details = True
+        detail = self.render(state)
+        plain = screen._ANSI_RE.sub("", "\n".join(detail.lines))
+        self.assertIn("  名册", plain)
+        self.assertIn("▌ 档案 / 阅读中", plain)
+
+        row = state.current(self.catalog)
+        targets = workspace_view.detail_targets("students", row, self.catalog, 55)
+        self.assertGreater(len(targets), 1)
+        selected_line = targets[state.detail_selected][0]
+        screen_row = 9 + selected_line - state.detail_scroll
+        self.assertIn(screen._SURFACE_SELECTED, detail.lines[screen_row])
+
+    def test_arrows_move_selection_inside_focused_detail_pane(self):
+        state = workspace.Workspace("students", details=True)
+        with patch.object(keys, "_read_key", side_effect=["down", "back", "back"]), \
+             patch.object(screen, "_paint"), \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+            workspace._interact(state, self.catalog)
+        self.assertEqual(state.detail_selected, 1)
+        self.assertEqual(state.selected, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
