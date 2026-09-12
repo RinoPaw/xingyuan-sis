@@ -85,19 +85,28 @@ def _orbit(width: int, height: int, angle: float, selected: int) -> list[str]:
         y = radius * _RING_MINOR_SCALE * math.sin(t)
         return x * math.cos(tilt) - y * math.sin(tilt), x * math.sin(tilt) + y * math.cos(tilt)
 
+    def hidden_by_globe(t: float, x: float, y: float) -> bool:
+        return math.sin(t) < 0 and x * x + y * y < radius * radius
+
     for scale in (_RING_INNER_SCALE, _RING_OUTER_SCALE):
         steps = max(120, width * 10)
         for step in range(steps):
             t = step * math.tau / steps
             x, y = ring(t, scale)
-            if math.sin(t) < 0 and x * x + y * y < radius * radius:
+            if hidden_by_globe(t, x, y):
                 continue
             point(x, y, 3)
 
+    # The bright marker rides the same physical orbit as the ring. Occlude each
+    # subpixel independently so it passes behind the globe instead of floating
+    # over the globe face, and reappears progressively at the limb.
     t = angle * 0.9 + selected * math.tau / 6
     x, y = ring(t, _RING_OUTER_SCALE)
     for dx, dy in ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)):
-        point(x + dx, y + dy, 4)
+        marker_x, marker_y = x + dx, y + dy
+        if hidden_by_globe(t, marker_x, marker_y):
+            continue
+        point(marker_x, marker_y, 4)
 
     styles = ("", "\x1b[38;5;60m", _ACCENT, _GOLD, "\x1b[38;5;252m")
     lines = []
