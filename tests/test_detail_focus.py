@@ -59,7 +59,7 @@ class DetailFocusTests(unittest.TestCase):
 
     def test_arrows_move_selection_inside_focused_detail_pane(self):
         state = workspace.Workspace("students", details=True)
-        with patch.object(keys, "_read_key", side_effect=["down", "back", "back"]), \
+        with patch.object(keys, "_read_key", side_effect=["down", "back", "back", "back"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             workspace._interact(state, self.catalog)
@@ -71,7 +71,7 @@ class DetailFocusTests(unittest.TestCase):
         with patch.object(
             keys,
             "_read_key",
-            side_effect=["right", "right", "down", "left", "left", "back"],
+            side_effect=["right", "right", "down", "left", "left", "back", "back"],
         ), patch.object(screen, "_paint"), patch.object(
             screen, "_terminal_size", return_value=os.terminal_size((120, 35))
         ):
