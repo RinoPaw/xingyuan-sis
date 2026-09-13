@@ -35,9 +35,9 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertIn("Esc 返回", footer)
         self.assertFalse(any(region.y == 35 for region in frame.regions))
 
-    def test_arrow_focus_can_choose_edit_and_enter_opens_it(self):
+    def test_escape_focus_can_choose_edit_and_enter_opens_it(self):
         state = workspace.Workspace("students")
-        with patch.object(keys, "_read_key", side_effect=["up", "right", "right", "select", "back"]), \
+        with patch.object(keys, "_read_key", side_effect=["back", "right", "right", "select", "back", "back"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
              patch.object(workspace_events, "open_form") as open_form:
@@ -45,11 +45,44 @@ class WorkspaceActionTests(unittest.TestCase):
 
         open_form.assert_called_once_with(state, self.catalog, "edit")
 
+    def test_escape_to_actions_preserves_selected_record_for_delete(self):
+        state = workspace.Workspace("students", selected=15)
+        selected_at_delete: list[int] = []
+
+        def capture(_state, _catalog, action):
+            if action == "delete":
+                selected_at_delete.append(_state.selected)
+
+        with patch.object(
+            keys, "_read_key",
+            side_effect=["back", "right", "right", "right", "select", "back", "back"],
+        ), patch.object(screen, "_paint"), patch.object(
+            screen, "_terminal_size", return_value=os.terminal_size((120, 35))
+        ), patch.object(workspace_events, "open_form", side_effect=capture):
+            workspace._interact(state, self.catalog)
+
+        self.assertEqual(selected_at_delete, [15])
+        self.assertEqual(state.selected, 15)
+
+    def test_action_focus_keeps_current_record_weakly_selected(self):
+        state = workspace.Workspace("students", selected=15, action_focus=True)
+        selected_name = state.current(self.catalog)["name"]
+
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+            frame = workspace_view.render(state, self.catalog)
+
+        selected_line = next(
+            line for line in frame.lines
+            if selected_name in screen._ANSI_RE.sub("", line)
+        )
+        self.assertIn(screen._SURFACE_INTERACTIVE, selected_line)
+        self.assertIn(screen._TEXT_PRIMARY, selected_line)
+
     def test_action_shortcuts_remain_direct(self):
         for key, action in (("create", "create"), ("edit", "edit"), ("delete", "delete")):
             state = workspace.Workspace("students")
             with self.subTest(key=key), \
-                 patch.object(keys, "_read_key", side_effect=[key, "back"]), \
+                 patch.object(keys, "_read_key", side_effect=[key, "back", "back"]), \
                  patch.object(screen, "_paint"), \
                  patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
                  patch.object(workspace_events, "open_form") as open_form:
