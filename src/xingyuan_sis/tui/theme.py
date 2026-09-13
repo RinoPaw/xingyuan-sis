@@ -12,7 +12,8 @@ _BUTTON_CURRENT = screen._SURFACE_INTERACTIVE + screen._TEXT_ACCENT
 _BAR_SURFACE = screen._SURFACE_FOOTER + screen._TEXT_PRIMARY
 _TOPBAR = screen._SURFACE_TOPBAR + screen._TEXT_ACCENT + screen._BOLD
 _SECTION_HEADING = screen._TEXT_PRIMARY + screen._BOLD
-_SECONDARY_FOCUS = screen._BOLD + screen._TEXT_ACCENT + "\x1b[4m"
+_SECONDARY = screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
+_SECONDARY_FOCUS = screen._SURFACE_SELECTED + screen._TEXT_ACCENT + screen._BOLD
 
 
 def bar_space(count: int) -> str:
@@ -40,10 +41,11 @@ def button(
     return screen._ansi(shown, style)
 
 
-def secondary_item(label: str, *, selected: bool = False) -> str:
-    """Render lightweight second-level navigation without button chrome."""
-    shown = f" {label} "
-    return screen._ansi(shown, _SECONDARY_FOCUS if selected else screen._TEXT_PRIMARY)
+def secondary_item(label: str, *, selected: bool = False, width: int = 10) -> str:
+    """Render compact second-level navigation without brackets or arrows."""
+    width = max(1, width)
+    shown = screen._pad_cells(screen._clip_cells(f" {label}", width), width)
+    return screen._ansi(shown, _SECONDARY_FOCUS if selected else _SECONDARY)
 
 
 def nav_item(
