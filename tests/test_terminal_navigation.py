@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from xingyuan_sis import basic_ui, terminal_ui
-from xingyuan_sis.tui import app as menu, screen, keys, animation, theme, workspace
+from xingyuan_sis.tui import app as menu, screen, keys, animation, theme, workspace, workspace_view
 from xingyuan_sis.tui.workspace_data import Catalog
 from xingyuan_sis.database import initialize_database
 
@@ -40,18 +40,18 @@ class BreadcrumbTests(unittest.TestCase):
                                  ([] if width < 4 else ["navigate:"] if width < 11
                                   else ["navigate:", "navigate:教务"]))
 
-    def test_workspace_ancestor_navigation_unwinds_to_portal(self):
+    def test_workspace_breadcrumb_skips_portal_grouping(self):
         with TemporaryDirectory() as temp:
             db = Path(temp) / "test.db"
             initialize_database(db)
             catalog = Catalog(db)
             state = workspace.Workspace("departments")
-            with patch.object(keys, "_read_key", return_value="navigate:教务"), \
-                 patch.object(screen, "_paint"), \
-                 patch.object(screen, "_terminal_size", return_value=os.terminal_size((100, 24))):
-                with self.assertRaises(screen.NavigateTo) as navigation:
-                    workspace._interact(state, catalog)
-            self.assertEqual(navigation.exception.path, "教务")
+            with patch.object(screen, "_terminal_size", return_value=os.terminal_size((100, 24))):
+                frame = workspace_view.render(state, catalog)
+            breadcrumb = screen._ANSI_RE.sub("", frame.lines[1])
+            self.assertIn("首页 / 学院", breadcrumb)
+            self.assertNotIn("教务", breadcrumb)
+            self.assertEqual([region.action for region in frame.regions if region.y == 2], ["navigate:"])
 
     def test_query_titles_include_academic_entity(self):
         for entity, label in (("college", "学院"), ("major", "专业"), ("class", "班级")):
