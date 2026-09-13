@@ -143,20 +143,7 @@ def frame(
 
     board = Board(width, height)
     board.put(0, 0, _topbar(width, database))
-    footer, regions = theme.footer(
-        width,
-        (
-            ("Enter 确认", "Enter", "select"),
-            (
-                "Esc 退出" if mode in {"login", "initialize"} else "Esc 返回",
-                "Esc",
-                "back",
-            ),
-        ),
-        height,
-    )
-    board.put(0, height - 1, footer)
-    board.regions.extend(regions)
+    board.put(0, height - 1, theme.footer(width))
 
     board.put(
         left,
