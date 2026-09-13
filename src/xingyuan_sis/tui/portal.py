@@ -202,10 +202,9 @@ def _compact_body(
     first = visible_start(selected, len(PRIMARY_LABELS), capacity)
     for index in range(first, min(len(PRIMARY_LABELS), first + capacity)):
         label = PRIMARY_LABELS[index]
-        suffix = "  ›" if index == selected and secondary_items(identity, index) else ""
         board.put(
             0, 2 + index - first,
-            theme.nav_item(label + suffix, selected=index == selected),
+            theme.nav_item(label, selected=index == selected),
             action=f"primary:{index}",
             width=width,
         )
