@@ -48,8 +48,15 @@ class WorkspaceLayout:
         return not self.compact and self.width >= 76
 
     @property
+    def split_x(self) -> int:
+        """Prefer the roster on wide screens without starving the inspector."""
+        if not self.split:
+            return self.width
+        return min(self.width * 3 // 5, self.width - 38)
+
+    @property
     def panel_x(self) -> int:
-        return 0 if self.compact else self.width // 2 + 3 if self.split else 1
+        return 0 if self.compact else self.split_x + 3 if self.split else 1
 
     @property
     def panel_width(self) -> int:
