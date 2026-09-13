@@ -122,6 +122,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 if state.history:
                     state.restore(catalog)
                 else:
+                    state.action_focus = False
                     return None
             elif state.key != "data":
                 # Esc first moves from the roster into the page action bar.
