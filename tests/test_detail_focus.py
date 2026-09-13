@@ -54,7 +54,7 @@ class DetailFocusTests(unittest.TestCase):
         plain = "\n".join(screen._ANSI_RE.sub("", line) for line, _, _ in details)
 
         self.assertIn(row["name"], plain)
-        self.assertIn(row["student_no"], plain)
+        self.assertNotIn(row["student_no"], plain)
         self.assertIn("选课与成绩", plain)
         self.assertIn("详细信息", plain)
         self.assertNotIn("档案字段", plain)
