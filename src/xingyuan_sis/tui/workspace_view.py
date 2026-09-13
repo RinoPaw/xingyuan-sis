@@ -34,7 +34,7 @@ def render(state: Workspace, catalog: Catalog):
     width, height = max(1, terminal.columns - 1), max(4, terminal.lines)
     layout = WorkspaceLayout(width, height)
     board = Board(width, height)
-    board.put(0, 0, theme.topbar(width, catalog.db_path))
+    board.put(0, 0, theme.topbar(width, catalog.service.db_path))
 
     x = 0
     for index, (label, action) in enumerate(_breadcrumb(state)):
