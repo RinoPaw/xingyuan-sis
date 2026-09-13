@@ -30,7 +30,7 @@ class PortalLayoutTests(unittest.TestCase):
             self.assertIn(label, text)
         self.assertTrue(any(region.action.startswith("secondary:") for region in frame.regions))
 
-    def test_primary_preview_has_no_secondary_selection(self) -> None:
+    def test_secondary_focus_uses_style_without_chevron(self) -> None:
         identity = Identity("Administrator", "admin")
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((100, 24))):
             preview = portal.frame(identity, 1, "primary", {1: 0}, {}, 0, animate=False)
@@ -39,9 +39,10 @@ class PortalLayoutTests(unittest.TestCase):
         preview_text = "\n".join(screen._ANSI_RE.sub("", line) for line in preview.lines)
         entered_text = "\n".join(screen._ANSI_RE.sub("", line) for line in entered.lines)
         self.assertIn("[ 学生 ]", preview_text)
-        self.assertNotIn("[·学生 ]", preview_text)
-        self.assertNotIn("[›学生 ]", preview_text)
-        self.assertIn("[›学生 ]", entered_text)
+        self.assertIn("[ 学生 ]", entered_text)
+        self.assertNotIn("›", preview_text)
+        self.assertNotIn("›", entered_text)
+        self.assertIn(screen._SURFACE_SELECTED, "\n".join(entered.lines))
 
     def test_primary_keeps_weak_selection_when_focus_enters_secondary(self) -> None:
         identity = Identity("Administrator", "admin")
@@ -65,6 +66,7 @@ class PortalLayoutTests(unittest.TestCase):
         self.assertNotIn(screen._SURFACE_SELECTED, weak)
         self.assertIn(screen._SURFACE_SELECTED, strong)
         self.assertIn(screen._TEXT_ACCENT, strong)
+        self.assertNotIn("›", screen._ANSI_RE.sub("", strong))
         self.assertNotEqual(weak, strong)
 
     def test_portal_footer_is_identical_at_every_navigation_level(self) -> None:
