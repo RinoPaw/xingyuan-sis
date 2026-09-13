@@ -81,7 +81,7 @@ def topbar(width: int, *, database: str | None = None, context: str = "") -> str
     """One application identity; account and storage are secondary context."""
     left = screen._clip_cells("✦ 星原 SIS", width)
     available = width - screen._display_width(left)
-    database_text = f"LOCAL / {database}" if database else ""
+    database_text = f"LOCAL  {database}" if database else ""
     right = "   ".join(part for part in (context, database_text) if part)
     if screen._display_width(right) + 2 > available:
         right = database_text if screen._display_width(database_text) + 2 <= available else ""
@@ -240,7 +240,7 @@ def home_frame(
     for y in range(1, height - 1):
         board.put(separator_x, y, "│", screen._BORDER_SUBTLE)
 
-    board.put(right_x, 1, f"{selected + 1:02d} / {title}", screen._BOLD + screen._TEXT_ACCENT)
+    board.put(right_x, 1, f"{selected + 1:02d}  {title}", screen._BOLD + screen._TEXT_ACCENT)
     if graph_width >= 28 and body_height >= 8:
         board.put(right_x, 2, description, screen._TEXT_SECONDARY)
         orbit_top = 4
@@ -259,12 +259,12 @@ def home_frame(
 
 
 _MODULES = (
-    ("学生档案", "查询每位学生的档案与成长记录。", "查询 / 搜索 / 新建 / 编辑"),
-    ("教务结构", "从学院到班级，管理校园的组织。", "学院 / 专业 / 班级"),
-    ("课程目录", "课程安排、学分与课时一目了然。", "课程详情 / 学分 / 课时"),
-    ("选课与成绩", "记录选课，跟进每一次学习进展。", "选课 / 录入成绩 / 搜索"),
-    ("数据工作台", "查看全校概况，导入或带走记录。", "统计 / CSV / 演示数据"),
-    ("结束本次工作", "已完成的操作已保存。", "Enter 退出 / 上下键继续浏览"),
+    ("学生档案", "查询每位学生的档案与成长记录。", "查询 · 搜索 · 新建 · 编辑"),
+    ("教务结构", "从学院到班级，管理校园的组织。", "学院 · 专业 · 班级"),
+    ("课程目录", "课程安排、学分与课时一目了然。", "课程详情 · 学分 · 课时"),
+    ("选课与成绩", "记录选课，跟进每一次学习进展。", "选课 · 录入成绩 · 搜索"),
+    ("数据工作台", "查看全校概况，导入或带走记录。", "统计 · CSV · 演示数据"),
+    ("结束本次工作", "已完成的操作已保存。", "Enter 退出 · 上下键继续浏览"),
 )
 
 
