@@ -80,7 +80,7 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
     kind, index = event
     if kind == "search":
         if state.key == "students":
-            label = "搜索（可用 --name / --class / --year 等）"
+            label = "搜索（可用 --name、--class、--year 等）"
             state.notice = "学生搜索与 xy stu ls 使用同一套查询条件。Esc 取消。"
         else:
             label = "搜索姓名、编号、班级等"
