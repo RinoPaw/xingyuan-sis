@@ -7,7 +7,8 @@ import unittest
 from unittest.mock import patch
 
 from xingyuan_sis import basic_ui, terminal_ui
-from xingyuan_sis.tui import app as menu, screen, keys, animation, theme
+from xingyuan_sis.tui import app as menu, screen, keys, animation, theme, workspace
+from xingyuan_sis.tui.workspace_data import Catalog
 from xingyuan_sis.database import initialize_database
 
 
@@ -17,7 +18,7 @@ class BreadcrumbTests(unittest.TestCase):
             home = menu._home_frame(("学生", "教务", "课程", "成绩", "数据", "退出"), 0, {}, 0)
             child, _ = screen._breadcrumb("学生", 79)
         self.assertIn("首页", home.lines[1])
-        self.assertIn("首页  学生", child)
+        self.assertIn("首页 / 学生", child)
         with patch.object(basic_ui, "_clear"), patch("builtins.input", return_value="q"), \
              redirect_stdout(StringIO()) as output:
             basic_ui.run()
@@ -36,8 +37,21 @@ class BreadcrumbTests(unittest.TestCase):
                 self.assertIsNone(screen._hit_action(keys.MouseClick(6, 2), regions))
                 self.assertIsNone(screen._hit_action(keys.MouseClick(15, 2), regions))
                 self.assertEqual([region.action for region in regions],
-                                 ([] if width < 4 else ["navigate:"] if width < 10
+                                 ([] if width < 4 else ["navigate:"] if width < 11
                                   else ["navigate:", "navigate:教务"]))
+
+    def test_workspace_ancestor_navigation_unwinds_to_portal(self):
+        with TemporaryDirectory() as temp:
+            db = Path(temp) / "test.db"
+            initialize_database(db)
+            catalog = Catalog(db)
+            state = workspace.Workspace("departments")
+            with patch.object(keys, "_read_key", return_value="navigate:教务"), \
+                 patch.object(screen, "_paint"), \
+                 patch.object(screen, "_terminal_size", return_value=os.terminal_size((100, 24))):
+                with self.assertRaises(screen.NavigateTo) as navigation:
+                    workspace._interact(state, catalog)
+            self.assertEqual(navigation.exception.path, "教务")
 
     def test_query_titles_include_academic_entity(self):
         for entity, label in (("college", "学院"), ("major", "专业"), ("class", "班级")):
