@@ -5,7 +5,12 @@ from .layout import WorkspaceLayout
 from .view_common import Board, metric_pair, metric_summary, safe
 from .workspace_dashboard import render_dashboard
 from .workspace_data import ACADEMICS, COLLECTIONS, Catalog
-from .workspace_detail import detail_targets, details as _details, render_inspector as _inspector
+from .workspace_detail import (
+    detail_targets,
+    details as _details,
+    preferred_width as _preferred_inspector_width,
+    render_inspector as _inspector,
+)
 from .workspace_editor import render_editor
 from .workspace_roster import render_roster as _roster
 from .workspace_state import Workspace
@@ -32,7 +37,11 @@ def _render_actions(board: Board, state: Workspace, x: int, y: int, width: int) 
 def render(state: Workspace, catalog: Catalog):
     terminal = screen._terminal_size()
     width, height = max(1, terminal.columns - 1), max(4, terminal.lines)
-    layout = WorkspaceLayout(width, height)
+    current = state.current(catalog) if state.key != "data" else None
+    inspector_width = None
+    if current is not None and state.form is None:
+        inspector_width = _preferred_inspector_width(state.key, current, catalog)
+    layout = WorkspaceLayout(width, height, inspector_width)
     board = Board(width, height)
     board.put(0, 0, theme.topbar(width, database=catalog.service.db_path))
 
@@ -52,7 +61,7 @@ def render(state: Workspace, catalog: Catalog):
         content_row = action_row + 1
         if state.form:
             render_editor(board, state, catalog, layout.panel_x, layout.panel_width)
-        elif state.current(catalog):
+        elif current:
             _inspector(board, state, catalog, layout.panel_x, layout.panel_width)
         elif state.key == "data":
             for i, (label, key) in enumerate((("学生", "students"), ("课程", "courses"), ("选课", "grades"))):
