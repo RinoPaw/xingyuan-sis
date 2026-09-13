@@ -54,7 +54,7 @@ class WorkspaceTests(unittest.TestCase):
 
     def test_wheel_scrolls_the_panel_under_the_pointer(self):
         state = workspace.Workspace("students")
-        with patch.object(keys, "_read_key", side_effect=[keys.MouseScroll(70, 12, "down"), "back", "back"]), \
+        with patch.object(keys, "_read_key", side_effect=[keys.MouseScroll(90, 12, "down"), "back", "back"]), \
              patch.object(screen, "_paint") as paint, patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 24))):
             workspace._interact(state, self.catalog)
         self.assertEqual(state.selected, 0)
@@ -200,7 +200,7 @@ class WorkspaceTests(unittest.TestCase):
 
     def test_breadcrumb_returns_home_after_resizing_academic_workspace(self):
         identity = app.Identity("Administrator", "admin")
-        events = ["2", "right", "down", "select", keys.MouseClick(2, 2), "back"]
+        events = ["2", "right", "right", "right", "right", "select", keys.MouseClick(2, 2), "back"]
         with redirect_stdout(StringIO()), patch.object(keys, "_read_key", side_effect=events), \
              patch.object(app, "read_session", return_value=identity), \
              patch.object(screen, "_paint") as paint, patch.object(screen, "_clear"), \
