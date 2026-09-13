@@ -177,14 +177,15 @@ def _read_line_posix(
     field_width: int | None = None,
     on_idle: Callable[[str], None] | None = None,
     idle_interval: float = 0.15,
+    initial_value: str = "",
 ) -> str:
     import termios
     import tty
 
     fd = sys.stdin.fileno()
     previous = termios.tcgetattr(fd)
-    chars: list[str] = []
-    cursor = 0
+    chars = list(initial_value)
+    cursor = len(chars)
     try:
         tty.setcbreak(fd, termios.TCSANOW)
         _redraw_line(
@@ -279,11 +280,12 @@ def _read_line_windows(
     field_width: int | None = None,
     on_idle: Callable[[str], None] | None = None,
     idle_interval: float = 0.15,
+    initial_value: str = "",
 ) -> str:
     import msvcrt
 
-    chars: list[str] = []
-    cursor = 0
+    chars = list(initial_value)
+    cursor = len(chars)
     _redraw_line(
         prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
     )
@@ -354,6 +356,7 @@ def _read_interactive_line(
     field_width: int | None = None,
     on_idle: Callable[[str], None] | None = None,
     idle_interval: float = 0.15,
+    initial_value: str = "",
 ) -> str:
     kwargs: dict[str, object] = {
         "colored": colored,
@@ -361,6 +364,7 @@ def _read_interactive_line(
         "field_width": field_width,
         "on_idle": on_idle,
         "idle_interval": idle_interval,
+        "initial_value": initial_value,
     }
     if os.name == "nt":
         return _read_line_windows(prompt, **kwargs)
@@ -374,6 +378,7 @@ def read_input(
     field_width: int | None = None,
     on_idle: Callable[[str], None] | None = None,
     idle_interval: float = 0.15,
+    initial_value: str = "",
 ) -> str:
     interactive = _ACTIVE.get() and sys.stdin.isatty() and sys.stdout.isatty()
     if not interactive:
@@ -388,6 +393,8 @@ def read_input(
     if on_idle is not None:
         kwargs["on_idle"] = on_idle
         kwargs["idle_interval"] = idle_interval
+    if initial_value:
+        kwargs["initial_value"] = initial_value
     try:
         return _read_interactive_line(prompt, **kwargs)
     finally:
