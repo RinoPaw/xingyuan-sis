@@ -7,6 +7,7 @@ from typing import Mapping, Sequence
 from ..auth import Identity
 from . import animation, screen, theme
 from .board import Board
+from .layout import visible_start
 
 
 PRIMARY_LABELS = ("首页", "教务", "个人中心", "退出登录")
@@ -45,13 +46,15 @@ def secondary_items(identity: Identity, primary: int) -> tuple[MenuItem, ...]:
     return ()
 
 
-def secondary_columns(total_width: int, focus: str = "secondary") -> int:
+def secondary_columns(total_width: int, focus: str = "secondary", *, height: int | None = None) -> int:
+    if total_width < NARROW_WIDTH or (height is not None and height < 9):
+        return 1
     content_width = _secondary_content_width(total_width, focus)
     if content_width >= 68:
         return 4
     if content_width >= 48:
         return 3
-    if content_width >= 30:
+    if content_width >= 32:
         return 2
     return 1
 
@@ -82,7 +85,7 @@ def frame(
     board.put(0, height - 1, footer_line)
     board.regions.extend(controls)
 
-    if width < NARROW_WIDTH:
+    if width < NARROW_WIDTH or height < 9:
         _compact_body(
             board, identity, selected, focus, secondary, items, name, angle, announcements
         )
@@ -149,18 +152,8 @@ def _topbar(
     display_name: str,
     database: str,
 ) -> str:
-    left = "✦ 星原 SIS"
     role = "管理员" if identity.is_admin else "学生"
-    right = f"{display_name} · {role}   LOCAL / {database}"
-    if screen._display_width(left) + screen._display_width(right) + 2 <= width:
-        gap = width - screen._display_width(left) - screen._display_width(right)
-        plain = left + " " * gap + right
-    else:
-        plain = screen._pad_cells(screen._clip_cells(left, width), width)
-    return screen._ansi(
-        screen._pad_cells(screen._clip_cells(plain, width), width),
-        screen._SURFACE_TOPBAR + screen._TEXT_ACCENT + screen._BOLD,
-    )
+    return theme.topbar(width, database=database, context=f"{display_name} · {role}")
 
 
 def _footer(
@@ -206,10 +199,11 @@ def _compact_body(
     width, height = board.width, board.height
     if focus == "secondary" and items:
         board.put(0, 1, PRIMARY_LABELS[selected], screen._BOLD + screen._TEXT_ACCENT)
-        for index, item in enumerate(items):
-            y = 3 + index
-            if y >= height - 1:
-                break
+        capacity = max(1, height - 4)
+        first = visible_start(secondary, len(items), capacity)
+        for index in range(first, min(len(items), first + capacity)):
+            item = items[index]
+            y = 3 + index - first
             board.put(
                 0, y,
                 theme.nav_item(item.label, selected=index == secondary),
@@ -219,10 +213,13 @@ def _compact_body(
         return
 
     board.put(0, 1, "导航", screen._TEXT_SECONDARY)
-    for index, label in enumerate(PRIMARY_LABELS):
+    capacity = max(1, height - 3)
+    first = visible_start(selected, len(PRIMARY_LABELS), capacity)
+    for index in range(first, min(len(PRIMARY_LABELS), first + capacity)):
+        label = PRIMARY_LABELS[index]
         suffix = "  ›" if index == selected and secondary_items(identity, index) else ""
         board.put(
-            0, 2 + index,
+            0, 2 + index - first,
             theme.nav_item(label + suffix, selected=index == selected),
             action=f"primary:{index}",
             width=width,
@@ -297,11 +294,14 @@ def _secondary_grid(
     selected: bool,
 ) -> None:
     columns = secondary_columns(board.width, "secondary")
-    columns = min(columns, max(1, width // 16))
     cell_width = max(1, width // columns)
-    for index, item in enumerate(items):
+    total_rows = (len(items) + columns - 1) // columns
+    capacity = max(1, (board.height - y) // 2)
+    first = visible_start(secondary // columns, total_rows, capacity)
+    for index in range(first * columns, min(len(items), (first + capacity) * columns)):
+        item = items[index]
         row, col = divmod(index, columns)
-        item_y = y + row * 2
+        item_y = y + (row - first) * 2
         if item_y >= board.height - 1:
             break
         is_current = index == secondary

@@ -4,46 +4,11 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date
-import math
 from pathlib import Path
 from typing import Any
 
+from ..schema import FIELDS, Field
 from ..service import XingyuanService
-
-
-@dataclass(frozen=True)
-class Field:
-    key: str
-    label: str
-    required: bool = False
-    kind: str = "text"
-    default: Any = None
-    minimum: float = 0
-    maximum: float | None = None
-
-    def parse(self, value: Any) -> Any:
-        text = "" if value is None else str(value).strip()
-        if not text:
-            if self.required:
-                raise ValueError(f"请填写{self.label}")
-            return None
-        if self.kind in {"int", "float"}:
-            try:
-                number = int(text) if self.kind == "int" else float(text)
-            except ValueError:
-                raise ValueError(f"{self.label}需要填写{'整数' if self.kind == 'int' else '数字'}") from None
-            if not math.isfinite(number) or number < self.minimum or (
-                self.maximum is not None and number > self.maximum
-            ):
-                bound = f"{self.minimum:g}～{self.maximum:g}" if self.maximum is not None else f"不小于 {self.minimum:g}"
-                raise ValueError(f"{self.label}应为{bound}")
-            return number
-        if self.kind == "date":
-            try:
-                date.fromisoformat(text)
-            except ValueError:
-                raise ValueError(f"{self.label}请使用 YYYY-MM-DD") from None
-        return text
 
 
 @dataclass(frozen=True)
@@ -55,46 +20,29 @@ class Collection:
     views: tuple[str, ...] = ("全部",)
 
 
-YEAR = Field("enrollment_year", "入学年份", True, "int", minimum=1900)
 COLLECTIONS = {
     "students": Collection("学生", "学生档案", (
         ("name", "姓名", 10), ("student_no", "学号", 12), ("class_name", "班级", 20),
         ("primary_element", "元素", 6), ("status", "学籍", 8),
-    ), (
-        Field("student_no", "学号", True), Field("name", "姓名", True),
-        Field("family", "族系", True), Field("branch", "支系", True), YEAR,
-        Field("class_code", "班级编号"), Field("status", "学籍状态", True, default="在读"),
-        Field("gender", "性别"), Field("birth_date", "出生日期", kind="date"),
-        Field("primary_element", "主元素"), Field("primary_affinity", "亲和等级"),
-        Field("contact", "联系方式"), Field("dormitory", "宿舍"), Field("notes", "备注"),
-    ), ("全部档案", "在读学生", "未分班")),
+    ), FIELDS["students"], ("全部档案", "在读学生", "未分班")),
     "courses": Collection("课程", "课程目录", (
         ("name", "课程", 20), ("course_code", "编号", 10), ("credits", "学分", 6),
         ("hours", "课时", 6), ("enrolled", "选课", 6),
-    ), (
-        Field("course_code", "课程编号", True), Field("name", "课程名称", True),
-        Field("credits", "学分", True, "float", 0), Field("hours", "课时", True, "int", 0),
-        Field("department_code", "学院编号"),
-    ), ("全部课程", "已有选课", "暂无选课")),
+    ), FIELDS["courses"], ("全部课程", "已有选课", "暂无选课")),
     "grades": Collection("成绩", "选课与成绩", (
         ("student_name", "学生", 10), ("course_name", "课程", 20),
         ("score", "成绩", 8), ("semester", "学期", 16),
-    ), (
-        Field("student_no", "学号", True), Field("course_code", "课程编号", True),
-        Field("semester", "学期", True), Field("score", "成绩", kind="float", maximum=100),
-    ), ("全部选课", "待录入", "已评分")),
+    ), FIELDS["grades"], ("全部选课", "待录入", "已评分")),
     "departments": Collection("教务 / 学院", "学院", (
         ("name", "学院", 24), ("code", "编号", 10), ("children", "专业数", 8),
-    ), (Field("code", "学院编号", True), Field("name", "学院名称", True))),
+    ), FIELDS["departments"]),
     "majors": Collection("教务 / 专业", "专业", (
         ("name", "专业", 22), ("code", "编号", 10), ("department_name", "学院", 24),
-    ), (Field("code", "专业编号", True), Field("name", "专业名称", True),
-        Field("department_code", "学院编号", True))),
+    ), FIELDS["majors"]),
     "classes": Collection("教务 / 班级", "班级", (
         ("name", "班级", 22), ("code", "编号", 8), ("enrolled", "学生数", 8),
         ("major_name", "专业", 20),
-    ), (Field("code", "班级编号", True), Field("name", "班级名称", True),
-        Field("major_code", "专业编号", True), YEAR)),
+    ), FIELDS["classes"]),
 }
 ACADEMICS = ("departments", "majors", "classes")
 

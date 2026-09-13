@@ -362,17 +362,7 @@ def _layout(width: int, height: int, field_count: int) -> tuple[int, int, int]:
 
 
 def _topbar(width: int, database: str) -> str:
-    left = "✦ 星原 SIS"
-    right = f"LOCAL / {database}"
-    if screen._display_width(left) + screen._display_width(right) + 2 <= width:
-        gap = width - screen._display_width(left) - screen._display_width(right)
-        plain = left + " " * gap + right
-    else:
-        plain = screen._pad_cells(screen._clip_cells(left, width), width)
-    return screen._ansi(
-        screen._pad_cells(screen._clip_cells(plain, width), width),
-        screen._SURFACE_TOPBAR + screen._TEXT_ACCENT + screen._BOLD,
-    )
+    return theme.topbar(width, database=database)
 
 
 def _database_name(db_path: Path | str | None) -> str:

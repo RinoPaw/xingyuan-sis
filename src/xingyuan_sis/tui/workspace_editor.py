@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from . import screen
 from .view_common import Board, identity, safe
-from .workspace_data import Catalog
+from .workspace_data import COLLECTIONS, Catalog
 
 if TYPE_CHECKING:
     from .workspace import Workspace
@@ -20,7 +20,8 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         capacity = max(1, board.height - 13)
         first = min(max(0, form.option_index - capacity + 1), max(0, len(form.options) - capacity))
         for i, (_, label) in enumerate(form.options[first:first + capacity], start=first):
-            text = screen._pad_cells(screen._clip_cells(safe(label), width), width)
+            marker = "› " if i == form.option_index else "  "
+            text = screen._pad_cells(screen._clip_cells(marker + safe(label), width), width)
             selected_style = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED if i == form.option_index else ""
             board.put(x, 10 + i - first, text, selected_style, f"option:{i}", width)
         if not form.options:
@@ -28,8 +29,8 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         return
 
     titles = {
-        "create": "新建档案",
-        "edit": "编辑档案",
+        "create": "新建 · " + COLLECTIONS[state.key].noun if state.key in COLLECTIONS else "新建",
+        "edit": "编辑 · " + COLLECTIONS[state.key].noun if state.key in COLLECTIONS else "编辑",
         "delete": "删除记录",
         "import": "导入学生 CSV",
         "export": "导出学生 CSV",
@@ -47,7 +48,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
             messages = [
                 (f"确认删除 {title}？", screen._BOLD + screen._TEXT_PRIMARY),
                 (identifier, screen._TEXT_SECONDARY),
-                ("删除后无法撤销。", screen._BOLD + screen._TEXT_PRIMARY),
+                ("! 删除后无法撤销。", screen._BOLD + screen._TEXT_DANGER),
             ]
             if state.key in {"students", "courses"}:
                 _, related = catalog.related(state.key, form.original)
@@ -60,18 +61,22 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         first = min(max(0, form.position - capacity + 1), max(0, len(form.fields) - capacity))
         for i, field in enumerate(form.fields[first:first + capacity], start=first):
             value = safe(form.values.get(field.key))
+            if form.mode in {"create", "edit"}:
+                options = catalog.options(state.key, field.key)
+                if options is not None:
+                    value = next((label for key, label in options if key == form.values.get(field.key)), value)
+            label_width = min(12, max(4, width // 3))
+            label = screen._pad_cells(screen._clip_cells(field.label + ("*" if field.required else ""), label_width), label_width)
             if i == form.position:
-                label = f"› {field.label}{'*' if field.required else ''}  {value}"
-                text = screen._pad_cells(screen._clip_cells(label, width), width)
+                text = screen._pad_cells(screen._clip_cells(f"› {label}  {value}", width), width)
                 board.put(
                     x, 11 + i - first, text,
                     screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED,
                     f"field:{i}", width,
                 )
             else:
-                label = f"  {field.label}{'*' if field.required else ''}"
                 text = (
-                    screen._ansi(label, screen._TEXT_SECONDARY)
+                    screen._ansi("  " + label, screen._TEXT_SECONDARY)
                     + "  "
                     + screen._ansi(value, screen._TEXT_PRIMARY)
                 )

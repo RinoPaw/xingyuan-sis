@@ -6,6 +6,7 @@ from pathlib import Path
 import sqlite3
 
 from .database import connect
+from .schema import FIELDS, validate_values
 
 STUDENT_FIELDS = [
     "student_no", "name", "family", "branch", "gender", "birth_date",
@@ -70,6 +71,12 @@ def import_students_csv(
         with connect(db_path) as connection:
             for line_number, row in enumerate(reader, start=2):
                 try:
+                    # Use the same contract as forms and service calls while
+                    # preserving per-row errors and the import transaction.
+                    row = validate_values("students", {
+                        field.key: (row.get(field.key) or field.default)
+                        for field in FIELDS["students"]
+                    })
                     class_code = (row.get("class_code") or "").strip()
                     class_id = None
                     if class_code:
@@ -110,7 +117,7 @@ def import_students_csv(
                             int(branch_row[0]),
                             _optional(row.get("gender")),
                             _optional(row.get("birth_date")),
-                            int(_required(row, "enrollment_year")),
+                            row["enrollment_year"],
                             class_id,
                             (row.get("status") or "在读").strip() or "在读",
                             _optional(row.get("primary_element")),

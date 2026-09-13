@@ -1,9 +1,11 @@
 """Responsive workspace layout composition."""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import screen, theme
+from .layout import WorkspaceLayout
 from .view_common import Board, identity, metric_pair, metric_summary, safe
 from .workspace_dashboard import render_dashboard
 from .workspace_data import ACADEMICS, COLLECTIONS, Catalog
@@ -21,17 +23,18 @@ _roster = render_roster
 
 
 def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
-    terminal = screen._terminal_size()
-    width, height = max(1, terminal.columns - 1), max(4, terminal.lines)
+    layout = WorkspaceLayout.measure()
+    width, height = layout.width, layout.height
     board = Board(width, height)
     title = COLLECTIONS[state.key].title if state.key != "data" else "数据"
 
-    board.put(0, 0, theme.topbar(width))
+    database = Path(catalog.service.db_path).name if catalog.service.db_path else "xingyuan.db"
+    board.put(0, 0, theme.topbar(width, database=database))
     breadcrumb, regions = screen._breadcrumb(title, width)
     board.put(0, 1, breadcrumb)
     board.regions.extend(regions)
 
-    if height < 20 or width < 24:
+    if layout.compact:
         row = state.current(catalog)
         board.put(0, 3, safe(identity(state.key, row)[0]) if row else title,
                   screen._BOLD + screen._TEXT_ACCENT, action="focus" if row else "")
@@ -50,19 +53,18 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
             else:
                 board.put(0, 4, "确认执行？  Esc 取消", screen._BOLD + screen._TEXT_PRIMARY)
         elif row:
-            content = details(state.key, row, catalog, width)[1:]
-            capacity = max(1, height - 6)
-            state.detail_scroll = min(state.detail_scroll, max(0, len(content) - capacity))
-            for i, (text, style, action) in enumerate(content[state.detail_scroll:state.detail_scroll + capacity]):
-                board.put(0, 4 + i, text, style, action, width)
+            board.rows[3] = []
+            board.regions = [region for region in board.regions if region.y != 4]
+            render_inspector(board, state, catalog, layout.panel_x, layout.panel_width)
         elif state.key == "data":
             for i, (label, key) in enumerate((("学生", "students"), ("课程", "courses"), ("选课", "grades"))):
                 if 4 + i < height - 2:
                     board.put(0, 4 + i, metric_pair(label, len(catalog.records[key])), action=f"collection:{key}")
 
         board.rows[height - 2] = []
-        board.put(0, height - 2, screen._clip_cells(safe(state.notice) if state.notice else "", width),
-                  screen._TEXT_SECONDARY)
+        board.put(0, height - 2,
+                  theme.notice(safe(state.notice), error=state.notice.startswith("未完成：")) if state.notice else "",
+                  width=width)
         buttons = ((("s 保存", "s", "save"), ("Esc", "Esc", "cancel")) if state.form else
                    (("↑↓ 浏览", "↑↓", "down"), ("a 新建", "a", "create"),
                     ("e 编辑", "e", "edit"), ("Esc", "Esc", "back")))
@@ -90,9 +92,8 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
                        for i, label in enumerate(COLLECTIONS[state.key].views)]
             choice_row = 4
 
-        for i, (label, count, action, selected) in enumerate(choices):
-            count_text = f" · {count}" if count is not None else ""
-            shown = f"{i + 1} {label}{count_text}" if width >= 48 else f"{label}{count_text}"
+        labels = theme.view_labels(width - 1, choices)
+        for shown, (_, _, action, selected) in zip(labels, choices):
             if x + screen._display_width(shown) + 4 <= width:
                 x = board.button(x, choice_row, shown, action, current=selected)
 
@@ -107,25 +108,23 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
         if state.key == "data" and not state.form:
             render_dashboard(board, state, catalog)
         else:
-            split = width // 2 if width >= 76 else width
-            if width >= 76:
+            split = width // 2 if layout.split else width
+            if layout.split:
                 if state.key != "data":
                     render_roster(board, state, catalog, split - 1)
                 for y in range(8, height - 2):
                     board.put(split, y, "│", screen._BORDER_SUBTLE)
-                x, panel_width = split + 3, width - split - 4
-            else:
-                x, panel_width = 1, width - 2
-                if not state.details and not state.form:
-                    render_roster(board, state, catalog, width - 1)
+            elif not state.details and not state.form:
+                render_roster(board, state, catalog, width - 1)
+            x, panel_width = layout.panel_x, layout.panel_width
             if state.form:
                 render_editor(board, state, catalog, x, panel_width)
-            elif width >= 76 or state.details:
+            elif layout.split or state.details:
                 render_inspector(board, state, catalog, x, panel_width)
 
         board.put(0, height - 2,
-                  safe(state.notice) if state.notice else "点击记录即预览 · 点击关联记录继续浏览 · r 刷新",
-                  screen._TEXT_SECONDARY, width=width)
+                  theme.notice(safe(state.notice), error=state.notice.startswith("未完成：")) if state.notice
+                  else theme.notice("点击记录预览 · Enter 打开关联 · r 刷新"), width=width)
         if state.form:
             buttons = (("Enter 编辑字段", "↵编辑", "select"), ("s 保存 / 确认", "s保存", "save"),
                        ("Esc", "Esc", "cancel"))

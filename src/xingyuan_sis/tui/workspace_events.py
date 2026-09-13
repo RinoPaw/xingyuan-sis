@@ -1,20 +1,15 @@
 from __future__ import annotations
 
 from . import keys, screen
+from .layout import WorkspaceLayout
 from .workspace_data import ACADEMICS, COLLECTIONS, Catalog
 from .workspace_forms import open_form
 from .workspace_state import Workspace
 
 
 def _detail_geometry() -> tuple[int, int]:
-    terminal = screen._terminal_size()
-    width, height = max(1, terminal.columns - 1), max(4, terminal.lines)
-    if width >= 76:
-        split = width // 2
-        panel_width = max(1, width - split - 4)
-    else:
-        panel_width = max(1, width - 2)
-    return panel_width, max(1, height - 12)
+    layout = WorkspaceLayout.measure()
+    return layout.panel_width, layout.detail_capacity
 
 
 def detail_targets(state: Workspace, catalog: Catalog) -> list[tuple[int, str]]:
@@ -23,8 +18,9 @@ def detail_targets(state: Workspace, catalog: Catalog) -> list[tuple[int, str]]:
     row = state.current(catalog)
     if row is None:
         return []
-    width, _ = _detail_geometry()
-    return view_targets(state.key, row, catalog, width)
+    layout = WorkspaceLayout.measure()
+    return [(line - layout.detail_offset, action)
+            for line, action in view_targets(state.key, row, catalog, layout.panel_width)]
 
 
 def reveal_detail_selection(state: Workspace, catalog: Catalog) -> None:
@@ -93,9 +89,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 state.details = False
                 state.detail_scroll = 0
             elif state.history:
-                state.key, state.view, state.query, state.selected, state.roster_scroll = state.history.pop()
-                state.detail_scroll = 0
-                state.detail_selected = 0
+                state.restore(catalog)
             else:
                 return None
             continue
@@ -145,17 +139,12 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             state.switch(key.split(":")[1])
         elif key.startswith("related:"):
             _, collection, identifier = key.split(":")
-            state.history.append((state.key, state.view, state.query, state.selected, state.roster_scroll))
-            state.switch(collection)
-            state.selected = next(
-                (i for i, row in enumerate(state.rows(catalog)) if str(row["id"]) == identifier),
-                0,
-            )
+            state.visit(collection, identifier, catalog)
         elif key.startswith("row:"):
             state.selected = int(key.split(":")[1])
             state.detail_scroll = 0
             state.detail_selected = 0
-            state.details = screen._terminal_size().columns < 76
+            state.details = not WorkspaceLayout.measure().split
         elif key.startswith("edit-field:"):
             open_form(state, catalog, "edit")
             field_key = key.split(":")[1]
@@ -190,12 +179,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 continue
             if key.startswith("related:"):
                 _, collection, identifier = key.split(":")
-                state.history.append((state.key, state.view, state.query, state.selected, state.roster_scroll))
-                state.switch(collection)
-                state.selected = next(
-                    (i for i, row in enumerate(state.rows(catalog)) if str(row["id"]) == identifier),
-                    0,
-                )
+                state.visit(collection, identifier, catalog)
             elif key.startswith("edit-field:"):
                 open_form(state, catalog, "edit")
                 field_key = key.split(":")[1]

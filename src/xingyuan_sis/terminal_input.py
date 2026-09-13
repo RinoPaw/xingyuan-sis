@@ -15,10 +15,9 @@ import sys
 import time
 import unicodedata
 
+from .tui.tokens import _RESET, _SURFACE, _SELECTED as _FIELD_SURFACE
+
 _ACTIVE = ContextVar("menu_input_style", default=False)
-_SURFACE = "\x1b[48;5;235m\x1b[38;5;252m"
-_FIELD_SURFACE = "\x1b[48;5;238m\x1b[38;5;255m"
-_RESET = "\x1b[0m"
 
 
 @contextmanager

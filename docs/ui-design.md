@@ -16,7 +16,7 @@
 
 **先决定信息角色，再决定视觉值。**
 
-代码和设计讨论中应使用 `text-primary`、`text-secondary`、`text-accent`、`surface-*`、`border-subtle` 这样的语义角色。`xterm 252`、`xterm 245` 等数字只是当前暗色主题的一种实现，不承担语义。
+代码和设计讨论中应使用 `text-primary`、`text-secondary`、`text-accent`、`surface-*`、`border-subtle` 这样的语义角色。`xterm 252`、`xterm 248` 等数字只是当前暗色主题的一种实现，不承担语义。
 
 同一个原始颜色可以服务多个相近角色，但不能因为“看起来差不多”就把不同信息层级合并。反过来，同一个语义 token 将来可以在不同终端能力或主题下映射到不同色值。
 
@@ -150,7 +150,7 @@
 
 普通 section heading 使用 `text-primary`，说明文字和字段标签使用 `text-secondary`。如果页面上大面积文字都变成强调色，说明语义层级已经失效。
 
-确认、删除、待录入等状态首先依赖明确文案和结构表达。当前主题没有单独定义 warning/danger token，因此不得借用 decorative gold 冒充状态色；确有需要时应先新增语义 token，再选择色号。
+确认、删除、待录入等状态首先依赖明确文案和结构表达。错误与不可逆删除使用 `text-danger`（xterm 217），并辅以明确文案和 `!` 标记；不得借用 decorative gold 冒充状态色。
 
 ## 8. 当前暗色主题映射
 
@@ -164,15 +164,15 @@
 | `surface-interactive` | xterm 237 |
 | `surface-selected` | xterm 238 |
 | `text-primary` | xterm 252 |
-| `text-secondary` | xterm 245 |
-| `text-accent` | xterm 110 |
+| `text-secondary` | xterm 248 |
+| `text-accent` | xterm 111 |
 | `text-on-selected` | xterm 255 |
 | `border-subtle` | xterm 239 |
 | decorative gold | xterm 180 |
 
 应用只绘制自己的终端单元格，不修改宿主终端客户端的窗口背景、padding 或主题配置。
 
-代码中的对应 token 集中在 `src/xingyuan_sis/tui/screen.py`：
+代码中的对应 token 集中在 `src/xingyuan_sis/tui/tokens.py`（`screen.py` 保留兼容导出）：
 
 ```text
 _TEXT_PRIMARY
@@ -186,6 +186,10 @@ _SURFACE_FOOTER
 _SURFACE_INTERACTIVE
 _SURFACE_SELECTED
 ```
+
+登录、首页与工作台统一使用 `theme.topbar`：左侧为 `✦ 星原 SIS`，右侧身份和数据库信息属于次级文字。字段标签定宽对齐，关联字段显示名称和业务编号。选中按钮、名册行、详情操作和选择器同时使用字符标记，不能仅依赖背景色。
+
+窄屏视图按钮优先显示完整名称与数量，空间不足时简化为编号与数量；所有视图仍保留点击入口。短窗口导航滚动显示当前选项。
 
 组件和页面不得再定义第二套“看起来差不多”的正文/强调颜色。
 

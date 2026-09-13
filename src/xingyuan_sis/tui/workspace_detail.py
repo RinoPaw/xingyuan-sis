@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..terminal_ui import _wrap_line
 from . import screen
+from .layout import WorkspaceLayout, visible_start
 from .view_common import Board, identity, metric_pair, panel_heading, safe
 from .workspace_data import COLLECTIONS, Catalog
 
@@ -121,9 +122,11 @@ def detail_targets(key: str, row: dict[str, Any], catalog: Catalog, width: int) 
 
 
 def render_inspector(board: Board, state: Workspace, catalog: Catalog, x: int, width: int) -> None:
-    top, bottom = 9, board.height - 2
-    board.put(x, 8, panel_heading("档案", state.details), action="focus", width=width)
+    layout = WorkspaceLayout(board.width, board.height)
+    top, bottom = layout.detail_top, board.height - 2
     row = state.current(catalog)
+    heading = identity(state.key, row)[0] if layout.compact and row else "档案"
+    board.put(x, top - 1, panel_heading(heading, state.details), action="focus", width=width)
     if row is None:
         if state.query or state.view:
             board.put(x, top + 1, "当前条件下没有记录", screen._BOLD + screen._TEXT_PRIMARY, width=width)
@@ -138,8 +141,9 @@ def render_inspector(board: Board, state: Workspace, catalog: Catalog, x: int, w
             board.button(x, top + 7, "体验演示校园", "seed")
         return
 
-    lines = details(state.key, row, catalog, width)
-    targets = detail_targets(state.key, row, catalog, width)
+    lines = details(state.key, row, catalog, width)[layout.detail_offset:]
+    targets = [(line - layout.detail_offset, action)
+               for line, action in detail_targets(state.key, row, catalog, width)]
     if targets:
         state.detail_selected = min(max(0, state.detail_selected), len(targets) - 1)
         selected_line = targets[state.detail_selected][0]
@@ -147,22 +151,18 @@ def render_inspector(board: Board, state: Workspace, catalog: Catalog, x: int, w
         state.detail_selected = 0
         selected_line = -1
 
-    capacity = max(1, bottom - top - 1)
+    capacity = layout.detail_capacity
     max_scroll = max(0, len(lines) - capacity)
     state.detail_scroll = min(max(0, state.detail_scroll), max_scroll)
     if state.details and selected_line >= 0:
-        if selected_line < state.detail_scroll:
-            state.detail_scroll = selected_line
-        elif selected_line >= state.detail_scroll + capacity:
-            state.detail_scroll = selected_line - capacity + 1
-        state.detail_scroll = min(max(0, state.detail_scroll), max_scroll)
+        state.detail_scroll = visible_start(selected_line, len(lines), capacity, state.detail_scroll)
 
     visible = lines[state.detail_scroll:state.detail_scroll + capacity]
     for offset, (text, style, action) in enumerate(visible):
         line_index = state.detail_scroll + offset
         if state.details and line_index == selected_line:
             plain = screen._ANSI_RE.sub("", text)
-            plain = screen._pad_cells(screen._clip_cells(plain, width), width)
+            plain = screen._pad_cells(screen._clip_cells("› " + plain, width), width)
             board.put(
                 x, top + offset, plain,
                 screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED,
@@ -171,7 +171,7 @@ def render_inspector(board: Board, state: Workspace, catalog: Catalog, x: int, w
         else:
             board.put(x, top + offset, text, style, action, width)
 
-    if len(lines) > capacity:
+    if len(lines) > capacity and not layout.compact:
         board.put(
             x, bottom - 1,
             f"{state.detail_scroll + 1}–{min(len(lines), state.detail_scroll + capacity)} / {len(lines)}",

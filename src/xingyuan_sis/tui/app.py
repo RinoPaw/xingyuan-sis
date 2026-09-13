@@ -250,7 +250,8 @@ def _portal_home(
                     return None
                 continue
 
-            columns = portal.secondary_columns(max(1, screen._terminal_size().columns - 1), focus)
+            terminal = screen._terminal_size()
+            columns = portal.secondary_columns(max(1, terminal.columns - 1), focus, height=terminal.lines)
             if key == "up":
                 secondary = max(0, secondary - columns)
             elif key == "down":

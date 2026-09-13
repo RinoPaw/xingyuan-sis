@@ -26,7 +26,8 @@ def button(
     width: int | None = None,
 ) -> str:
     """Render an action button with separate focus and current-location states."""
-    shown = f"[ {label} ]"
+    marker = "›" if selected else "·" if current else " "
+    shown = f"[{marker}{label} ]"
     if width is not None:
         shown = screen._pad_cells(screen._clip_cells(shown, width), width)
     if selected:
@@ -67,15 +68,34 @@ def overview_item(label: str, value: object) -> str:
     )
 
 
-def topbar(width: int, *, database: str | None = None) -> str:
-    left = "✦ 星原 / 教务台"
-    right = f"LOCAL / {database}" if database else ""
-    if right and screen._display_width(left) + screen._display_width(right) + 2 <= width:
-        gap = width - screen._display_width(left) - screen._display_width(right)
-        plain = left + " " * gap + right
-    else:
-        plain = screen._pad_cells(screen._clip_cells(left, width), width)
-    return screen._ansi(screen._pad_cells(screen._clip_cells(plain, width), width), _TOPBAR)
+def topbar(width: int, *, database: str | None = None, context: str = "") -> str:
+    """One application identity; account and storage are secondary context."""
+    left = screen._clip_cells("✦ 星原 SIS", width)
+    available = width - screen._display_width(left)
+    database_text = f"LOCAL / {database}" if database else ""
+    right = "   ".join(part for part in (context, database_text) if part)
+    if screen._display_width(right) + 2 > available:
+        right = database_text if screen._display_width(database_text) + 2 <= available else ""
+    gap = max(0, available - screen._display_width(right))
+    return (screen._ansi(left, _TOPBAR)
+            + screen._ansi(" " * gap + right, screen._SURFACE_TOPBAR + screen._TEXT_SECONDARY))
+
+
+def view_labels(width: int, choices: Sequence[tuple[str, int | None, str, bool]]) -> list[str]:
+    """Fit all views before sacrificing their descriptive labels."""
+    full = [f"{i + 1} {label}" + (f" · {count}" if count is not None else "")
+            for i, (label, count, _, _) in enumerate(choices)]
+    short = [f"{i + 1} · {count}" if count is not None else f"{i + 1} {label}"
+             for i, (label, count, _, _) in enumerate(choices)]
+    for labels in (full, short):
+        if sum(screen._display_width(label) + 5 for label in labels) <= width:
+            return labels
+    return [str(i + 1) for i in range(len(choices))]
+
+
+def notice(message: str, *, error: bool = False) -> str:
+    style = screen._TEXT_DANGER if error else screen._TEXT_SECONDARY
+    return screen._ansi(("! " if error else "· ") + message, style) if message else ""
 
 
 def footer(

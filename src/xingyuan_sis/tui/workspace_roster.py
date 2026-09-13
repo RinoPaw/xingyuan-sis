@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from . import screen
+from .layout import visible_start
 from .view_common import Board, panel_heading, safe
 from .workspace_data import COLLECTIONS, Catalog
 
@@ -11,28 +12,23 @@ if TYPE_CHECKING:
 
 
 def roster_window(state: Workspace, row_count: int, capacity: int) -> int:
-    max_first = max(0, row_count - capacity)
-    first = min(max(0, state.roster_scroll), max_first)
-    if state.selected < first:
-        first = state.selected
-    elif state.selected >= first + capacity:
-        first = state.selected - capacity + 1
-    state.roster_scroll = min(max(0, first), max_first)
+    state.roster_scroll = visible_start(state.selected, row_count, capacity, state.roster_scroll)
     return state.roster_scroll
 
 
 def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) -> None:
     rows = state.rows(catalog)
+    focused = not state.details and state.form is None
     capacity = max(1, board.height - 12)
     first = roster_window(state, len(rows), capacity)
-    heading = panel_heading("名册", not state.details)
+    heading = panel_heading("名册", focused)
     range_text = f"  {len(rows):02d}" + (
         f"  /  {first + 1}–{min(first + capacity, len(rows))}" if rows else ""
     )
     board.put(1, 8, heading + screen._ansi(range_text, screen._TEXT_SECONDARY), width=width - 1)
 
     definitions = COLLECTIONS[state.key].columns
-    available = max(1, width - 2)
+    available = max(1, width - 4)
     columns: list[list[Any]] = []
     remaining = available
     for key, label, base_size in definitions:
@@ -56,18 +52,19 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
             if remaining <= 0:
                 break
 
-    header = " ".join(screen._pad_cells(label, size) for _, label, size in columns)
+    header = "  " + " ".join(screen._pad_cells(label, size) for _, label, size in columns)
     board.put(1, 9, header, screen._TEXT_SECONDARY, width=width - 1)
     for index, row in enumerate(rows[first:first + capacity], start=first):
         text = " ".join(
             screen._pad_cells(screen._clip_cells(safe(row.get(key)), size), size)
             for key, _, size in columns
         )
-        text = screen._pad_cells(screen._clip_cells(text, width - 1), width - 1)
+        marker = "▌ " if index == state.selected and focused else "▏ " if index == state.selected else "  "
+        text = screen._pad_cells(screen._clip_cells(marker + text, width - 1), width - 1)
         if index == state.selected:
             selected_style = (
                 screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
-                if not state.details
+                if focused
                 else screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
             )
         else:
