@@ -12,6 +12,8 @@ from .layout import visible_start
 
 PRIMARY_LABELS = ("首页", "教务", "个人中心", "退出登录")
 NARROW_WIDTH = 38
+_SECONDARY_SLOT_WIDTH = 10
+_SECONDARY_MAX_COLUMNS = 7
 
 
 @dataclass(frozen=True)
@@ -50,13 +52,7 @@ def secondary_columns(total_width: int, focus: str = "secondary", *, height: int
     if total_width < NARROW_WIDTH or (height is not None and height < 9):
         return 1
     content_width = _secondary_content_width(total_width, focus)
-    if content_width >= 68:
-        return 4
-    if content_width >= 48:
-        return 3
-    if content_width >= 32:
-        return 2
-    return 1
+    return max(1, min(_SECONDARY_MAX_COLUMNS, content_width // _SECONDARY_SLOT_WIDTH))
 
 
 def frame(
@@ -191,7 +187,7 @@ def _compact_body(
             y = 3 + index - first
             board.put(
                 0, y,
-                theme.nav_item(item.label, selected=index == secondary),
+                theme.secondary_item(item.label, selected=index == secondary),
                 action=f"secondary:{index}",
                 width=width,
             )
@@ -277,8 +273,10 @@ def _secondary_grid(
     *,
     focused: bool,
 ) -> None:
-    columns = secondary_columns(board.width, "secondary")
-    cell_width = max(1, width // columns)
+    if not items:
+        return
+    columns = min(len(items), secondary_columns(board.width, "secondary", height=board.height))
+    slot_width = max(1, min(_SECONDARY_SLOT_WIDTH, width // columns))
     total_rows = (len(items) + columns - 1) // columns
     capacity = max(1, (board.height - y) // 2)
     first = visible_start(secondary // columns, total_rows, capacity)
@@ -289,15 +287,11 @@ def _secondary_grid(
         if item_y >= board.height - 1:
             break
         board.put(
-            x + col * cell_width,
+            x + col * slot_width,
             item_y,
-            theme.button(
-                item.label,
-                selected=focused and index == secondary,
-                width=max(1, cell_width - 1),
-            ),
+            theme.secondary_item(item.label, selected=focused and index == secondary),
             action=f"secondary:{index}",
-            width=max(1, cell_width - 1),
+            width=slot_width,
         )
 
 
