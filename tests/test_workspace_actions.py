@@ -66,17 +66,19 @@ class WorkspaceActionTests(unittest.TestCase):
 
     def test_action_focus_keeps_current_record_weakly_selected(self):
         state = workspace.Workspace("students", selected=15, action_focus=True)
-        selected_name = state.current(self.catalog)["name"]
+        selected = state.current(self.catalog)
 
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             frame = workspace_view.render(state, self.catalog)
 
         selected_line = next(
             line for line in frame.lines
-            if selected_name in screen._ANSI_RE.sub("", line)
+            if selected["name"] in screen._ANSI_RE.sub("", line)
+            and selected["student_no"] in screen._ANSI_RE.sub("", line)
         )
         self.assertIn(screen._SURFACE_INTERACTIVE, selected_line)
         self.assertIn(screen._TEXT_PRIMARY, selected_line)
+        self.assertNotIn(screen._SURFACE_SELECTED, selected_line)
 
     def test_action_shortcuts_remain_direct(self):
         for key, action in (("create", "create"), ("edit", "edit"), ("delete", "delete")):
