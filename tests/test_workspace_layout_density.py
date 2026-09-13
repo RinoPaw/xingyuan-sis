@@ -7,6 +7,7 @@ from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import screen, workspace_view
 from xingyuan_sis.tui.layout import WorkspaceLayout
 from xingyuan_sis.tui.workspace_data import Catalog
+from xingyuan_sis.tui.workspace_detail import preferred_width
 
 
 class WorkspaceLayoutDensityTests(unittest.TestCase):
@@ -18,16 +19,27 @@ class WorkspaceLayoutDensityTests(unittest.TestCase):
         seed_demo(db)
         self.catalog = Catalog(db)
 
-    def test_wide_split_caps_inspector_and_gives_surplus_to_roster(self):
+    def test_wide_split_uses_current_inspector_width(self):
+        layout = WorkspaceLayout(160, 35, 28)
+        self.assertEqual(layout.split_x, 128)
+        self.assertEqual(layout.panel_width, 28)
+        self.assertGreater(layout.split_x, layout.width * 3 // 4)
+
+    def test_wide_split_keeps_fallback_cap_without_hint(self):
         layout = WorkspaceLayout(160, 35)
         self.assertEqual(layout.split_x, 114)
         self.assertEqual(layout.panel_width, 42)
-        self.assertGreater(layout.split_x, layout.width * 2 // 3)
 
-    def test_medium_split_stays_balanced_before_inspector_cap(self):
-        layout = WorkspaceLayout(80, 30)
+    def test_medium_split_stays_balanced_when_content_is_wide(self):
+        layout = WorkspaceLayout(80, 30, 42)
         self.assertEqual(layout.split_x, 40)
         self.assertEqual(layout.panel_width, 36)
+
+    def test_student_inspector_width_tracks_actual_content(self):
+        row = self.catalog.records["students"][0]
+        width = preferred_width("students", row, self.catalog)
+        self.assertGreaterEqual(width, 28)
+        self.assertLess(width, 42)
 
     def test_student_inspector_does_not_repeat_roster_fields(self):
         row = self.catalog.records["students"][0]
