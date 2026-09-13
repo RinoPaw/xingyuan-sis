@@ -103,6 +103,21 @@ def details(key: str, row: dict[str, Any], catalog: Catalog, width: int) -> list
     return lines
 
 
+def preferred_width(key: str, row: dict[str, Any] | None, catalog: Catalog) -> int:
+    """Width needed by the current inspector before wrapping nonessential text."""
+    minimum, maximum = 28, 42
+    if row is None:
+        return minimum
+    rendered = details(key, row, catalog, maximum)
+    longest = max(
+        [screen._display_width("档案"), *(
+            screen._display_width(screen._ANSI_RE.sub("", text))
+            for text, _, _ in rendered
+        )]
+    )
+    return min(maximum, max(minimum, longest + 2))
+
+
 def detail_targets(key: str, row: dict[str, Any], catalog: Catalog, width: int) -> list[tuple[int, str]]:
     result: list[tuple[int, str]] = []
     seen: set[str] = set()
