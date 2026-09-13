@@ -69,6 +69,8 @@ class Catalog:
             ("grades", service.list_enrollments), ("departments", service.list_departments),
             ("majors", service.list_majors), ("classes", service.list_classes),
         )}
+        self.species_families = [dict(row) for row in service.list_species_families()]
+        self.species_branches = [dict(row) for row in service.list_species_branches()]
         departments = {row["id"]: row for row in self.records["departments"]}
         majors = {row["id"]: row for row in self.records["majors"]}
         classes = {row["id"]: row for row in self.records["classes"]}
@@ -158,11 +160,11 @@ class Catalog:
             return options + [(value, value) for value in _STUDENT_ENUMS[field_key]]
 
         if key == "students" and field_key == "family":
-            return [(row["name"], row["name"]) for row in self.service.list_species_families()]
+            return [(row["name"], row["name"]) for row in self.species_families]
 
         if key == "students" and field_key == "branch":
             family = (values or {}).get("family")
-            rows = self.service.list_species_branches()
+            rows = self.species_branches
             if family:
                 rows = [row for row in rows if row["family_name"] == family]
             return [
