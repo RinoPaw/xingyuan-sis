@@ -16,6 +16,45 @@ def roster_window(state: Workspace, row_count: int, capacity: int) -> int:
     return state.roster_scroll
 
 
+def _fit_columns(
+    definitions: tuple[tuple[str, str, int], ...],
+    rows: list[dict[str, Any]],
+    available: int,
+) -> list[list[Any]]:
+    """Fit columns to their actual content before truncating any cell."""
+    measured: list[list[Any]] = []
+    for key, label, preferred_size in definitions:
+        label_width = screen._display_width(label)
+        natural_width = max(
+            [label_width, *(screen._display_width(safe(row.get(key))) for row in rows)]
+        )
+        preferred_width = min(natural_width, max(label_width, preferred_size))
+        measured.append([key, label, preferred_width, natural_width])
+
+    columns: list[list[Any]] = []
+    used = 0
+    for key, label, preferred_width, natural_width in measured:
+        separator = 1 if columns else 0
+        if used + separator + preferred_width > available:
+            if not columns:
+                columns.append([key, label, max(1, available), natural_width])
+            break
+        columns.append([key, label, preferred_width, natural_width])
+        used += separator + preferred_width
+
+    remaining = max(0, available - used)
+    while remaining and any(column[2] < column[3] for column in columns):
+        for column in columns:
+            if column[2] >= column[3]:
+                continue
+            column[2] += 1
+            remaining -= 1
+            if remaining == 0:
+                break
+
+    return [[key, label, size] for key, label, size, _ in columns]
+
+
 def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) -> None:
     rows = state.rows(catalog)
     focused = not state.details and not state.action_focus and state.form is None
@@ -31,30 +70,8 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
     )
     board.put(1, heading_row, heading + screen._ansi(range_text, screen._TEXT_SECONDARY), width=width - 1)
 
-    definitions = COLLECTIONS[state.key].columns
     available = max(1, width - 4)
-    columns: list[list[Any]] = []
-    remaining = available
-    for key, label, base_size in definitions:
-        size = min(base_size, remaining) if not columns else base_size
-        if size > remaining:
-            break
-        columns.append([key, label, size])
-        remaining -= size + 1
-
-    if columns and remaining > 0:
-        for column in columns:
-            key, label, size = column
-            desired = max(
-                screen._display_width(label),
-                *(screen._display_width(safe(row.get(key))) for row in rows),
-                size,
-            )
-            growth = min(max(0, desired - size), remaining)
-            column[2] += growth
-            remaining -= growth
-            if remaining <= 0:
-                break
+    columns = _fit_columns(COLLECTIONS[state.key].columns, rows, available)
 
     header = "  " + " ".join(screen._pad_cells(label, size) for _, label, size in columns)
     board.put(1, header_row, header, screen._TEXT_SECONDARY, width=width - 1)
