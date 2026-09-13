@@ -219,7 +219,7 @@ def _compact_body(
     elif selected in {1, 2}:
         board.put(0, y, PRIMARY_LABELS[selected], screen._BOLD + screen._TEXT_ACCENT)
         if y + 2 < height - 1:
-            board.put(0, y + 2, "Enter / Space / → 进入", screen._TEXT_SECONDARY)
+            board.put(0, y + 2, "Enter 进入", screen._TEXT_SECONDARY)
     else:
         board.put(0, y, f"{display_name} · {'管理员' if identity.is_admin else '学生'}",
                   screen._TEXT_SECONDARY)
