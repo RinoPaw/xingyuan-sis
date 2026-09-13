@@ -9,6 +9,8 @@ from typing import Any
 
 from ..schema import FIELDS, Field
 from ..service import XingyuanService
+from ..student_filters import query_students
+from ..student_query import parse_student_query
 
 
 @dataclass(frozen=True)
@@ -24,7 +26,7 @@ COLLECTIONS = {
     "students": Collection("学生", "学生档案", (
         ("name", "姓名", 10), ("student_no", "学号", 12), ("class_name", "班级", 20),
         ("primary_element", "元素", 6), ("status", "学籍", 8),
-    ), FIELDS["students"], ("全部档案", "在读学生", "未分班")),
+    ), FIELDS["students"], ()),
     "courses": Collection("课程", "课程目录", (
         ("name", "课程", 20), ("course_code", "编号", 10), ("credits", "学分", 6),
         ("hours", "课时", 6), ("enrolled", "选课", 6),
@@ -80,12 +82,19 @@ class Catalog:
     def rows(self, key: str, view: int = 0, query: str = "") -> list[dict[str, Any]]:
         rows = self.records[key]
         if view:
-            if key == "students":
-                rows = [row for row in rows if (row["status"] == "在读" if view == 1 else row["class_id"] is None)]
-            elif key == "courses":
+            if key == "courses":
                 rows = [row for row in rows if (row["enrolled"] > 0 if view == 1 else row["enrolled"] == 0)]
             elif key == "grades":
                 rows = [row for row in rows if (row["score"] is None if view == 1 else row["score"] is not None)]
+
+        if key == "students" and query.strip():
+            parsed = parse_student_query(query)
+            matched = {
+                record.student_no
+                for record in query_students(self.service, **parsed.as_kwargs())
+            }
+            return [row for row in rows if str(row["student_no"]) in matched]
+
         terms = query.casefold().split()
         return [row for row in rows if all(term in " ".join(
             str(value) for name, value in row.items() if name != "id" and not name.endswith("_id") and value is not None
