@@ -137,7 +137,7 @@ class PortalLayoutTests(unittest.TestCase):
         entered_text = "\n".join(entered.lines)
         self.assertIn("教务", preview_text)
         self.assertNotIn("学院", preview_text)
-        self.assertIn("Enter / Space / → 进入", preview_text)
+        self.assertIn("Enter 进入", preview_text)
         self.assertIn("学生", entered_text)
         self.assertIn("学院", entered_text)
         self.assertIn("成绩", entered_text)
