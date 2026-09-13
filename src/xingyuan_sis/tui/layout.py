@@ -6,6 +6,17 @@ from dataclasses import dataclass
 from . import screen
 
 
+_CONTROL_ROWS = {
+    "students": 0,
+    "courses": 1,
+    "grades": 1,
+    "departments": 1,
+    "majors": 1,
+    "classes": 1,
+    "data": 2,
+}
+
+
 def visible_start(selected: int, total: int, capacity: int, first: int = 0) -> int:
     """Keep a selection visible without moving an already suitable viewport."""
     capacity = max(1, capacity)
@@ -45,12 +56,27 @@ class WorkspaceLayout:
         return max(1, self.width - self.panel_x - (0 if self.compact else 1))
 
     @property
-    def detail_top(self) -> int:
-        return 4 if self.compact else 9
+    def action_row(self) -> int:
+        return 2 if self.compact else 3
 
-    @property
-    def detail_capacity(self) -> int:
-        return max(1, self.height - self.detail_top - (2 if self.compact else 3))
+    def separator_row(self, key: str) -> int:
+        """Row separating workspace controls from record content."""
+        if self.compact:
+            return self.action_row
+        return self.action_row + 1 + _CONTROL_ROWS.get(key, 0)
+
+    def panel_heading_row(self, key: str) -> int:
+        """Row containing the roster/inspector heading."""
+        return 3 if self.compact else self.separator_row(key) + 1
+
+    def panel_content_row(self, key: str) -> int:
+        """First row available to panel content below its heading."""
+        return self.panel_heading_row(key) + 1
+
+    def panel_capacity(self, key: str) -> int:
+        """Scrollable detail capacity while reserving status and footer rows."""
+        bottom_reserve = 2 if self.compact else 3
+        return max(1, self.height - self.panel_content_row(key) - bottom_reserve)
 
     @property
     def detail_offset(self) -> int:
