@@ -29,6 +29,19 @@ class PortalLayoutTests(unittest.TestCase):
             self.assertIn(label, text)
         self.assertTrue(any(region.action.startswith("secondary:") for region in frame.regions))
 
+    def test_primary_preview_has_no_secondary_selection(self) -> None:
+        identity = Identity("Administrator", "admin")
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((100, 24))):
+            preview = portal.frame(identity, 1, "primary", {1: 0}, {}, 0, animate=False)
+            entered = portal.frame(identity, 1, "secondary", {1: 0}, {}, 0, animate=False)
+
+        preview_text = "\n".join(screen._ANSI_RE.sub("", line) for line in preview.lines)
+        entered_text = "\n".join(screen._ANSI_RE.sub("", line) for line in entered.lines)
+        self.assertIn("[ 学生 ]", preview_text)
+        self.assertNotIn("[·学生 ]", preview_text)
+        self.assertNotIn("[›学生 ]", preview_text)
+        self.assertIn("[›学生 ]", entered_text)
+
     def test_primary_keeps_weak_selection_when_focus_enters_secondary(self) -> None:
         identity = Identity("Administrator", "admin")
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((100, 24))):
@@ -45,10 +58,22 @@ class PortalLayoutTests(unittest.TestCase):
             os.environ.pop("NO_COLOR", None)
             weak = theme.button("学生", current=True)
             strong = theme.button("学生", selected=True)
-        self.assertIn(screen._SURFACE_SELECTED, weak)
+        self.assertIn(screen._SURFACE_INTERACTIVE, weak)
         self.assertIn(screen._TEXT_ACCENT, weak)
+        self.assertNotIn(screen._SURFACE_SELECTED, weak)
+        self.assertIn(screen._SURFACE_SELECTED, strong)
         self.assertIn(screen._TEXT_ON_SELECTED, strong)
         self.assertNotEqual(weak, strong)
+
+    def test_secondary_footer_calls_direction_keys_movement(self) -> None:
+        identity = Identity("Administrator", "admin")
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((100, 24))):
+            frame = portal.frame(identity, 1, "secondary", {1: 0}, {}, 0, animate=False)
+        footer = screen._ANSI_RE.sub("", frame.lines[-1])
+        self.assertIn("方向键 移动", footer)
+        self.assertNotIn("方向键 选择", footer)
+        self.assertIn("Enter 打开", footer)
+        self.assertIn("Esc 返回", footer)
 
     def test_extreme_narrow_width_hides_preview_but_entered_menu_still_renders(self) -> None:
         identity = Identity("Administrator", "admin")
