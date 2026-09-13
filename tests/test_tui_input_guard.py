@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from xingyuan_sis import terminal_input
+from xingyuan_sis.auth import ADMIN_USERNAME
 from xingyuan_sis import tui
 from xingyuan_sis.tui import animation, auth_view, screen
 
@@ -43,6 +44,16 @@ class TuiInputGuardTests(unittest.TestCase):
         self.assertEqual(cursor, 6)
         self.assertNotIn("s3cret", shown)
 
+    def test_tui_editor_forwards_nonempty_initial_value(self):
+        with patch("sys.stdin.isatty", return_value=True), patch("sys.stdout.isatty", return_value=True), \
+             patch.object(terminal_input, "_read_interactive_line", return_value=ADMIN_USERNAME) as read, \
+             patch("sys.stdout.write"), patch("sys.stdout.flush"), patch.dict(os.environ):
+            os.environ.pop("NO_COLOR", None)
+            with terminal_input.input_style(True):
+                value = terminal_input.read_input("账号: ", initial_value=ADMIN_USERNAME)
+        self.assertEqual(value, ADMIN_USERNAME)
+        read.assert_called_once_with("账号: ", colored=True, initial_value=ADMIN_USERNAME)
+
     def test_auth_field_escape_cancels_instead_of_becoming_text(self):
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 24))), \
              patch.object(screen, "_paint"), patch("sys.stdout.isatty", return_value=False), \
@@ -58,6 +69,24 @@ class TuiInputGuardTests(unittest.TestCase):
             )
         self.assertIsNone(value)
         self.assertTrue(read.call_args.kwargs["secret"])
+
+    def test_auth_username_prefill_is_owned_by_the_editor(self):
+        def fake_read(_prompt, **kwargs):
+            return kwargs["initial_value"]
+
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 24))), \
+             patch.object(screen, "_paint"), patch("sys.stdout.isatty", return_value=False), \
+             patch.object(auth_view, "read_input", side_effect=fake_read) as read:
+            value = auth_view._read_field(
+                "login",
+                {"username": ADMIN_USERNAME, "password": ""},
+                "username",
+                "账号",
+                database="test.db",
+                message="",
+            )
+        self.assertEqual(value, ADMIN_USERNAME)
+        self.assertEqual(read.call_args.kwargs["initial_value"], ADMIN_USERNAME)
 
     def test_auth_field_repaints_animation_while_input_is_idle(self):
         def fake_read(_prompt, **kwargs):
