@@ -39,9 +39,12 @@ def render(state: Workspace, catalog: Catalog):
     x = 0
     for index, (label, action) in enumerate(_breadcrumb(state)):
         if index:
-            x = board.put(x, 1, " / ", screen._TEXT_SECONDARY)
+            separator = " / "
+            board.put(x, 1, separator, screen._TEXT_SECONDARY)
+            x += screen._display_width(separator)
         style = screen._TEXT_ACCENT + "\x1b[4m" if action else screen._TEXT_SECONDARY
-        x = board.put(x, 1, label, style, action or None)
+        board.put(x, 1, label, style, action or None)
+        x += screen._display_width(label)
 
     if layout.compact:
         action_row = layout.action_row
