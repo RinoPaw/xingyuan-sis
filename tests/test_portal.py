@@ -86,7 +86,8 @@ class PortalLayoutTests(unittest.TestCase):
         footer = footers[0]
         self.assertIn("方向键 移动", footer)
         self.assertIn("Enter 确认", footer)
-        self.assertIn("Esc 返回 / 退出", footer)
+        self.assertIn("Esc 返回", footer)
+        self.assertNotIn("返回 / 退出", footer)
 
     def test_logout_is_an_explicit_action_not_a_right_arrow_destination(self) -> None:
         identity = Identity("Administrator", "admin")
