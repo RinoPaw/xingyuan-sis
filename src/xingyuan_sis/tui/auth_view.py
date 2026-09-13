@@ -35,7 +35,7 @@ def login(db_path: Path | str | None) -> Identity | None:
 
     message = "管理员已创建。" if initialized else ""
     while True:
-        values = {"username": "", "password": ""}
+        values = {"username": ADMIN_USERNAME, "password": ""}
         username = _read_field(
             "login", values, "username", "账号", database=_database_name(db_path), message=message
         )
@@ -170,12 +170,8 @@ def frame(
         value = values.get(key, "")
         if secret and value:
             shown = "•" * min(len(value), max(1, box_width - 2))
-        elif value:
-            shown = str(value)
-        elif key == "username" and mode == "login":
-            shown = ADMIN_USERNAME
         else:
-            shown = ""
+            shown = str(value)
 
         label_style = screen._TEXT_PRIMARY if key == active else screen._TEXT_SECONDARY
         label_text = screen._ansi(screen._pad_cells(label, label_width), label_style)
@@ -249,6 +245,7 @@ def _read_field(
     label_width = min(_LABEL_WIDTH, max(1, field_width // 3))
     box_width = max(4, field_width - label_width - 2)
     prompt = " " * max(0, left - 2) + screen._pad_cells(label, label_width) + "  "
+    initial_value = str(values.get(key, ""))
 
     rendered = frame(
         mode, values, active=key, message=message, database=database, phase=_phase()
@@ -281,6 +278,7 @@ def _read_field(
                 field_width=box_width,
                 on_idle=refresh,
                 idle_interval=animation._SPARKLE_FRAME,
+                initial_value=initial_value,
             )
     except (KeyboardInterrupt, EOFError):
         return None
