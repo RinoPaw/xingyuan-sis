@@ -39,7 +39,7 @@ def login(db_path: Path | str | None) -> Identity | None:
     if not has_admin() and not _initialize_admin(db_path):
         return None
 
-    values = {"username": ADMIN_USERNAME, "password": ""}
+    values = {"username": "", "password": ""}
     message = ""
     while True:
         submitted = _run_form(
@@ -51,7 +51,7 @@ def login(db_path: Path | str | None) -> Identity | None:
         if submitted is None:
             return None
 
-        username = submitted["username"].strip() or ADMIN_USERNAME
+        username = submitted["username"].strip()
         identity = authenticate(db_path, username, submitted["password"])
         if identity is None:
             values = {"username": username, "password": ""}
