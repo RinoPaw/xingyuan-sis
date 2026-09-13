@@ -119,13 +119,14 @@ def frame(
         )
         return animation._starlight(board.frame(), width, angle, protected)
 
+    secondary_focused = focus == "secondary"
     if selected == 1:
         board.put(right_x, 1, "教务", screen._BOLD + screen._TEXT_ACCENT)
         description = "增删改查与校园业务管理" if identity.is_admin else "查询校园学生信息"
         board.put(right_x, 2, description, screen._TEXT_SECONDARY)
         _secondary_grid(
             board, right_x, 4, content_width, items, secondary,
-            selected=focus == "secondary",
+            focused=secondary_focused,
         )
     elif selected == 2:
         board.put(right_x, 1, "个人中心", screen._BOLD + screen._TEXT_ACCENT)
@@ -136,7 +137,7 @@ def frame(
         )
         _secondary_grid(
             board, right_x, 4, content_width, items, secondary,
-            selected=focus == "secondary",
+            focused=secondary_focused,
         )
     else:
         board.put(right_x, 1, "退出登录", screen._BOLD + screen._TEXT_ACCENT)
@@ -166,7 +167,7 @@ def _footer(
 ) -> tuple[str, list[screen.HitRegion]]:
     if focus == "secondary":
         buttons = (
-            ("方向键 选择", "方向", "down"),
+            ("方向键 移动", "方向", "down"),
             ("Enter 打开", "↵", "select"),
             ("Esc 返回", "Esc", "back"),
         )
@@ -291,7 +292,7 @@ def _secondary_grid(
     items: Sequence[MenuItem],
     secondary: int,
     *,
-    selected: bool,
+    focused: bool,
 ) -> None:
     columns = secondary_columns(board.width, "secondary")
     cell_width = max(1, width // columns)
@@ -304,14 +305,12 @@ def _secondary_grid(
         item_y = y + (row - first) * 2
         if item_y >= board.height - 1:
             break
-        is_current = index == secondary
         board.put(
             x + col * cell_width,
             item_y,
             theme.button(
                 item.label,
-                selected=selected and is_current,
-                current=not selected and is_current,
+                selected=focused and index == secondary,
                 width=max(1, cell_width - 1),
             ),
             action=f"secondary:{index}",
