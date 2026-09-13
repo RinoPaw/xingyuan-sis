@@ -70,7 +70,7 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
     )
     board.put(1, heading_row, heading + screen._ansi(range_text, screen._TEXT_SECONDARY), width=width - 1)
 
-    available = max(1, width - 4)
+    available = max(1, width - 3)
     columns = _fit_columns(COLLECTIONS[state.key].columns, rows, available)
 
     header = "  " + " ".join(screen._pad_cells(label, size) for _, label, size in columns)

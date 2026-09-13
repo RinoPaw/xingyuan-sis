@@ -1,8 +1,30 @@
 import unittest
 
 from xingyuan_sis.tui import screen
+from xingyuan_sis.tui.view_common import Board
 from xingyuan_sis.tui.workspace_data import COLLECTIONS
-from xingyuan_sis.tui.workspace_roster import _fit_columns
+from xingyuan_sis.tui.workspace_roster import _fit_columns, render_roster
+
+
+class _State:
+    key = "students"
+    selected = 0
+    roster_scroll = 0
+    details = False
+    action_focus = False
+    form = None
+    query = ""
+    view = 0
+
+    def __init__(self, rows):
+        self._rows = rows
+
+    def rows(self, catalog):
+        return self._rows
+
+
+class _Catalog:
+    records = {"students": [{}]}
 
 
 class RosterColumnTests(unittest.TestCase):
@@ -23,6 +45,12 @@ class RosterColumnTests(unittest.TestCase):
         self.assertGreaterEqual(widths["name"], screen._display_width("Calvin McMurray"))
         self.assertEqual(widths["student_no"], screen._display_width("20230016"))
         self.assertEqual(widths["primary_element"], screen._display_width("元素"))
+
+    def test_render_uses_final_cell_before_truncating_name(self):
+        board = Board(80, 24)
+        render_roster(board, _State(self.rows), _Catalog(), 52)
+        plain = "\n".join(screen._ANSI_RE.sub("", line) for line in board.frame().lines)
+        self.assertIn("Calvin McMurray", plain)
 
     def test_narrow_layout_never_exceeds_available_width(self):
         available = 20
