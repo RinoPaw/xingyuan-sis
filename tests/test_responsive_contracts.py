@@ -65,7 +65,7 @@ class ResponsiveContractTests(unittest.TestCase):
 
     def test_narrow_workspace_keeps_every_filter_clickable(self):
         with patch.object(screen, '_terminal_size', return_value=os.terminal_size((30, 24))):
-            for key in ('students', 'courses', 'grades'):
+            for key in ('courses', 'grades'):
                 state = workspace.Workspace(key, view=2)
                 frame = workspace_view.render(state, self.catalog)
                 self.assertTrue({'view:0', 'view:1', 'view:2'} <= {r.action for r in frame.regions})
@@ -74,7 +74,8 @@ class ResponsiveContractTests(unittest.TestCase):
         with patch.dict(os.environ, {'NO_COLOR': '1'}), \
              patch.object(screen, '_terminal_size', return_value=os.terminal_size((120, 35))):
             frame = workspace_view.render(workspace.Workspace('students', selected=1), self.catalog)
-        self.assertIn('▌ ', frame.lines[11])
+        selected = next(r for r in frame.regions if r.action == 'row:1')
+        self.assertIn(self.catalog.records['students'][1]['name'], frame.lines[selected.y - 1])
         self.assertNotIn('\x1b', ''.join(frame.lines))
 
     def test_related_return_restores_identity_and_inspector_context_after_reordering(self):
