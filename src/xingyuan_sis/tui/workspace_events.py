@@ -15,9 +15,9 @@ def _actions(state: Workspace) -> tuple[str, ...]:
     return _DATA_ACTIONS if state.key == "data" else _RECORD_ACTIONS
 
 
-def _detail_geometry() -> tuple[int, int]:
+def _detail_geometry(state: Workspace) -> tuple[int, int]:
     layout = WorkspaceLayout.measure()
-    return layout.panel_width, layout.detail_capacity
+    return layout.panel_width, layout.panel_capacity(state.key)
 
 
 def detail_targets(state: Workspace, catalog: Catalog) -> list[tuple[int, str]]:
@@ -37,7 +37,7 @@ def reveal_detail_selection(state: Workspace, catalog: Catalog) -> None:
         state.detail_selected = 0
         return
     state.detail_selected = min(max(0, state.detail_selected), len(targets) - 1)
-    _, capacity = _detail_geometry()
+    _, capacity = _detail_geometry(state)
     line = targets[state.detail_selected][0]
     if line < state.detail_scroll:
         state.detail_scroll = line
@@ -50,7 +50,7 @@ def select_visible_detail_target(state: Workspace, catalog: Catalog) -> None:
     if not targets:
         state.detail_selected = 0
         return
-    _, capacity = _detail_geometry()
+    _, capacity = _detail_geometry(state)
     first, last = state.detail_scroll, state.detail_scroll + capacity - 1
     visible = [(index, line) for index, (line, _) in enumerate(targets) if first <= line <= last]
     if visible:
