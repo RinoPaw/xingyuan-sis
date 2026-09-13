@@ -21,6 +21,24 @@ _details = details
 _inspector = render_inspector
 _roster = render_roster
 
+_RECORD_ACTIONS = (("增加", "create"), ("编辑", "edit"), ("删除", "delete"))
+_DATA_ACTIONS = (("导入", "import"), ("导出", "export"), ("演示", "seed"))
+
+
+def _render_actions(board: Board, state: Workspace, x: int, y: int, available: int) -> None:
+    if state.form or available <= 0:
+        return
+    actions = _DATA_ACTIONS if state.key == "data" else _RECORD_ACTIONS
+    state.action_selected = min(max(0, state.action_selected), len(actions) - 1)
+    right = x + available
+    for index, (label, action) in enumerate(actions):
+        shown = theme.button(label, selected=state.action_focus and index == state.action_selected)
+        width = screen._display_width(shown)
+        if x + width > right:
+            break
+        board.put(x, y, shown, action=action)
+        x += width + 2
+
 
 def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
     layout = WorkspaceLayout.measure()
@@ -35,6 +53,8 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
     board.regions.extend(regions)
 
     if layout.compact:
+        if not state.form:
+            _render_actions(board, state, 0, 2, width)
         row = state.current(catalog)
         board.put(0, 3, safe(identity(state.key, row)[0]) if row else title,
                   screen._BOLD + screen._TEXT_ACCENT, action="focus" if row else "")
@@ -65,15 +85,12 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
         board.put(0, height - 2,
                   theme.notice(safe(state.notice), error=state.notice.startswith("未完成：")) if state.notice else "",
                   width=width)
-        buttons = ((("s 保存", "s", "save"), ("Esc", "Esc", "cancel")) if state.form else
-                   (("↑↓ 浏览", "↑↓", "down"), ("a 新建", "a", "create"),
-                    ("e 编辑", "e", "edit"), ("Esc", "Esc", "back")))
-        if state.key == "data" and not state.form:
-            buttons = (("i 导入", "i", "import"), ("o 导出", "o", "export"),
-                       ("g 演示", "g", "seed"), ("Esc", "Esc", "back"))
     else:
         noun = COLLECTIONS[state.key].noun if state.key != "data" else "校园概览"
         board.put(1, 3, noun, screen._BOLD + screen._TEXT_ACCENT)
+        action_x = max(15, screen._display_width(noun) + 5)
+        _render_actions(board, state, action_x, 3, max(0, width - action_x - 1))
+
         x = 1
         if state.key == "data":
             metrics = [("学生", str(len(catalog.records["students"]))),
@@ -129,24 +146,10 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
                 render_inspector(board, state, catalog, x, panel_width)
 
         board.put(0, height - 2,
-                  theme.notice(safe(state.notice), error=state.notice.startswith("未完成：")) if state.notice
-                  else theme.notice("点击记录预览 · Enter 打开关联 · r 刷新"), width=width)
-        if state.form:
-            buttons = (("Enter 编辑字段", "↵编辑", "select"), ("s 保存", "s保存", "save"),
-                       ("Esc", "Esc", "cancel"))
-        elif state.key == "data":
-            buttons = (("i 导入 CSV", "i导入", "import"), ("o 导出 CSV", "o导出", "export"),
-                       ("g 演示校园", "g演示", "seed"), ("Esc", "Esc", "back"))
-        else:
-            buttons = (("↑↓ 浏览", "↑↓", "down"), ("a 新建", "a新增", "create"),
-                       ("e 编辑", "e编辑", "edit"), ("d 删除", "d删除", "delete"),
-                       ("Tab 切换", "Tab", "focus"), ("Esc", "Esc", "back"))
+                  theme.notice(safe(state.notice), error=state.notice.startswith("未完成：")) if state.notice else "",
+                  width=width)
 
-    if state.form and state.form.options is not None:
-        buttons = (("↑↓ 选择", "↑↓", "down"), ("Enter 确定", "↵", "select"), ("Esc", "Esc", "cancel"))
-
-    footer, regions = theme.footer(width, buttons, height)
-    board.rows[-1] = [(0, footer)]
+    board.rows[-1] = [(0, theme.footer(width))]
     board.regions = [region for region in board.regions
-                     if region.y < height - 1 and region.x + region.width - 1 <= width] + regions
+                     if region.y < height and region.x + region.width - 1 <= width]
     return board.frame()
