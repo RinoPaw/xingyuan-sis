@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from ..terminal_ui import _wrap_line
 from . import screen
+from .layout import WorkspaceLayout
 from .view_common import Board, safe
 from .workspace_data import Catalog
 
@@ -90,7 +91,9 @@ def render_dashboard(board: Board, state: Workspace, catalog: Catalog) -> None:
     else:
         panels = [(1, split - 3, lines), (split + 2, width - split - 3, right)]
 
-    capacity = max(1, board.height - 11)
+    layout = WorkspaceLayout(board.width, board.height)
+    top = layout.panel_heading_row("data")
+    capacity = max(1, board.height - top - 2)
     state.detail_scroll = min(
         state.detail_scroll,
         max(0, max(len(panel[2]) for panel in panels) - capacity),
@@ -99,4 +102,4 @@ def render_dashboard(board: Board, state: Workspace, catalog: Catalog) -> None:
         for index, (text, style, action) in enumerate(
             content[state.detail_scroll:state.detail_scroll + capacity]
         ):
-            board.put(x, 9 + index, text, style, action, panel_width)
+            board.put(x, top + index, text, style, action, panel_width)
