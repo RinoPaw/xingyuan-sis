@@ -18,11 +18,16 @@ class WorkspaceLayoutDensityTests(unittest.TestCase):
         seed_demo(db)
         self.catalog = Catalog(db)
 
-    def test_wide_split_gives_roster_more_room_without_starving_inspector(self):
+    def test_wide_split_caps_inspector_and_gives_surplus_to_roster(self):
         layout = WorkspaceLayout(160, 35)
-        self.assertEqual(layout.split_x, 96)
-        self.assertGreater(layout.split_x, layout.width // 2)
-        self.assertGreaterEqual(layout.panel_width, 38)
+        self.assertEqual(layout.split_x, 114)
+        self.assertEqual(layout.panel_width, 42)
+        self.assertGreater(layout.split_x, layout.width * 2 // 3)
+
+    def test_medium_split_stays_balanced_before_inspector_cap(self):
+        layout = WorkspaceLayout(80, 30)
+        self.assertEqual(layout.split_x, 40)
+        self.assertEqual(layout.panel_width, 36)
 
     def test_student_inspector_does_not_repeat_roster_fields(self):
         row = self.catalog.records["students"][0]
