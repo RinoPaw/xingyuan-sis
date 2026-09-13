@@ -36,14 +36,7 @@ def show(text: str, title: str) -> None:
             ]
             while len(lines) < height - 1:
                 lines.append("")
-
-            buttons = [("p 上一页", "p上页", "prev")]
-            if last < len(records):
-                buttons.append(("Enter 下一页", "Enter", "next"))
-            buttons.append(("Esc", "Esc", "back"))
-            footer, regions = theme.footer(width, tuple(buttons), height)
-
-            lines.append(footer)
+            lines.append(theme.footer(width))
             lines = [screen._clip_cells(line, width) for line in lines]
             if lines != previous:
                 screen._paint(lines, previous)
@@ -52,7 +45,7 @@ def show(text: str, title: str) -> None:
             if isinstance(key, keys.MouseScroll):
                 key = key.direction
             if isinstance(key, screen.MouseClick):
-                key = screen._hit_action(key, navigation + regions)
+                key = screen._hit_action(key, navigation)
                 if key and key.startswith("navigate:"):
                     raise screen.NavigateTo(key.removeprefix("navigate:"))
             if key == "back":
