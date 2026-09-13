@@ -98,10 +98,16 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
                 x = board.button(x, choice_row, shown, action, current=selected)
 
         if state.key != "data":
-            text = f"/ {safe(state.query)}" if state.query else "/ 搜索姓名、编号、班级…"
-            board.put(1, 5, text, screen._TEXT_SECONDARY, "search", max(1, width - 12))
+            search_row = 4 if state.key == "students" else 5
+            if state.query:
+                text = f"/ {safe(state.query)}"
+            elif state.key == "students":
+                text = "/ 搜索；支持 --name / --class / --year …"
+            else:
+                text = "/ 搜索姓名、编号、班级…"
+            board.put(1, search_row, text, screen._TEXT_SECONDARY, "search", max(1, width - 12))
             if state.query and width >= 40:
-                board.put(width - 10, 5, theme.button("清除"), action="reset-search")
+                board.put(width - 10, search_row, theme.button("清除"), action="reset-search")
 
         separator_row = 7 if state.key == "data" else 6
         board.put(0, separator_row, "─" * width, screen._BORDER_SUBTLE)
