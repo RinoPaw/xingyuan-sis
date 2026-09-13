@@ -35,13 +35,13 @@ COLLECTIONS = {
         ("student_name", "学生", 10), ("course_name", "课程", 20),
         ("score", "成绩", 8), ("semester", "学期", 16),
     ), FIELDS["grades"], ("全部选课", "待录入", "已评分")),
-    "departments": Collection("教务 / 学院", "学院", (
+    "departments": Collection("学院", "学院", (
         ("name", "学院", 24), ("code", "编号", 10), ("children", "专业数", 8),
     ), FIELDS["departments"]),
-    "majors": Collection("教务 / 专业", "专业", (
+    "majors": Collection("专业", "专业", (
         ("name", "专业", 22), ("code", "编号", 10), ("department_name", "学院", 24),
     ), FIELDS["majors"]),
-    "classes": Collection("教务 / 班级", "班级", (
+    "classes": Collection("班级", "班级", (
         ("name", "班级", 22), ("code", "编号", 8), ("enrolled", "学生数", 8),
         ("major_name", "专业", 20),
     ), FIELDS["classes"]),
