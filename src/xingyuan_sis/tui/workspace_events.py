@@ -161,12 +161,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             continue
 
         if key.startswith("navigate:"):
-            path = key.removeprefix("navigate:")
-            if not path:
-                raise screen.NavigateTo("")
-            if path == "教务":
-                state.switch("departments")
-            continue
+            raise screen.NavigateTo(key.removeprefix("navigate:"))
         if key.startswith("collection:"):
             state.history.clear()
             state.switch(key.split(":")[1])
