@@ -100,11 +100,11 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
         if state.key != "data":
             search_row = 4 if state.key == "students" else 5
             if state.query:
-                text = f"/ {safe(state.query)}"
+                text = f"搜索  {safe(state.query)}"
             elif state.key == "students":
-                text = "/ 搜索；支持 --name / --class / --year …"
+                text = "搜索  支持 --name、--class、--year …"
             else:
-                text = "/ 搜索姓名、编号、班级…"
+                text = "搜索姓名、编号、班级…"
             board.put(1, search_row, text, screen._TEXT_SECONDARY, "search", max(1, width - 12))
             if state.query and width >= 40:
                 board.put(width - 10, search_row, theme.button("清除"), action="reset-search")
@@ -132,7 +132,7 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
                   theme.notice(safe(state.notice), error=state.notice.startswith("未完成：")) if state.notice
                   else theme.notice("点击记录预览 · Enter 打开关联 · r 刷新"), width=width)
         if state.form:
-            buttons = (("Enter 编辑字段", "↵编辑", "select"), ("s 保存 / 确认", "s保存", "save"),
+            buttons = (("Enter 编辑字段", "↵编辑", "select"), ("s 保存", "s保存", "save"),
                        ("Esc", "Esc", "cancel"))
         elif state.key == "data":
             buttons = (("i 导入 CSV", "i导入", "import"), ("o 导出 CSV", "o导出", "export"),
