@@ -1,9 +1,10 @@
+from contextlib import nullcontext
 import os
 import unittest
 from unittest.mock import patch
 
 from xingyuan_sis.auth import Identity
-from xingyuan_sis.tui import portal, screen, theme
+from xingyuan_sis.tui import app, portal, screen, theme
 
 
 class PortalLayoutTests(unittest.TestCase):
@@ -74,6 +75,30 @@ class PortalLayoutTests(unittest.TestCase):
         self.assertNotIn("方向键 选择", footer)
         self.assertIn("Enter 打开", footer)
         self.assertIn("Esc 返回", footer)
+
+    def test_logout_is_an_explicit_action_not_a_right_arrow_destination(self) -> None:
+        identity = Identity("Administrator", "admin")
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((100, 24))):
+            frame = portal.frame(identity, 3, "primary", {}, {}, 0, animate=False)
+        text = "\n".join(screen._ANSI_RE.sub("", line) for line in frame.lines)
+        self.assertIn("Enter 退出当前账户", text)
+        self.assertNotIn("→ 退出当前账户", text)
+
+        preferences: dict[str, object] = {
+            "identity": identity,
+            "portal_selected": 3,
+            "portal_focus": "primary",
+            "animate": False,
+        }
+        with patch("xingyuan_sis.service.XingyuanService") as service_type, \
+             patch.object(app.screen, "_clear"), \
+             patch.object(app.screen, "_paint"), \
+             patch.object(app.screen, "_terminal_size", return_value=os.terminal_size((100, 24))), \
+             patch.object(app.keys, "_mouse_tracking", return_value=nullcontext()), \
+             patch.object(app.keys, "_read_key", side_effect=["right", "back"]) as read_key:
+            service_type.return_value.stats.return_value = {}
+            self.assertIsNone(app._portal_home(None, selected=3, preferences=preferences))
+        self.assertEqual(read_key.call_count, 2)
 
     def test_extreme_narrow_width_hides_preview_but_entered_menu_still_renders(self) -> None:
         identity = Identity("Administrator", "admin")
