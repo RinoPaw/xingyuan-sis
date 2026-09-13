@@ -142,7 +142,7 @@ def frame(
     else:
         board.put(right_x, 1, "退出登录", screen._BOLD + screen._TEXT_ACCENT)
         board.put(right_x, 3, f"当前用户  {name}", screen._TEXT_PRIMARY)
-        board.put(right_x, 5, "Enter / Space / → 退出当前账户", screen._TEXT_SECONDARY)
+        board.put(right_x, 5, "Enter 退出当前账户", screen._TEXT_SECONDARY)
 
     return animation._starlight(board.frame(), width, angle)
 
