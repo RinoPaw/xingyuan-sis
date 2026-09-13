@@ -25,8 +25,8 @@ def button(
     current: bool = False,
     width: int | None = None,
 ) -> str:
-    """Render an action button with separate focus and current-location states."""
-    marker = "›" if selected else "·" if current else " "
+    """Render an action button; color/surface carry focus without chevrons."""
+    marker = "·" if current and not selected else " "
     shown = f"[{marker}{label} ]"
     if width is not None:
         shown = screen._pad_cells(screen._clip_cells(shown, width), width)
