@@ -68,7 +68,9 @@ class WorkspaceActionTests(unittest.TestCase):
         state = workspace.Workspace("students", selected=15, action_focus=True)
         selected = state.current(self.catalog)
 
-        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
+             patch("sys.stdout.isatty", return_value=True), patch.dict(os.environ) as environment:
+            environment.pop("NO_COLOR", None)
             frame = workspace_view.render(state, self.catalog)
 
         selected_line = next(
