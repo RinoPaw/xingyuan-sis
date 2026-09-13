@@ -123,10 +123,11 @@ def detail_targets(key: str, row: dict[str, Any], catalog: Catalog, width: int) 
 
 def render_inspector(board: Board, state: Workspace, catalog: Catalog, x: int, width: int) -> None:
     layout = WorkspaceLayout(board.width, board.height)
-    top, bottom = layout.detail_top, board.height - 2
+    heading_row = layout.panel_heading_row(state.key)
+    top, bottom = layout.panel_content_row(state.key), board.height - 2
     row = state.current(catalog)
     heading = identity(state.key, row)[0] if layout.compact and row else "档案"
-    board.put(x, top - 1, panel_heading(heading, state.details), action="focus", width=width)
+    board.put(x, heading_row, panel_heading(heading, state.details), action="focus", width=width)
     if row is None:
         if state.query or state.view:
             board.put(x, top + 1, "当前条件下没有记录", screen._BOLD + screen._TEXT_PRIMARY, width=width)
@@ -151,7 +152,7 @@ def render_inspector(board: Board, state: Workspace, catalog: Catalog, x: int, w
         state.detail_selected = 0
         selected_line = -1
 
-    capacity = layout.detail_capacity
+    capacity = layout.panel_capacity(state.key)
     max_scroll = max(0, len(lines) - capacity)
     state.detail_scroll = min(max(0, state.detail_scroll), max_scroll)
     if state.details and selected_line >= 0:
