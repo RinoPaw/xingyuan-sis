@@ -13,21 +13,13 @@ if TYPE_CHECKING:
 
 
 def _student_summary(row: dict[str, Any]) -> list[tuple[str, str, str]]:
-    title = (
-        screen._ansi(safe(row["name"]), screen._BOLD + screen._TEXT_ACCENT)
-        + "  "
-        + screen._ansi(safe(row["student_no"]), screen._TEXT_SECONDARY)
-    )
-    lineage = f"{safe(row['family'])} · {safe(row['branch'])}"
-    enrollment = f"{safe(row['enrollment_year'])}级 · {safe(row['status'])}"
-    element = f"{safe(row['primary_element'])} · {safe(row['primary_affinity'])}"
-    classroom = safe(row["class_name"])
-    department = safe(row["department_name"])
+    species = f"{safe(row['family'])} · {safe(row['branch'])}"
     return [
-        (title, "", ""),
-        (lineage + "    " + enrollment, screen._TEXT_PRIMARY, ""),
-        (element + "    " + classroom, screen._TEXT_PRIMARY, ""),
-        (department, screen._TEXT_SECONDARY, ""),
+        (safe(row["name"]), screen._BOLD + screen._TEXT_ACCENT, ""),
+        (screen._ansi("物种  ", screen._TEXT_SECONDARY) + screen._ansi(species, screen._TEXT_PRIMARY), "", ""),
+        (screen._ansi("入学  ", screen._TEXT_SECONDARY) + screen._ansi(f"{safe(row['enrollment_year'])}级", screen._TEXT_PRIMARY), "", ""),
+        (screen._ansi("亲和  ", screen._TEXT_SECONDARY) + screen._ansi(safe(row["primary_affinity"]), screen._TEXT_PRIMARY), "", ""),
+        (screen._ansi("学院  ", screen._TEXT_SECONDARY) + screen._ansi(safe(row["department_name"]), screen._TEXT_PRIMARY), "", ""),
     ]
 
 
