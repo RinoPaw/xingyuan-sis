@@ -38,6 +38,12 @@ class TuiAuthViewTests(unittest.TestCase):
             self.assertTrue(fields[1].editable)
             self.assertTrue(fields[2].editable)
 
+    def test_login_account_starts_empty(self):
+        with patch.object(auth_view, "has_admin", return_value=True), \
+             patch.object(auth_view, "_run_form", return_value=None) as run:
+            self.assertIsNone(auth_view.login("test.db"))
+        self.assertEqual(run.call_args.args[1], {"username": "", "password": ""})
+
     def test_password_fields_keep_equal_surface_width_under_starlight(self):
         size = os.terminal_size((80, 24))
         values = {"username": "Administrator", "password": "", "confirm": ""}
