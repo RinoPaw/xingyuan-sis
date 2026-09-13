@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..student_query import parse_student_query
-from ..terminal_input import input_style, read_input
+from ..terminal_input import input_style, read_inline_input, read_input
 from . import screen
 from .view_common import safe
 from .workspace_data import Catalog, Field
@@ -74,6 +74,14 @@ def apply_form(state: Workspace, catalog: Catalog) -> None:
     state.detail_scroll = 0
 
 
+def _inline_field_geometry(frame: screen.ScreenFrame, index: int) -> tuple[int, int, int]:
+    region = next(region for region in frame.regions if region.action == f"field:{index}")
+    label_width = min(12, max(4, region.width // 3))
+    value_column = region.x + label_width + 2
+    value_width = max(1, region.width - label_width - 2)
+    return region.y, value_column, value_width
+
+
 def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> None:
     from .workspace_view import render
 
@@ -86,33 +94,18 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
             label = "搜索姓名、编号、班级等"
             state.notice = "支持多个关键词。Esc 取消。"
         current = state.query
-    else:
-        field_ = state.form.fields[index]
-        state.form.position = index
-        options = catalog.options(state.key, field_.key) if state.form.mode in {"create", "edit"} else None
-        if options is not None:
-            state.form.options = options
-            state.form.option_index = next(
-                (i for i, (value, _) in enumerate(options) if value == state.form.values.get(field_.key)),
-                0,
-            )
-            state.notice = "选择已有记录；无需记住编号。Esc 取消。"
-            return
-        label, current = field_.label, state.form.values.get(field_.key)
-        state.notice = (
-            f"当前：{safe(current)} · 留空保持"
-            + (" · 输入 - 清空" if not field_.required else "")
-            + " · Esc 取消"
-        )
 
-    frame = render(state, catalog)
-    screen._paint(frame.lines)
-    height = len(frame.lines)
-    screen.sys.stdout.write(f"\x1b[{max(1, height - 1)};1H")
-    screen.sys.stdout.flush()
-    with input_style(True):
-        raw = read_input(screen._clip_cells(label, max(4, screen._terminal_size().columns - 8)) + " > ").strip()
-    if kind == "search":
+        frame = render(state, catalog)
+        screen._paint(frame.lines)
+        height = len(frame.lines)
+        screen.sys.stdout.write(f"\x1b[{max(1, height - 1)};1H")
+        screen.sys.stdout.flush()
+        with input_style(True):
+            raw = read_input(
+                screen._clip_cells(label, max(4, screen._terminal_size().columns - 8)) + " > ",
+                initial_value=current,
+            ).strip()
+
         if state.key == "students":
             try:
                 parse_student_query(raw)
@@ -122,7 +115,38 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
         state.query, state.selected, state.roster_scroll = raw, 0, 0
         state.detail_scroll, state.detail_selected = 0, 0
         state.notice = f"搜索：{raw}" if raw else "已显示全部记录。"
-    elif raw:
-        value = None if raw == "-" and not field_.required else raw
-        state.form.values[field_.key] = field_.parse(value)
-        state.notice = "字段已暂存。Esc 取消。"
+        return
+
+    field_ = state.form.fields[index]
+    state.form.position = index
+    options = catalog.options(state.key, field_.key, state.form.values) if state.form.mode in {"create", "edit"} else None
+    if options is not None:
+        state.form.options = options
+        state.form.option_index = next(
+            (i for i, (value, _) in enumerate(options) if value == state.form.values.get(field_.key)),
+            0,
+        )
+        state.notice = "↑↓ 选择，Enter 暂存。Esc 取消。"
+        return
+
+    current = state.form.values.get(field_.key)
+    state.notice = (
+        "直接在当前字段修改 · Enter 暂存"
+        + (" · 清空后 Enter 可置空" if not field_.required else "")
+        + " · Esc 取消"
+    )
+    frame = render(state, catalog)
+    screen._paint(frame.lines)
+    row, column, width = _inline_field_geometry(frame, index)
+    with input_style(True):
+        raw = read_inline_input(
+            f"{field_.label} > ",
+            row=row,
+            column=column,
+            width=width,
+            initial_value="" if current is None else str(current),
+        ).strip()
+
+    value = field_.parse(raw if raw else None)
+    state.form.values[field_.key] = value
+    state.notice = "字段已暂存。Esc 取消。"

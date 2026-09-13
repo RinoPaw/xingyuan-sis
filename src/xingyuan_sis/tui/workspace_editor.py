@@ -68,7 +68,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         for i, field in enumerate(form.fields[first:first + capacity], start=first):
             value = safe(form.values.get(field.key))
             if form.mode in {"create", "edit"}:
-                options = catalog.options(state.key, field.key)
+                options = catalog.options(state.key, field.key, form.values)
                 if options is not None:
                     value = next((label for key, label in options if key == form.values.get(field.key)), value)
             label_width = min(12, max(4, width // 3))

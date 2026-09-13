@@ -82,6 +82,27 @@ def _redraw_line(
     sys.stdout.flush()
 
 
+def _redraw_inline(
+    row: int,
+    column: int,
+    width: int,
+    chars: list[str],
+    cursor: int,
+    *,
+    colored: bool,
+    secret: bool = False,
+) -> None:
+    """Redraw only an existing field value without clearing its terminal row."""
+    field_width = max(1, width)
+    visible, cursor_cells = _visible_input(chars, cursor, field_width, secret=secret)
+    content = visible + " " * max(0, field_width - _display_width(visible))
+    style = _FIELD_SURFACE if colored else ""
+    surface = _SURFACE if colored else ""
+    sys.stdout.write(f"\x1b[{max(1, row)};{max(1, column)}H" + style + content + surface)
+    sys.stdout.write(f"\x1b[{max(1, row)};{max(1, column) + cursor_cells}H")
+    sys.stdout.flush()
+
+
 def _refresh_idle(on_idle: Callable[[str], None], value: str, redraw: Callable[[], None]) -> None:
     """Refresh an animated surface without exposing intermediate cursor moves."""
     hide_cursor = sys.stdout.isatty()
@@ -138,6 +159,44 @@ def _read_interactive_line(
                 redraw()
 
 
+def _read_interactive_inline(
+    *,
+    row: int,
+    column: int,
+    width: int,
+    colored: bool,
+    secret: bool = False,
+    initial_value: str = "",
+) -> str:
+    buffer = TextBuffer.from_value(initial_value)
+
+    def redraw() -> None:
+        _redraw_inline(
+            row,
+            column,
+            width,
+            buffer.chars,
+            buffer.cursor,
+            colored=colored,
+            secret=secret,
+        )
+
+    redraw()
+    with input_mode():
+        while True:
+            event = read_event(None)
+            if event is None:
+                continue
+            before = (buffer.value, buffer.cursor)
+            action = buffer.apply(event)
+            if action == "submit":
+                return buffer.value
+            if action == "cancel":
+                raise KeyboardInterrupt
+            if (buffer.value, buffer.cursor) != before:
+                redraw()
+
+
 def read_input(
     prompt: str,
     *,
@@ -164,6 +223,36 @@ def read_input(
         kwargs["initial_value"] = initial_value
     try:
         return _read_interactive_line(prompt, **kwargs)
+    finally:
+        if colored:
+            sys.stdout.write(_RESET)
+            sys.stdout.flush()
+
+
+def read_inline_input(
+    prompt: str,
+    *,
+    row: int,
+    column: int,
+    width: int,
+    secret: bool = False,
+    initial_value: str = "",
+) -> str:
+    """Edit a value in place inside an already rendered TUI field."""
+    interactive = _ACTIVE.get() and sys.stdin.isatty() and sys.stdout.isatty()
+    if not interactive:
+        return getpass.getpass(prompt) if secret else input(prompt)
+
+    colored = os.environ.get("NO_COLOR") is None
+    try:
+        return _read_interactive_inline(
+            row=row,
+            column=column,
+            width=width,
+            colored=colored,
+            secret=secret,
+            initial_value=initial_value,
+        )
     finally:
         if colored:
             sys.stdout.write(_RESET)

@@ -49,6 +49,14 @@ COLLECTIONS = {
 ACADEMICS = ("departments", "majors", "classes")
 
 
+_STUDENT_ENUMS: dict[str, tuple[str, ...]] = {
+    "status": ("在读", "休学", "保留学籍"),
+    "gender": ("男", "女"),
+    "primary_element": ("风", "水", "火", "雷", "岩", "光"),
+    "primary_affinity": ("A", "B", "C"),
+}
+
+
 class Catalog:
     def __init__(self, db_path: Path | str | None):
         self.service = XingyuanService(db_path)
@@ -61,6 +69,8 @@ class Catalog:
             ("grades", service.list_enrollments), ("departments", service.list_departments),
             ("majors", service.list_majors), ("classes", service.list_classes),
         )}
+        self.species_families = [dict(row) for row in service.list_species_families()]
+        self.species_branches = [dict(row) for row in service.list_species_branches()]
         departments = {row["id"]: row for row in self.records["departments"]}
         majors = {row["id"]: row for row in self.records["majors"]}
         classes = {row["id"]: row for row in self.records["classes"]}
@@ -137,7 +147,31 @@ class Catalog:
         # An enrollment's student/course remain attached while editing its score.
         return tuple(f for f in COLLECTIONS[key].fields if not (key == "grades" and editing and f.key in {"student_no", "course_code"}))
 
-    def options(self, key: str, field_key: str) -> list[tuple[Any, str]] | None:
+    def options(
+        self,
+        key: str,
+        field_key: str,
+        values: dict[str, Any] | None = None,
+    ) -> list[tuple[Any, str]] | None:
+        field = next(f for f in COLLECTIONS[key].fields if f.key == field_key)
+
+        if key == "students" and field_key in _STUDENT_ENUMS:
+            options = [] if field.required else [(None, "未指定")]
+            return options + [(value, value) for value in _STUDENT_ENUMS[field_key]]
+
+        if key == "students" and field_key == "family":
+            return [(row["name"], row["name"]) for row in self.species_families]
+
+        if key == "students" and field_key == "branch":
+            family = (values or {}).get("family")
+            rows = self.species_branches
+            if family:
+                rows = [row for row in rows if row["family_name"] == family]
+            return [
+                (row["name"], row["name"] if family else f"{row['family_name']} · {row['name']}")
+                for row in rows
+            ]
+
         target = {("students", "class_code"): ("classes", "code", "name"),
                   ("courses", "department_code"): ("departments", "code", "name"),
                   ("majors", "department_code"): ("departments", "code", "name"),
@@ -147,7 +181,6 @@ class Catalog:
         if target is None:
             return None
         collection, identifier, label = target
-        field = next(f for f in COLLECTIONS[key].fields if f.key == field_key)
         options = [] if field.required else [(None, "未指定")]
         return options + [(r[identifier], f"{r[label]} · {r[identifier]}") for r in self.records[collection]]
 
