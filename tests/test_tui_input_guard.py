@@ -8,7 +8,8 @@ from unittest.mock import patch
 from xingyuan_sis import terminal_input
 from xingyuan_sis.auth import ADMIN_USERNAME
 from xingyuan_sis import tui
-from xingyuan_sis.tui import animation, auth_view, screen
+from xingyuan_sis.tui import auth_view, screen
+from xingyuan_sis.tui.text_edit import TextBuffer, TextEvent
 
 
 class TuiInputGuardTests(unittest.TestCase):
@@ -29,7 +30,11 @@ class TuiInputGuardTests(unittest.TestCase):
                     and node.func.value.id == "getpass"
                 ):
                     offenders.append(f"{path.name}:{node.lineno}: getpass.getpass()")
-        self.assertEqual(offenders, [], "TUI text fields must use terminal_input.read_input: " + ", ".join(offenders))
+        self.assertEqual(
+            offenders,
+            [],
+            "TUI text fields must use the shared text editor: " + ", ".join(offenders),
+        )
 
     def test_secret_input_uses_the_same_tui_editor_and_masks_text(self):
         with patch("sys.stdin.isatty", return_value=True), patch("sys.stdout.isatty", return_value=True), \
@@ -54,63 +59,66 @@ class TuiInputGuardTests(unittest.TestCase):
         self.assertEqual(value, ADMIN_USERNAME)
         read.assert_called_once_with("账号: ", colored=True, initial_value=ADMIN_USERNAME)
 
-    def test_auth_field_escape_cancels_instead_of_becoming_text(self):
-        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 24))), \
-             patch.object(screen, "_paint"), patch("sys.stdout.isatty", return_value=False), \
-             patch.object(auth_view, "read_input", side_effect=KeyboardInterrupt) as read:
-            value = auth_view._read_field(
-                "login",
-                {"username": "", "password": ""},
-                "password",
-                "密码",
-                secret=True,
-                database="test.db",
-                message="",
-            )
-        self.assertIsNone(value)
-        self.assertTrue(read.call_args.kwargs["secret"])
+    def test_shared_text_buffer_owns_value_cursor_and_editing(self):
+        buffer = TextBuffer.from_value("Admin")
+        buffer.apply(TextEvent("left"))
+        buffer.apply(TextEvent("left"))
+        buffer.apply(TextEvent("insert", "X"))
+        self.assertEqual(buffer.value, "AdmXin")
+        self.assertEqual(buffer.cursor, 4)
+        buffer.apply(TextEvent("backspace"))
+        self.assertEqual(buffer.value, "Admin")
+        self.assertEqual(buffer.cursor, 3)
 
-    def test_auth_username_prefill_is_owned_by_the_editor(self):
-        def fake_read(_prompt, **kwargs):
-            return kwargs["initial_value"]
-
-        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 24))), \
-             patch.object(screen, "_paint"), patch("sys.stdout.isatty", return_value=False), \
-             patch.object(auth_view, "read_input", side_effect=fake_read) as read:
-            value = auth_view._read_field(
-                "login",
-                {"username": ADMIN_USERNAME, "password": ""},
-                "username",
-                "账号",
-                database="test.db",
-                message="",
-            )
-        self.assertEqual(value, ADMIN_USERNAME)
-        self.assertEqual(read.call_args.kwargs["initial_value"], ADMIN_USERNAME)
-
-    def test_auth_field_repaints_animation_while_input_is_idle(self):
-        def fake_read(_prompt, **kwargs):
-            kwargs["on_idle"]("abc")
-            return "abc"
-
+    def test_auth_form_uses_one_state_loop_for_prefill_and_submission(self):
+        events = [
+            TextEvent("submit"),
+            TextEvent("insert", "s"),
+            TextEvent("insert", "e"),
+            TextEvent("insert", "c"),
+            TextEvent("submit"),
+        ]
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 24))), \
              patch.object(screen, "_paint") as paint, patch("sys.stdout.isatty", return_value=False), \
-             patch.object(auth_view, "_phase", side_effect=[0.0, 2.0]), \
-             patch.object(auth_view, "read_input", side_effect=fake_read) as read:
-            value = auth_view._read_field(
+             patch.object(auth_view, "input_mode", return_value=nullcontext()), \
+             patch.object(auth_view, "read_event", side_effect=events):
+            result = auth_view._run_form(
                 "login",
-                {"username": "", "password": ""},
-                "password",
-                "密码",
-                secret=True,
+                {"username": ADMIN_USERNAME, "password": ""},
                 database="test.db",
-                message="",
             )
 
-        self.assertEqual(value, "abc")
+        self.assertEqual(result, {"username": ADMIN_USERNAME, "password": "sec"})
+        self.assertGreaterEqual(paint.call_count, len(events))
+
+    def test_auth_form_repaints_animation_on_idle_without_a_second_renderer(self):
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 24))), \
+             patch.object(screen, "_paint") as paint, patch("sys.stdout.isatty", return_value=False), \
+             patch.object(auth_view, "input_mode", return_value=nullcontext()), \
+             patch.object(auth_view, "read_event", side_effect=[None, TextEvent("cancel")]):
+            result = auth_view._run_form(
+                "login",
+                {"username": ADMIN_USERNAME, "password": ""},
+                database="test.db",
+            )
+
+        self.assertIsNone(result)
         self.assertGreaterEqual(paint.call_count, 2)
-        self.assertIsNotNone(read.call_args.kwargs["on_idle"])
-        self.assertEqual(read.call_args.kwargs["idle_interval"], animation._SPARKLE_FRAME)
+
+    def test_form_paint_hides_cursor_during_frame_then_restores_it_at_field(self):
+        events: list[str] = []
+
+        def fake_paint(_lines, _previous):
+            events.append("paint")
+
+        with patch("sys.stdout.isatty", return_value=True), \
+             patch.object(screen, "_paint", side_effect=fake_paint), \
+             patch("sys.stdout.write") as write, patch("sys.stdout.flush"):
+            auth_view._paint_form(["row"], [], (12, 7))
+
+        self.assertEqual(events, ["paint"])
+        self.assertEqual(write.call_args_list[0].args[0], "\x1b[?25l")
+        self.assertEqual(write.call_args_list[-1].args[0], "\x1b[8;13H\x1b[?25h")
 
     def test_idle_refresh_hides_terminal_cursor_until_input_is_redrawn(self):
         events: list[str] = []
