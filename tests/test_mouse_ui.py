@@ -85,7 +85,7 @@ class MouseAndLayoutTests(unittest.TestCase):
     def test_footer_uses_dark_gray_backgrounds(self):
         with patch("sys.stdout.isatty", return_value=True), patch.dict(os.environ):
             os.environ.pop("NO_COLOR", None)
-            bar = theme.home_footer(79, 1, True)[0]
+            bar = theme.footer(79)
         self.assertNotIn("44m", bar)
         self.assertTrue(all(232 <= int(color) <= 238 for color in screen.re.findall(r"48;5;(\d+)m", bar)))
 
@@ -118,12 +118,13 @@ class ViewerAndInputTests(unittest.TestCase):
         self.assertIn("row-07", "".join(paint.call_args_list[-1].args[0]))
         self.assertNotIn("row-06", "".join(paint.call_args_list[-1].args[0]))
 
-    def test_viewer_footer_can_be_clicked(self):
+    def test_viewer_footer_is_not_clickable(self):
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 10))), \
              patch.object(keys, "_read_key", side_effect=[keys.MouseClick(40, 10), "back"]), \
              patch.object(screen, "_paint") as paint:
             terminal_viewer.show("\n".join(f"row-{i:02d}" for i in range(20)), "学生")
-        self.assertIn("row-06", "".join(paint.call_args_list[1].args[0]))
+        self.assertEqual(len(paint.call_args_list), 1)
+        self.assertIn("row-00", "".join(paint.call_args_list[0].args[0]))
 
     def test_native_input_keeps_chinese_and_resets_color_on_cancel(self):
         with patch("sys.stdin.isatty", return_value=True), patch("sys.stdout.isatty", return_value=True), \
