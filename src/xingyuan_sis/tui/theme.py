@@ -14,6 +14,7 @@ _TOPBAR = screen._SURFACE_TOPBAR + screen._TEXT_ACCENT + screen._BOLD
 _SECTION_HEADING = screen._TEXT_PRIMARY + screen._BOLD
 _SECONDARY = screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
 _SECONDARY_FOCUS = screen._SURFACE_SELECTED + screen._TEXT_ACCENT + screen._BOLD
+_FOOTER_LABELS = ("[ 方向键 移动 ]", "[ Enter 打开 ]", "[ Esc 返回 ]")
 
 
 def bar_space(count: int) -> str:
@@ -107,50 +108,21 @@ def notice(message: str, *, error: bool = False) -> str:
     return screen._ansi(("! " if error else "· ") + message, style) if message else ""
 
 
-def footer(
-    width: int,
-    buttons: Sequence[tuple[str, str, str]],
-    row: int,
-) -> tuple[str, list[screen.HitRegion]]:
-    def labels(use_short: bool) -> list[tuple[str, str]]:
-        return [
-            (f"[ {short if use_short else long} ]", action)
-            for long, short, action in buttons
-        ]
+def footer(width: int) -> str:
+    """Render the one global, non-interactive navigation hint."""
+    total = sum(screen._display_width(label) for label in _FOOTER_LABELS)
+    if total >= width:
+        return screen._ansi(screen._clip_cells(" ".join(_FOOTER_LABELS), width), _BAR_SURFACE)
 
-    chosen = labels(False)
-    minimum = sum(screen._display_width(text) for text, _ in chosen) + max(0, len(chosen) - 1)
-    if minimum > width:
-        chosen = labels(True)
-
-    while chosen and (
-        sum(screen._display_width(text) for text, _ in chosen) + max(0, len(chosen) - 1) > width
-    ):
-        if len(chosen) > 2:
-            chosen.pop(-2)
-        else:
-            chosen.pop(0)
-
-    if not chosen:
-        return bar_space(width), []
-
-    button_width = sum(screen._display_width(text) for text, _ in chosen)
-    free = max(0, width - button_width)
-    slots = len(chosen) + 1
+    free = width - total
+    slots = len(_FOOTER_LABELS) + 1
     base_gap, extra = divmod(free, slots)
     gaps = [base_gap + (1 if index < extra else 0) for index in range(slots)]
-
     parts: list[str] = [bar_space(gaps[0])]
-    regions: list[screen.HitRegion] = []
-    cell = gaps[0]
-    for index, (shown, action) in enumerate(chosen):
-        regions.append(screen.HitRegion(cell + 1, row, screen._display_width(shown), action))
-        parts.append(screen._ansi(shown, _BUTTON))
-        cell += screen._display_width(shown)
+    for index, label in enumerate(_FOOTER_LABELS):
+        parts.append(screen._ansi(label, _BUTTON))
         parts.append(bar_space(gaps[index + 1]))
-        cell += gaps[index + 1]
-
-    return "".join(parts), regions
+    return "".join(parts)
 
 
 def home_frame(
@@ -169,9 +141,7 @@ def home_frame(
 
     board = Board(width, height)
     board.put(0, 0, topbar(width, database=database))
-    footer_line, controls = home_footer(width, height, animate)
-    board.put(0, height - 1, footer_line)
-    board.regions.extend(controls)
+    board.put(0, height - 1, footer(width))
     protected_cells: set[tuple[int, int]] = set()
 
     # Compact layout: title and orbit occupy the body; navigation is positioned
@@ -266,11 +236,3 @@ _MODULES = (
     ("数据工作台", "查看全校概况，导入或带走记录。", "统计 · CSV · 演示数据"),
     ("结束本次工作", "已完成的操作已保存。", "Enter 退出 · 上下键继续浏览"),
 )
-
-
-def home_footer(width: int, height: int, animate: bool) -> tuple[str, list[screen.HitRegion]]:
-    motion = "暂停动画" if animate else "播放动画"
-    return footer(width, (("↑↓ 移动", "↑↓", "down"),
-                           ("Enter 打开", "↵", "select"),
-                           (f"p {motion}", "p", "pause"),
-                           ("Esc 退出", "Esc退", "back")), height)
