@@ -8,7 +8,7 @@ from .board import Board
 
 
 _BUTTON = screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
-_BUTTON_CURRENT = screen._SURFACE_SELECTED + screen._TEXT_ACCENT
+_BUTTON_CURRENT = screen._SURFACE_INTERACTIVE + screen._TEXT_ACCENT
 _BAR_SURFACE = screen._SURFACE_FOOTER + screen._TEXT_PRIMARY
 _TOPBAR = screen._SURFACE_TOPBAR + screen._TEXT_ACCENT + screen._BOLD
 _SECTION_HEADING = screen._TEXT_PRIMARY + screen._BOLD
