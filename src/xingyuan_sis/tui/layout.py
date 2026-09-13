@@ -33,6 +33,7 @@ def visible_start(selected: int, total: int, capacity: int, first: int = 0) -> i
 class WorkspaceLayout:
     width: int
     height: int
+    inspector_width: int | None = None
 
     @classmethod
     def measure(cls) -> WorkspaceLayout:
@@ -49,13 +50,15 @@ class WorkspaceLayout:
 
     @property
     def split_x(self) -> int:
-        """Give surplus width to the roster while keeping a useful inspector."""
+        """Give the roster every column the current inspector does not need."""
         if not self.split:
             return self.width
-        # panel_width = width - split_x - 4. Keep the inspector at roughly
-        # 42 cells once the terminal is wide enough instead of growing it
-        # indefinitely and wasting space that the roster can use.
-        return max(self.width // 2, self.width - 46)
+        desired = 42 if self.inspector_width is None else self.inspector_width
+        desired = min(42, max(28, desired))
+        # panel_width = width - split_x - 4. Keep at least half the screen for
+        # the roster on medium terminals; on wide terminals the inspector is
+        # sized from its current content instead of a fixed percentage/cap.
+        return max(self.width // 2, self.width - desired - 4)
 
     @property
     def panel_x(self) -> int:
