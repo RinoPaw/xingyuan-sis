@@ -108,9 +108,6 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 continue
             if key == "select":
                 key = actions[state.action_selected]
-            elif key == "back":
-                state.action_focus = False
-                continue
 
         if key in {"back", "cancel"}:
             if state.form and state.form.options is not None:
@@ -121,6 +118,16 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             elif state.details:
                 state.details = False
                 state.detail_scroll = 0
+            elif state.action_focus:
+                if state.history:
+                    state.restore(catalog)
+                else:
+                    return None
+            elif state.key != "data":
+                # Esc first moves from the roster into the page action bar.
+                # The selected record remains unchanged and is rendered as
+                # weak context while the action bar owns keyboard focus.
+                state.action_focus = True
             elif state.history:
                 state.restore(catalog)
             else:
@@ -222,9 +229,6 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
         elif key in {"up", "down", "page_up", "page_down", "home", "end"}:
             if not state.details and key == "up":
                 if state.key == "data" and state.detail_scroll == 0:
-                    state.action_focus = True
-                    continue
-                if state.key != "data" and state.selected == 0:
                     state.action_focus = True
                     continue
             amount = max(1, screen._terminal_size().lines - 11) if key.startswith("page_") else 1
