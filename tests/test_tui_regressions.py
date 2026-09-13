@@ -125,7 +125,7 @@ class TuiRegressionAuditTests(unittest.TestCase):
                 workspace._open_form(state, self.catalog, "edit")
                 self.assertIsNotNone(state.form)
 
-                with patch.object(keys, "_read_key", side_effect=["back", "back"]), \
+                with patch.object(keys, "_read_key", side_effect=["back", "back", "back"]), \
                      patch.object(screen, "_paint"), \
                      patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
                     self.assertIsNone(workspace._interact(state, self.catalog))
@@ -139,7 +139,7 @@ class TuiRegressionAuditTests(unittest.TestCase):
         count = len(self.catalog.records["students"])
         workspace._open_form(state, self.catalog, "delete")
 
-        with patch.object(keys, "_read_key", side_effect=["back", "back"]), \
+        with patch.object(keys, "_read_key", side_effect=["back", "back", "back"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             self.assertIsNone(workspace._interact(state, self.catalog))
@@ -147,9 +147,9 @@ class TuiRegressionAuditTests(unittest.TestCase):
         self.assertEqual(len(self.catalog.records["students"]), count)
         self.assertEqual(state.current(self.catalog), before)
 
-    def test_escape_unwinds_detail_focus_before_leaving_workspace(self):
+    def test_escape_unwinds_detail_focus_then_actions_before_leaving_workspace(self):
         state = workspace.Workspace("students", details=True)
-        with patch.object(keys, "_read_key", side_effect=["back", "back"]), \
+        with patch.object(keys, "_read_key", side_effect=["back", "back", "back"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             self.assertIsNone(workspace._interact(state, self.catalog))
