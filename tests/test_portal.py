@@ -30,19 +30,30 @@ class PortalLayoutTests(unittest.TestCase):
             self.assertIn(label, text)
         self.assertTrue(any(region.action.startswith("secondary:") for region in frame.regions))
 
-    def test_secondary_focus_uses_style_without_chevron(self) -> None:
+    def test_wide_academic_menu_uses_compact_single_row(self) -> None:
+        self.assertEqual(portal.secondary_columns(99, "secondary", height=24), 7)
+
+    def test_secondary_focus_is_lightweight_text_without_button_chrome(self) -> None:
         identity = Identity("Administrator", "admin")
-        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((100, 24))):
+        with patch("sys.stdout.isatty", return_value=True), patch.dict(os.environ), \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size((100, 24))):
+            os.environ.pop("NO_COLOR", None)
             preview = portal.frame(identity, 1, "primary", {1: 0}, {}, 0, animate=False)
             entered = portal.frame(identity, 1, "secondary", {1: 0}, {}, 0, animate=False)
 
-        preview_text = "\n".join(screen._ANSI_RE.sub("", line) for line in preview.lines)
-        entered_text = "\n".join(screen._ANSI_RE.sub("", line) for line in entered.lines)
-        self.assertIn("[ 学生 ]", preview_text)
-        self.assertIn("[ 学生 ]", entered_text)
-        self.assertNotIn("›", preview_text)
+        preview_raw = "\n".join(preview.lines)
+        entered_raw = "\n".join(entered.lines)
+        preview_text = screen._ANSI_RE.sub("", preview_raw)
+        entered_text = screen._ANSI_RE.sub("", entered_raw)
+        self.assertIn(" 学生 ", preview_text)
+        self.assertIn(" 学生 ", entered_text)
+        self.assertNotIn("[ 学生 ]", preview_text)
+        self.assertNotIn("[ 学生 ]", entered_text)
         self.assertNotIn("›", entered_text)
-        self.assertIn(screen._SURFACE_SELECTED, "\n".join(entered.lines))
+        self.assertNotIn(screen._SURFACE_SELECTED, entered_raw)
+        self.assertIn(screen._TEXT_ACCENT, entered_raw)
+        self.assertIn("\x1b[4m", entered_raw)
+        self.assertNotIn("\x1b[4m", preview_raw)
 
     def test_primary_keeps_weak_selection_when_focus_enters_secondary(self) -> None:
         identity = Identity("Administrator", "admin")
