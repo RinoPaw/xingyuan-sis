@@ -160,15 +160,22 @@ class TuiRegressionAuditTests(unittest.TestCase):
         row = state.current(self.catalog)
         details = workspace_view._details("students", row, self.catalog, 55)
         plain = "\n".join(screen._ANSI_RE.sub("", text) for text, _, _ in details)
+        summary = plain.split("选课与成绩", 1)[0]
 
-        self.assertIn(row["name"], plain)
-        self.assertIn(row["student_no"], plain)
+        self.assertIn(row["name"], summary)
+        self.assertIn("物种", summary)
+        self.assertIn("入学", summary)
+        self.assertIn("亲和", summary)
+        self.assertIn("学院", summary)
+        self.assertNotIn(str(row["student_no"]), summary)
+        self.assertNotIn(str(row["class_name"]), summary)
+        self.assertNotIn(str(row["status"]), summary)
+        self.assertNotIn(str(row["primary_element"]), summary)
         self.assertIn("选课与成绩", plain)
         self.assertIn("详细信息", plain)
         self.assertNotIn("即时预览", plain)
         self.assertNotIn("阅读中", plain)
         self.assertNotIn("档案字段", plain)
-        self.assertEqual(plain.count(row["student_no"]), 1)
         self.assertEqual(plain.count(row["name"]), 1)
 
 
