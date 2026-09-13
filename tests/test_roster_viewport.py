@@ -27,7 +27,7 @@ class RosterViewportTests(unittest.TestCase):
             workspace_view.render(state, self.catalog)
         self.assertEqual(state.roster_scroll, 1)
 
-        with patch.object(keys, "_read_key", side_effect=["up", "back"]), \
+        with patch.object(keys, "_read_key", side_effect=["up", "back", "back"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
             workspace._interact(state, self.catalog)
