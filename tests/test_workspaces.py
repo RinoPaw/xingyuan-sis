@@ -54,12 +54,16 @@ class WorkspaceTests(unittest.TestCase):
 
     def test_wheel_scrolls_the_panel_under_the_pointer(self):
         state = workspace.Workspace("students")
-        with patch.object(keys, "_read_key", side_effect=[keys.MouseScroll(90, 12, "down"), "back", "back"]), \
-             patch.object(screen, "_paint") as paint, patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 24))):
+        size = (120, 24)
+        frame = self.render(state, size)
+        detail_region = next(region for region in frame.regions if region.action == "focus-details")
+        right_wheel = keys.MouseScroll(detail_region.x, min(detail_region.y, 12), "down")
+        with patch.object(keys, "_read_key", side_effect=[right_wheel, "back", "back"]), \
+             patch.object(screen, "_paint") as paint, patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
             workspace._interact(state, self.catalog)
         self.assertEqual(state.selected, 0)
         self.assertIn("2–", "".join(paint.call_args_list[1].args[0]))
-        self.interact(state, [keys.MouseScroll(2, 12, "down"), "back"])
+        self.interact(state, [keys.MouseScroll(2, 12, "down"), "back", "back"])
         self.assertEqual(state.selected, 1)
 
     def test_selection_updates_profile_without_query_or_enter(self):
@@ -67,7 +71,7 @@ class WorkspaceTests(unittest.TestCase):
         first = self.render(state)
         expected = self.catalog.records["students"][1]
         second_row = next(r for r in first.regions if r.action == "row:1")
-        with patch.object(keys, "_read_key", side_effect=[keys.MouseClick(second_row.x, second_row.y), "back"]), \
+        with patch.object(keys, "_read_key", side_effect=[keys.MouseClick(second_row.x, second_row.y), "back", "back"]), \
              patch.object(screen, "_paint") as paint, patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             workspace._interact(state, self.catalog)
         self.assertEqual(state.current(self.catalog)["name"], expected["name"])
@@ -82,13 +86,13 @@ class WorkspaceTests(unittest.TestCase):
         original = state.current(self.catalog)
         related_key, related = self.catalog.related(state.key, original)
         self.assertTrue(related)
-        self.interact(state, [f"related:{related_key}:{related[0]['id']}", "back", "back"])
+        self.interact(state, [f"related:{related_key}:{related[0]['id']}", "back", "back", "back", "back"])
         self.assertEqual((state.key, state.query, state.selected), ("students", "元素", 1))
         self.assertEqual(state.current(self.catalog)["id"], original["id"])
 
     def test_keyboard_filters_and_unicode_search_use_real_records(self):
         state = workspace.Workspace("grades")
-        self.interact(state, ["2", "back"])
+        self.interact(state, ["2", "back", "back"])
         self.assertTrue(state.rows(self.catalog))
         self.assertTrue(all(row["score"] is None for row in state.rows(self.catalog)))
         state.switch("students")
@@ -108,7 +112,7 @@ class WorkspaceTests(unittest.TestCase):
             workspace._read_value(state, self.catalog, ("field", 1))
         self.assertEqual(state.form.values["name"], "暂存的名字")
         self.assertEqual(self.catalog.service.student_by_no(original["student_no"])["name"], original["name"])
-        self.interact(state, ["cancel", "back"])
+        self.interact(state, ["cancel", "back", "back"])
         self.assertIsNone(state.form)
         self.assertEqual(self.catalog.service.student_by_no(original["student_no"])["name"], original["name"])
 
@@ -192,7 +196,7 @@ class WorkspaceTests(unittest.TestCase):
     def test_short_workspace_keeps_every_record_accessible(self):
         state = workspace.Workspace("students")
         expected_name = self.catalog.records["students"][-1]["name"]
-        with patch.object(keys, "_read_key", side_effect=["end", "back"]), patch.object(screen, "_paint") as paint, \
+        with patch.object(keys, "_read_key", side_effect=["end", "back", "back"]), patch.object(screen, "_paint") as paint, \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((30, 12))):
             workspace._interact(state, self.catalog)
         self.assertEqual(state.selected, len(self.catalog.records["students"]) - 1)
@@ -232,7 +236,7 @@ class WorkspaceTests(unittest.TestCase):
 
     def test_compact_inspector_can_scroll_to_last_fields(self):
         state = workspace.Workspace("students")
-        with patch.object(keys, "_read_key", side_effect=["focus", "end", "back", "back"]), \
+        with patch.object(keys, "_read_key", side_effect=["focus", "end", "back", "back", "back"]), \
              patch.object(screen, "_paint") as paint, patch.object(screen, "_terminal_size", return_value=os.terminal_size((30, 12))):
             workspace._interact(state, self.catalog)
         self.assertTrue(any("备注" in "".join(call.args[0]) for call in paint.call_args_list))
@@ -240,7 +244,7 @@ class WorkspaceTests(unittest.TestCase):
 
     def test_data_shortcuts_open_the_displayed_collections(self):
         state = workspace.Workspace("data")
-        self.interact(state, ["4", "back"])
+        self.interact(state, ["4", "back", "back"])
         self.assertEqual(state.key, "departments")
 
     def test_import_reports_partial_failures_and_refreshes_data(self):
