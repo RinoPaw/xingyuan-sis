@@ -7,6 +7,14 @@ from .workspace_forms import open_form
 from .workspace_state import Workspace
 
 
+_RECORD_ACTIONS = ("create", "edit", "delete")
+_DATA_ACTIONS = ("import", "export", "seed")
+
+
+def _actions(state: Workspace) -> tuple[str, ...]:
+    return _DATA_ACTIONS if state.key == "data" else _RECORD_ACTIONS
+
+
 def _detail_geometry() -> tuple[int, int]:
     layout = WorkspaceLayout.measure()
     return layout.panel_width, layout.detail_capacity
@@ -79,6 +87,31 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
         if not key:
             continue
 
+        actions = _actions(state)
+        if state.action_focus and not state.form:
+            if key == "left":
+                state.action_selected = max(0, state.action_selected - 1)
+                continue
+            if key == "right":
+                state.action_selected = min(len(actions) - 1, state.action_selected + 1)
+                continue
+            if key == "home":
+                state.action_selected = 0
+                continue
+            if key == "end":
+                state.action_selected = len(actions) - 1
+                continue
+            if key == "up":
+                continue
+            if key == "down":
+                state.action_focus = False
+                continue
+            if key == "select":
+                key = actions[state.action_selected]
+            elif key == "back":
+                state.action_focus = False
+                continue
+
         if key in {"back", "cancel"}:
             if state.form and state.form.options is not None:
                 state.form.options = None
@@ -141,26 +174,32 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             _, collection, identifier = key.split(":")
             state.visit(collection, identifier, catalog)
         elif key.startswith("row:"):
+            state.action_focus = False
             state.selected = int(key.split(":")[1])
             state.detail_scroll = 0
             state.detail_selected = 0
             state.details = not WorkspaceLayout.measure().split
         elif key.startswith("edit-field:"):
+            state.action_focus = False
             open_form(state, catalog, "edit")
             field_key = key.split(":")[1]
             state.form.position = next(i for i, field in enumerate(state.form.fields) if field.key == field_key)
             return "field", state.form.position
         elif key == "right":
             if state.key != "data":
+                state.action_focus = False
                 state.details = True
                 reveal_detail_selection(state, catalog)
         elif key == "left":
             if state.key != "data":
+                state.action_focus = False
                 state.details = False
         elif key == "focus-details":
+            state.action_focus = False
             state.details = True
             reveal_detail_selection(state, catalog)
         elif key == "focus":
+            state.action_focus = False
             state.details = not state.details
             if state.details:
                 reveal_detail_selection(state, catalog)
@@ -186,6 +225,13 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 state.form.position = next(i for i, field in enumerate(state.form.fields) if field.key == field_key)
                 return "field", state.form.position
         elif key in {"up", "down", "page_up", "page_down", "home", "end"}:
+            if not state.details and key == "up":
+                if state.key == "data" and state.detail_scroll == 0:
+                    state.action_focus = True
+                    continue
+                if state.key != "data" and state.selected == 0:
+                    state.action_focus = True
+                    continue
             amount = max(1, screen._terminal_size().lines - 11) if key.startswith("page_") else 1
             amount *= -1 if key in {"up", "page_up"} else 1
             if wheel and state.key != "data":
@@ -226,6 +272,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 state.detail_scroll = 0
                 state.detail_selected = 0
         elif key.startswith("view:") or key in {"1", "2", "3", "4"}:
+            state.action_focus = False
             index = int(key.split(":")[1]) if key.startswith("view:") else int(key) - 1
             if state.key == "data":
                 state.switch(("students", "courses", "grades", "departments")[index])
@@ -235,13 +282,16 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 state.view, state.selected, state.roster_scroll = index, 0, 0
                 state.detail_scroll, state.detail_selected = 0, 0
         elif key == "search" and state.key != "data":
+            state.action_focus = False
             return "search", 0
         elif key == "reset-search":
             state.query, state.selected, state.roster_scroll = "", 0, 0
             state.detail_scroll, state.detail_selected = 0, 0
         elif key == "refresh":
             return "refresh", 0
-        elif key in {"create", "edit", "delete"} and state.key != "data":
+        elif key in _RECORD_ACTIONS and state.key != "data":
+            state.action_focus = False
             open_form(state, catalog, key)
-        elif key in {"import", "export", "seed"}:
+        elif key in _DATA_ACTIONS and state.key == "data":
+            state.action_focus = False
             open_form(state, catalog, key)
