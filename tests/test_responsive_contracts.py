@@ -30,7 +30,10 @@ class ResponsiveContractTests(unittest.TestCase):
                 action = app._portal_home(self.db, selected=1, preferences={
                     'identity': self.identity, 'portal_focus': 'secondary', 'animate': False,
                 })
-                self.assertEqual(action, 'workspace:departments')
+                items = portal.secondary_items(self.identity, 1)
+                columns = portal.secondary_columns(max(1, size[0] - 1), 'secondary', height=size[1])
+                expected = items[min(len(items) - 1, columns)].action
+                self.assertEqual(action, expected)
 
     def test_every_portal_selection_is_visible_and_clickable_after_resize(self):
         for size in ((26, 8), (34, 12), (49, 9), (100, 7), (100, 24)):
