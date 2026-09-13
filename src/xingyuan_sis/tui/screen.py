@@ -121,7 +121,7 @@ def _breadcrumb(title: str, width: int, row: int = 2) -> tuple[str, list[HitRegi
     regions = []
     for index, label in enumerate(parts):
         if index:
-            text += _ansi("  ", _BORDER_SUBTLE)
+            text += _ansi(" / ", _BORDER_SUBTLE)
         cell = _display_width(text)
         clickable = index < len(parts) - 1 and cell + _display_width(label) <= width
         if clickable:
