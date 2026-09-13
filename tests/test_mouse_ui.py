@@ -5,7 +5,15 @@ import unittest
 from unittest.mock import patch
 
 from xingyuan_sis import terminal_input
-from xingyuan_sis.tui import app as menu, screen, keys, animation, theme, viewer as terminal_viewer
+from xingyuan_sis.tui import (
+    app as menu,
+    screen,
+    keys,
+    animation,
+    theme,
+    text_edit,
+    viewer as terminal_viewer,
+)
 
 LABELS = ("学生", "教务", "课程", "成绩", "数据", "退出")
 
@@ -139,30 +147,39 @@ class ViewerAndInputTests(unittest.TestCase):
         import termios
         import tty
 
-        with patch("sys.stdin.fileno", return_value=10), \
+        with patch("sys.stdin.isatty", return_value=True), \
+             patch("sys.stdin.fileno", return_value=10), \
              patch("termios.tcgetattr", return_value=[1, 2, 3]), \
              patch("tty.setcbreak") as cbreak, patch("termios.tcsetattr") as restore, \
              patch("os.read", side_effect=[b"\t", b"\x1b"]), \
-             patch.object(terminal_input, "_read_escape_sequence", return_value=b""), \
-             redirect_stdout(StringIO()):
-            with self.assertRaises(KeyboardInterrupt):
-                terminal_input._read_line_posix("备注 > ", colored=False)
+             patch.object(text_edit, "_read_escape_sequence", return_value=b""):
+            with text_edit.input_mode():
+                self.assertEqual(text_edit.read_event().kind, "tab")
+                self.assertEqual(text_edit.read_event().kind, "cancel")
         cbreak.assert_called_once_with(10, termios.TCSANOW)
         restore.assert_called_once()
 
     @unittest.skipIf(os.name == "nt", "POSIX line editor")
     def test_tui_line_editor_accepts_utf8_and_cursor_navigation(self):
         import termios
+        import tty
 
         chinese = list("林岚".encode("utf-8"))
         reads = [bytes([byte]) for byte in chinese] + [b"\x1b", b"X", b"\r"]
-        with patch("sys.stdin.fileno", return_value=10), \
-             patch("termios.tcgetattr", return_value=[1, 2, 3]), patch("tty.setcbreak"), \
-             patch("termios.tcsetattr"), patch("os.read", side_effect=reads), \
-             patch.object(terminal_input, "_read_escape_sequence", return_value=b"[D"), \
-             redirect_stdout(StringIO()):
-            value = terminal_input._read_line_posix("姓名 > ", colored=False)
-        self.assertEqual(value, "林X岚")
+        buffer = text_edit.TextBuffer.from_value()
+        with patch("sys.stdin.isatty", return_value=True), \
+             patch("sys.stdin.fileno", return_value=10), \
+             patch("termios.tcgetattr", return_value=[1, 2, 3]), \
+             patch("tty.setcbreak"), patch("termios.tcsetattr"), \
+             patch("os.read", side_effect=reads), \
+             patch.object(text_edit, "_read_escape_sequence", return_value=b"[D"):
+            with text_edit.input_mode():
+                while True:
+                    event = text_edit.read_event()
+                    action = buffer.apply(event)
+                    if action == "submit":
+                        break
+        self.assertEqual(buffer.value, "林X岚")
 
     def test_cli_prompts_remain_plain(self):
         with patch("builtins.input", return_value="林岚") as read:
