@@ -241,11 +241,13 @@ def _portal_home(
                     selected = int(key) - 1
                 elif key == "pause" and selected == 0:
                     preferences["animate"] = not animate
-                elif key in {"select", "right"}:
+                elif key == "select":
                     if selected == 3:
                         return "logout"
                     if items:
                         focus = "secondary"
+                elif key == "right" and items:
+                    focus = "secondary"
                 elif key == "back":
                     return None
                 continue
