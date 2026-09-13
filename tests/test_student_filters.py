@@ -9,6 +9,8 @@ from xingyuan_sis.csv_io import STUDENT_FIELDS
 from xingyuan_sis.cli import main as cli_main
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
+from xingyuan_sis.student_query import parse_student_query
+from xingyuan_sis.tui.workspace_data import Catalog
 
 
 class StudentFilterCliTests(unittest.TestCase):
@@ -99,6 +101,27 @@ class StudentFilterCliTests(unittest.TestCase):
         self.assertIn("20260001", output)
         self.assertIn("20260002", output)
         self.assertNotIn("20250001", output)
+
+    def test_tui_query_uses_cli_option_names(self) -> None:
+        query = parse_student_query("--major 元素 --year 2026 --status 在")
+        self.assertEqual(query.major_codes, ("元素",))
+        self.assertEqual(query.years, (2026,))
+        self.assertEqual(query.statuses, ("在",))
+
+        catalog = Catalog(self.db_path)
+        rows = catalog.rows("students", query="--major 元素 --year 2026 --status 在")
+        student_nos = {row["student_no"] for row in rows}
+        self.assertIn("20260001", student_nos)
+        self.assertNotIn("20250004", student_nos)
+        self.assertNotIn("20250001", student_nos)
+
+    def test_tui_query_accepts_plain_text_with_structured_filters(self) -> None:
+        catalog = Catalog(self.db_path)
+        rows = catalog.rows("students", query="赤狐 --status 在读")
+        student_nos = {row["student_no"] for row in rows}
+        self.assertIn("20250004", student_nos)
+        self.assertIn("20240003", student_nos)
+        self.assertNotIn("20230002", student_nos)
 
     def test_csv_format_can_be_written_to_stdout(self) -> None:
         output = self.run_xy("stu", "ls", "--major", "元素", "--format", "csv")
