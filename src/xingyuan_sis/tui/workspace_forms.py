@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..student_query import parse_student_query
 from ..terminal_input import input_style, read_input
 from . import screen
 from .view_common import safe
@@ -78,8 +79,13 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
 
     kind, index = event
     if kind == "search":
-        label, current = "搜索姓名、编号、班级等", state.query
-        state.notice = "支持多个关键词。Esc 取消。"
+        if state.key == "students":
+            label = "搜索（可用 --name / --class / --year 等）"
+            state.notice = "学生搜索与 xy stu ls 使用同一套查询条件。Esc 取消。"
+        else:
+            label = "搜索姓名、编号、班级等"
+            state.notice = "支持多个关键词。Esc 取消。"
+        current = state.query
     else:
         field_ = state.form.fields[index]
         state.form.position = index
@@ -107,6 +113,12 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
     with input_style(True):
         raw = read_input(screen._clip_cells(label, max(4, screen._terminal_size().columns - 8)) + " > ").strip()
     if kind == "search":
+        if state.key == "students":
+            try:
+                parse_student_query(raw)
+            except ValueError as exc:
+                state.notice = f"未完成：{exc}"
+                return
         state.query, state.selected, state.roster_scroll = raw, 0, 0
         state.detail_scroll, state.detail_selected = 0, 0
         state.notice = f"搜索：{raw}" if raw else "已显示全部记录。"
