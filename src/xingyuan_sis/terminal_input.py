@@ -1,21 +1,20 @@
 """Line input shared by the TUI and the plain CLI.
 
-The default TUI uses a tiny stdlib line editor so Esc has deterministic
-"cancel the innermost interaction" semantics. Plain CLI prompts still use
-Python's normal ``input()`` unchanged.
+Interactive TUI text editing is backed by :mod:`xingyuan_sis.tui.text_edit`,
+which owns the editable buffer and raw key decoding. Plain CLI prompts still
+use Python's normal ``input()`` / ``getpass()`` behavior.
 """
 from collections.abc import Callable
 from contextlib import contextmanager
 from contextvars import ContextVar
 import getpass
 import os
-import select
 import shutil
 import sys
-import time
-import unicodedata
 
+from .tui.text_edit import TextBuffer, display_width, input_mode, read_event
 from .tui.tokens import _RESET, _SURFACE, _SELECTED as _FIELD_SURFACE
+
 
 _ACTIVE = ContextVar("menu_input_style", default=False)
 
@@ -29,14 +28,8 @@ def input_style(enabled: bool):
         _ACTIVE.reset(token)
 
 
-def _cell_width(char: str) -> int:
-    if unicodedata.combining(char) or unicodedata.category(char) in {"Cf", "Mn", "Me"}:
-        return 0
-    return 2 if unicodedata.east_asian_width(char) in {"W", "F"} else 1
-
-
 def _display_width(text: str) -> int:
-    return sum(_cell_width(char) for char in text)
+    return display_width(text)
 
 
 def _terminal_columns() -> int:
@@ -49,25 +42,9 @@ def _terminal_columns() -> int:
 def _visible_input(
     chars: list[str], cursor: int, width: int, *, secret: bool = False
 ) -> tuple[str, int]:
-    """Return a one-line viewport and the cursor cell inside it."""
-    width = max(1, width)
-    rendered = ["•"] * len(chars) if secret else chars
-    start = 0
-    while start < cursor and _display_width("".join(rendered[start:cursor])) >= width:
-        start += 1
-
-    shown: list[str] = []
-    used = 0
-    for char in rendered[start:]:
-        cells = _cell_width(char)
-        if shown and used + cells > width:
-            break
-        if not shown and cells > width:
-            break
-        shown.append(char)
-        used += cells
-    cursor_cells = min(width, _display_width("".join(rendered[start:cursor])))
-    return "".join(shown), cursor_cells
+    """Compatibility wrapper around the shared TUI text buffer viewport."""
+    buffer = TextBuffer(list(chars), max(0, min(cursor, len(chars))))
+    return buffer.view(width, secret=secret)
 
 
 def _redraw_line(
@@ -120,234 +97,6 @@ def _refresh_idle(on_idle: Callable[[str], None], value: str, redraw: Callable[[
             sys.stdout.flush()
 
 
-def _read_escape_sequence(fd: int) -> bytes:
-    sequence = bytearray()
-    while len(sequence) < 32:
-        ready, _, _ = select.select([fd], [], [], 0.035)
-        if not ready:
-            break
-        chunk = os.read(fd, 1)
-        if not chunk:
-            break
-        sequence += chunk
-        byte = chunk[0]
-        if len(sequence) >= 2 and sequence.startswith((b"[", b"O")) and 0x40 <= byte <= 0x7E:
-            break
-    return bytes(sequence)
-
-
-def _read_utf8_char(fd: int, first: bytes) -> str:
-    lead = first[0]
-    if lead < 0x80:
-        return first.decode("ascii", errors="ignore")
-    if 0xC2 <= lead <= 0xDF:
-        needed = 1
-    elif 0xE0 <= lead <= 0xEF:
-        needed = 2
-    elif 0xF0 <= lead <= 0xF4:
-        needed = 3
-    else:
-        return ""
-    data = bytearray(first)
-    for _ in range(needed):
-        data += os.read(fd, 1)
-    return bytes(data).decode("utf-8", errors="ignore")
-
-
-def _apply_navigation(sequence: bytes, chars: list[str], cursor: int) -> tuple[int, bool]:
-    if sequence in {b"[D", b"OD"}:
-        return max(0, cursor - 1), True
-    if sequence in {b"[C", b"OC"}:
-        return min(len(chars), cursor + 1), True
-    if sequence in {b"[H", b"OH", b"[1~", b"[7~"}:
-        return 0, True
-    if sequence in {b"[F", b"OF", b"[4~", b"[8~"}:
-        return len(chars), True
-    if sequence == b"[3~" and cursor < len(chars):
-        del chars[cursor]
-        return cursor, True
-    return cursor, False
-
-
-def _read_line_posix(
-    prompt: str,
-    *,
-    colored: bool,
-    secret: bool = False,
-    field_width: int | None = None,
-    on_idle: Callable[[str], None] | None = None,
-    idle_interval: float = 0.15,
-    initial_value: str = "",
-) -> str:
-    import termios
-    import tty
-
-    fd = sys.stdin.fileno()
-    previous = termios.tcgetattr(fd)
-    chars = list(initial_value)
-    cursor = len(chars)
-    try:
-        tty.setcbreak(fd, termios.TCSANOW)
-        _redraw_line(
-            prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
-        )
-        while True:
-            if on_idle is not None:
-                ready, _, _ = select.select([fd], [], [], max(0.01, idle_interval))
-                if not ready:
-                    _refresh_idle(
-                        on_idle,
-                        "".join(chars),
-                        lambda: _redraw_line(
-                            prompt,
-                            chars,
-                            cursor,
-                            colored=colored,
-                            secret=secret,
-                            field_width=field_width,
-                        ),
-                    )
-                    continue
-            raw = os.read(fd, 1)
-            if not raw:
-                raise KeyboardInterrupt
-            if raw == b"\x1b":
-                sequence = _read_escape_sequence(fd)
-                if not sequence:
-                    raise KeyboardInterrupt
-                cursor, changed = _apply_navigation(sequence, chars, cursor)
-                if changed:
-                    _redraw_line(
-                        prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
-                    )
-                continue
-            if raw in {b"\r", b"\n"}:
-                return "".join(chars)
-            if raw in {b"\x03", b"\x04"}:
-                raise KeyboardInterrupt
-            if raw in {b"\x08", b"\x7f"}:
-                if cursor:
-                    cursor -= 1
-                    del chars[cursor]
-                    _redraw_line(
-                        prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
-                    )
-                continue
-            if raw == b"\x01":
-                cursor = 0
-                _redraw_line(
-                    prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
-                )
-                continue
-            if raw == b"\x05":
-                cursor = len(chars)
-                _redraw_line(
-                    prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
-                )
-                continue
-            if raw == b"\x15":
-                chars.clear()
-                cursor = 0
-                _redraw_line(
-                    prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
-                )
-                continue
-            if raw == b"\x0b":
-                del chars[cursor:]
-                _redraw_line(
-                    prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
-                )
-                continue
-            if raw == b"\t":
-                continue
-
-            char = _read_utf8_char(fd, raw)
-            if char and all(part.isprintable() for part in char):
-                chars[cursor:cursor] = list(char)
-                cursor += len(char)
-                _redraw_line(
-                    prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
-                )
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, previous)
-
-
-def _read_line_windows(
-    prompt: str,
-    *,
-    colored: bool,
-    secret: bool = False,
-    field_width: int | None = None,
-    on_idle: Callable[[str], None] | None = None,
-    idle_interval: float = 0.15,
-    initial_value: str = "",
-) -> str:
-    import msvcrt
-
-    chars = list(initial_value)
-    cursor = len(chars)
-    _redraw_line(
-        prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
-    )
-    next_idle = time.monotonic() + max(0.01, idle_interval)
-    while True:
-        if on_idle is not None:
-            while not msvcrt.kbhit():
-                now = time.monotonic()
-                if now >= next_idle:
-                    _refresh_idle(
-                        on_idle,
-                        "".join(chars),
-                        lambda: _redraw_line(
-                            prompt,
-                            chars,
-                            cursor,
-                            colored=colored,
-                            secret=secret,
-                            field_width=field_width,
-                        ),
-                    )
-                    next_idle = now + max(0.01, idle_interval)
-                time.sleep(min(0.01, max(0.0, next_idle - now)))
-        char = msvcrt.getwch()
-        if char in {"\x00", "\xe0"}:
-            code = msvcrt.getwch()
-            if code == "K":
-                cursor = max(0, cursor - 1)
-            elif code == "M":
-                cursor = min(len(chars), cursor + 1)
-            elif code == "G":
-                cursor = 0
-            elif code == "O":
-                cursor = len(chars)
-            elif code == "S" and cursor < len(chars):
-                del chars[cursor]
-            _redraw_line(
-                prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
-            )
-            continue
-        if char == "\x1b" or char in {"\x03", "\x04"}:
-            raise KeyboardInterrupt
-        if char in {"\r", "\n"}:
-            return "".join(chars)
-        if char in {"\x08", "\x7f"}:
-            if cursor:
-                cursor -= 1
-                del chars[cursor]
-                _redraw_line(
-                    prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
-                )
-            continue
-        if char == "\t":
-            continue
-        if char and char.isprintable():
-            chars.insert(cursor, char)
-            cursor += 1
-            _redraw_line(
-                prompt, chars, cursor, colored=colored, secret=secret, field_width=field_width
-            )
-
-
 def _read_interactive_line(
     prompt: str,
     *,
@@ -358,17 +107,35 @@ def _read_interactive_line(
     idle_interval: float = 0.15,
     initial_value: str = "",
 ) -> str:
-    kwargs: dict[str, object] = {
-        "colored": colored,
-        "secret": secret,
-        "field_width": field_width,
-        "on_idle": on_idle,
-        "idle_interval": idle_interval,
-        "initial_value": initial_value,
-    }
-    if os.name == "nt":
-        return _read_line_windows(prompt, **kwargs)
-    return _read_line_posix(prompt, **kwargs)
+    buffer = TextBuffer.from_value(initial_value)
+
+    def redraw() -> None:
+        _redraw_line(
+            prompt,
+            buffer.chars,
+            buffer.cursor,
+            colored=colored,
+            secret=secret,
+            field_width=field_width,
+        )
+
+    redraw()
+    with input_mode():
+        while True:
+            event = read_event(max(0.01, idle_interval) if on_idle is not None else None)
+            if event is None:
+                if on_idle is not None:
+                    _refresh_idle(on_idle, buffer.value, redraw)
+                continue
+
+            before = (buffer.value, buffer.cursor)
+            action = buffer.apply(event)
+            if action == "submit":
+                return buffer.value
+            if action == "cancel":
+                raise KeyboardInterrupt
+            if (buffer.value, buffer.cursor) != before:
+                redraw()
 
 
 def read_input(
