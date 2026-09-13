@@ -38,22 +38,19 @@ class HomeLayoutTests(unittest.TestCase):
         right_title = lines[1].split("│", 1)[1]
         self.assertTrue(any(char in dots for char in right_title))
 
-    def test_home_footer_only_describes_keyboard_actions(self):
-        footer = self.plain(self.render((120, 36)).lines[-1])
-        self.assertIn("↑↓ 移动", footer)
-        self.assertIn("Enter 打开", footer)
-        self.assertIn("p 暂停动画", footer)
-        self.assertIn("Esc 退出", footer)
-        self.assertNotIn("滚轮", footer)
-        self.assertNotIn("点击", footer)
+    def test_footer_is_one_stable_navigation_contract(self):
+        expected = ("方向键 移动", "Enter 打开", "Esc 返回")
+        for animate in (True, False):
+            frame = self.render((120, 36), animate=animate)
+            footer = self.plain(frame.lines[-1])
+            for hint in expected:
+                self.assertIn(hint, footer)
+            self.assertFalse(any(region.y == 36 for region in frame.regions))
 
-        paused = self.plain(self.render((120, 36), animate=False).lines[-1])
-        self.assertIn("p 播放动画", paused)
-
-    def test_minimum_footer_keeps_all_essential_keys(self):
+    def test_narrow_footer_is_clipped_without_changing_wording(self):
         footer = self.plain(self.render((30, 12)).lines[-1])
-        for hint in ("↑↓", "↵", "p", "Esc退"):
-            self.assertIn(hint, footer)
+        self.assertTrue(footer.startswith("[ 方向键 移动 ]"))
+        self.assertNotIn("确认", footer)
 
 
 if __name__ == "__main__":
