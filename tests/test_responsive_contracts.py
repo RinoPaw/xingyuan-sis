@@ -30,7 +30,10 @@ class ResponsiveContractTests(unittest.TestCase):
                 action = app._portal_home(self.db, selected=1, preferences={
                     'identity': self.identity, 'portal_focus': 'secondary', 'animate': False,
                 })
-                self.assertEqual(action, 'workspace:departments')
+                items = portal.secondary_items(self.identity, 1)
+                columns = portal.secondary_columns(max(1, size[0] - 1), 'secondary', height=size[1])
+                expected = items[min(len(items) - 1, columns)].action
+                self.assertEqual(action, expected)
 
     def test_every_portal_selection_is_visible_and_clickable_after_resize(self):
         for size in ((26, 8), (34, 12), (49, 9), (100, 7), (100, 24)):
@@ -54,14 +57,18 @@ class ResponsiveContractTests(unittest.TestCase):
 
     def test_compact_detail_focus_is_visible_and_enter_edits_that_field(self):
         state = workspace.Workspace('students')
-        with patch.dict(os.environ, {'NO_COLOR': '1'}), \
+        with patch.dict(os.environ) as environment, \
+             patch('sys.stdout.isatty', return_value=True), \
              patch.object(screen, '_terminal_size', return_value=os.terminal_size((30, 12))), \
              patch.object(screen, '_paint') as paint, \
              patch.object(keys, '_read_key', side_effect=['right', 'end', 'select']):
+            environment.pop('NO_COLOR', None)
             event = workspace._interact(state, self.catalog)
         self.assertEqual(event[0], 'field')
         self.assertEqual(state.form.fields[event[1]].key, 'notes')
-        self.assertTrue(any('› 备注' in line for line in paint.call_args_list[-1].args[0]))
+        focused = next(line for line in paint.call_args_list[-1].args[0] if '备注' in screen._ANSI_RE.sub('', line))
+        self.assertIn(screen._SURFACE_SELECTED, focused)
+        self.assertNotIn('›', screen._ANSI_RE.sub('', focused))
 
     def test_narrow_workspace_keeps_every_filter_clickable(self):
         with patch.object(screen, '_terminal_size', return_value=os.terminal_size((30, 24))):

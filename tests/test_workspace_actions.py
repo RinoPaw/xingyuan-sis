@@ -37,7 +37,7 @@ class WorkspaceActionTests(unittest.TestCase):
 
     def test_arrow_focus_can_choose_edit_and_enter_opens_it(self):
         state = workspace.Workspace("students")
-        with patch.object(keys, "_read_key", side_effect=["up", "right", "select", "back"]), \
+        with patch.object(keys, "_read_key", side_effect=["up", "right", "right", "select", "back"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
              patch.object(workspace_events, "open_form") as open_form:

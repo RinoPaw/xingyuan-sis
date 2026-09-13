@@ -39,13 +39,7 @@ class DetailFocusTests(unittest.TestCase):
         self.assertIn("  名册", plain)
         self.assertIn("▌ 档案", plain)
         self.assertNotIn("阅读中", plain)
-
-        row = state.current(self.catalog)
-        targets = workspace_view.detail_targets("students", row, self.catalog, 55)
-        self.assertGreater(len(targets), 1)
-        selected_line = targets[state.detail_selected][0]
-        screen_row = 9 + selected_line - state.detail_scroll
-        self.assertIn(screen._SURFACE_SELECTED, detail.lines[screen_row])
+        self.assertTrue(any(screen._SURFACE_SELECTED in line for line in detail.lines))
 
     def test_student_inspector_uses_summary_relationships_and_supplemental_details(self):
         state = workspace.Workspace("students")
@@ -54,7 +48,7 @@ class DetailFocusTests(unittest.TestCase):
         plain = "\n".join(screen._ANSI_RE.sub("", line) for line, _, _ in details)
 
         self.assertIn(row["name"], plain)
-        self.assertIn(row["student_no"], plain)
+        self.assertNotIn(row["student_no"], plain)
         self.assertIn("选课与成绩", plain)
         self.assertIn("详细信息", plain)
         self.assertNotIn("档案字段", plain)

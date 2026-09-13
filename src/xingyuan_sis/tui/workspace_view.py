@@ -12,7 +12,7 @@ from .workspace_state import Workspace
 
 
 def _breadcrumb(state: Workspace) -> list[tuple[str, str]]:
-    return [("首页", "navigate:首页"), (COLLECTIONS[state.key].title if state.key != "data" else "数据", "")]
+    return [("首页", "navigate:"), (COLLECTIONS[state.key].title if state.key != "data" else "数据", "")]
 
 
 def _render_actions(board: Board, state: Workspace, x: int, y: int, width: int) -> None:
@@ -34,37 +34,24 @@ def render(state: Workspace, catalog: Catalog):
     width, height = max(1, terminal.columns - 1), max(4, terminal.lines)
     layout = WorkspaceLayout(width, height)
     board = Board(width, height)
-    board.put(0, 0, theme.topbar(width, catalog.db_path))
+    board.put(0, 0, theme.topbar(width, database=catalog.service.db_path))
 
     x = 0
     for index, (label, action) in enumerate(_breadcrumb(state)):
         if index:
-            x = board.put(x, 1, " / ", screen._TEXT_SECONDARY)
+            separator = " / "
+            board.put(x, 1, separator, screen._TEXT_SECONDARY)
+            x += screen._display_width(separator)
         style = screen._TEXT_ACCENT + "\x1b[4m" if action else screen._TEXT_SECONDARY
-        x = board.put(x, 1, label, style, action or None)
+        board.put(x, 1, label, style, action or None)
+        x += screen._display_width(label)
 
     if layout.compact:
         action_row = layout.action_row
-        if state.key == "data":
-            _render_actions(board, state, 0, action_row, width)
-            content_row = action_row + 1
-        else:
-            _render_actions(board, state, 0, action_row, width)
-            content_row = action_row + 1
+        _render_actions(board, state, 0, action_row, width)
+        content_row = action_row + 1
         if state.form:
-            form = state.form
-            board.put(0, content_row, form.title, screen._BOLD + screen._TEXT_ACCENT)
-            content_row += 1
-            if form.options is not None:
-                for i, (_, label) in enumerate(form.options[:max(1, height - content_row - 2)]):
-                    board.button(0, content_row + i, label, f"option:{i}", current=i == form.option_index)
-            elif form.fields:
-                field = form.fields[form.position]
-                field_line = (screen._ansi(field.label, screen._TEXT_SECONDARY) + "  "
-                              + screen._ansi(safe(form.values.get(field.key)), screen._TEXT_PRIMARY))
-                board.put(0, content_row, field_line, action=f"field:{form.position}")
-            else:
-                board.put(0, content_row, "确认执行？  Esc 取消", screen._BOLD + screen._TEXT_PRIMARY)
+            render_editor(board, state, catalog, layout.panel_x, layout.panel_width)
         elif state.current(catalog):
             _inspector(board, state, catalog, layout.panel_x, layout.panel_width)
         elif state.key == "data":

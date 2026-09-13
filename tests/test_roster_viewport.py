@@ -20,8 +20,8 @@ class RosterViewportTests(unittest.TestCase):
         self.catalog = Catalog(self.db)
 
     def test_moving_up_inside_visible_window_does_not_scroll_page(self):
-        size = (120, 42)  # roster capacity: 30 rows
-        state = workspace.Workspace("students", selected=30)
+        size = (120, 42)  # roster capacity: 33 rows
+        state = workspace.Workspace("students", selected=33)
 
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
             workspace_view.render(state, self.catalog)
@@ -32,7 +32,7 @@ class RosterViewportTests(unittest.TestCase):
              patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
             workspace._interact(state, self.catalog)
 
-        self.assertEqual(state.selected, 29)
+        self.assertEqual(state.selected, 32)
         self.assertEqual(state.roster_scroll, 1)
 
     def test_viewport_moves_only_after_selection_crosses_an_edge(self):

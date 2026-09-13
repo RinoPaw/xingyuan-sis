@@ -79,8 +79,8 @@ class KeyboardMenuTests(unittest.TestCase):
                 self.assertNotEqual(first[:-1], second[:-1])
                 self.assertTrue(any(0x2800 < ord(char) <= 0x28ff for line in first for char in line))
                 self.assertEqual(first[-1], second[-1])
-                self.assertIn("p", first[-1])
-                self.assertIn("Esc", first[-1])
+                self.assertIn("方向键", first[-1])
+                self.assertNotIn("p", first[-1])
                 self.assertNotIn("q/0", first[-1])
                 self.assertNotIn("\n", first[-1])
                 self.assertLess(screen._display_width(first[-1]), size[0])
@@ -95,7 +95,7 @@ class KeyboardMenuTests(unittest.TestCase):
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 24))):
             text = "\n".join(menu._home_lines(LABELS, 3, {}, 0, animate=False))
         self.assertIn("选课与成绩", text)
-        self.assertIn("p 播放", text)
+        self.assertNotIn("p 播放", text)
         self.assertIn("记录选课", text)
 
     def test_pausing_animation_and_interrupt_restore_cursor(self) -> None:
