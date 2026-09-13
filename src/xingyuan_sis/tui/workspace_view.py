@@ -21,7 +21,7 @@ _details = details
 _inspector = render_inspector
 _roster = render_roster
 
-_RECORD_ACTIONS = (("增加", "create"), ("编辑", "edit"), ("删除", "delete"))
+_RECORD_ACTIONS = (("搜索", "search"), ("增加", "create"), ("编辑", "edit"), ("删除", "delete"))
 _DATA_ACTIONS = (("导入", "import"), ("导出", "export"), ("演示", "seed"))
 
 
@@ -86,10 +86,13 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
                   theme.notice(safe(state.notice), error=state.notice.startswith("未完成：")) if state.notice else "",
                   width=width)
     else:
-        noun = COLLECTIONS[state.key].noun if state.key != "data" else "校园概览"
-        board.put(1, 3, noun, screen._BOLD + screen._TEXT_ACCENT)
-        action_x = max(15, screen._display_width(noun) + 5)
-        _render_actions(board, state, action_x, 3, max(0, width - action_x - 1))
+        if state.key == "data":
+            noun = "校园概览"
+            board.put(1, 3, noun, screen._BOLD + screen._TEXT_ACCENT)
+            action_x = max(15, screen._display_width(noun) + 5)
+            _render_actions(board, state, action_x, 3, max(0, width - action_x - 1))
+        else:
+            _render_actions(board, state, 1, 3, max(0, width - 2))
 
         x = 1
         if state.key == "data":
@@ -113,18 +116,6 @@ def render(state: Workspace, catalog: Catalog) -> screen.ScreenFrame:
         for shown, (_, _, action, selected) in zip(labels, choices):
             if x + screen._display_width(shown) + 4 <= width:
                 x = board.button(x, choice_row, shown, action, current=selected)
-
-        if state.key != "data":
-            search_row = 4 if state.key == "students" else 5
-            if state.query:
-                text = f"搜索  {safe(state.query)}"
-            elif state.key == "students":
-                text = "搜索  支持 --name、--class、--year …"
-            else:
-                text = "搜索姓名、编号、班级…"
-            board.put(1, search_row, text, screen._TEXT_SECONDARY, "search", max(1, width - 12))
-            if state.query and width >= 40:
-                board.put(width - 10, search_row, theme.button("清除"), action="reset-search")
 
         separator_row = 7 if state.key == "data" else 6
         board.put(0, separator_row, "─" * width, screen._BORDER_SUBTLE)
