@@ -58,6 +58,7 @@ class ResponsiveContractTests(unittest.TestCase):
     def test_compact_detail_focus_is_visible_and_enter_edits_that_field(self):
         state = workspace.Workspace('students')
         with patch.dict(os.environ) as environment, \
+             patch('sys.stdout.isatty', return_value=True), \
              patch.object(screen, '_terminal_size', return_value=os.terminal_size((30, 12))), \
              patch.object(screen, '_paint') as paint, \
              patch.object(keys, '_read_key', side_effect=['right', 'end', 'select']):
