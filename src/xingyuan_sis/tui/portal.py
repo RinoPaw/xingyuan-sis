@@ -78,9 +78,7 @@ def frame(
 
     board = Board(width, height)
     board.put(0, 0, _topbar(width, identity, name, database))
-    footer_line, controls = _footer(width, height)
-    board.put(0, height - 1, footer_line)
-    board.regions.extend(controls)
+    board.put(0, height - 1, theme.footer(width))
 
     if width < NARROW_WIDTH or height < 9:
         _compact_body(
@@ -154,19 +152,6 @@ def _topbar(
     return theme.topbar(width, database=database, context=f"{display_name} · {role}")
 
 
-def _footer(width: int, height: int) -> tuple[str, list[screen.HitRegion]]:
-    """Use one stable navigation contract at every portal level."""
-    return theme.footer(
-        width,
-        (
-            ("方向键 移动", "方向", "down"),
-            ("Enter 确认", "↵", "select"),
-            ("Esc 返回", "Esc", "back"),
-        ),
-        height,
-    )
-
-
 def _compact_body(
     board: Board,
     identity: Identity,
@@ -201,7 +186,8 @@ def _compact_body(
     for index in range(first, min(len(PRIMARY_LABELS), first + capacity)):
         label = PRIMARY_LABELS[index]
         board.put(
-            0, 2 + index - first,
+            0,
+            2 + index - first,
             theme.nav_item(label, selected=index == selected),
             action=f"primary:{index}",
             width=width,
