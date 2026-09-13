@@ -24,7 +24,7 @@ class MouseFocusTests(unittest.TestCase):
         with patch.object(
             keys,
             "_read_key",
-            side_effect=[keys.MouseScroll(70, 12, "down"), "back"],
+            side_effect=[keys.MouseScroll(90, 12, "down"), "back"],
         ), patch.object(screen, "_paint"), patch.object(
             screen, "_terminal_size", return_value=os.terminal_size((120, 24))
         ):
