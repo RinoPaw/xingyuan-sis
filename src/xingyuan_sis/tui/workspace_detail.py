@@ -162,7 +162,7 @@ def render_inspector(board: Board, state: Workspace, catalog: Catalog, x: int, w
         line_index = state.detail_scroll + offset
         if state.details and line_index == selected_line:
             plain = screen._ANSI_RE.sub("", text)
-            plain = screen._pad_cells(screen._clip_cells("› " + plain, width), width)
+            plain = screen._pad_cells(screen._clip_cells(plain, width), width)
             board.put(
                 x, top + offset, plain,
                 screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED,
