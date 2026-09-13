@@ -79,7 +79,7 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
         if state.query or state.view:
             board.put(1, 13, "清除搜索或切换上方视图。", screen._TEXT_SECONDARY, width=width - 1)
         else:
-            board.button(1, 13, "增加", "create")
+            board.put(1, 13, "可使用上方“增加”建立第一条记录。", screen._TEXT_SECONDARY, width=width - 1)
             if state.key == "students":
                 board.button(1, 15, "导入学生 CSV", "import")
             if not any(catalog.records.values()):
