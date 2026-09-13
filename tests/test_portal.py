@@ -66,15 +66,27 @@ class PortalLayoutTests(unittest.TestCase):
         self.assertIn(screen._TEXT_ON_SELECTED, strong)
         self.assertNotEqual(weak, strong)
 
-    def test_secondary_footer_calls_direction_keys_movement(self) -> None:
+    def test_portal_footer_is_identical_at_every_navigation_level(self) -> None:
         identity = Identity("Administrator", "admin")
+        states = (
+            (0, "primary", {}),
+            (1, "primary", {1: 0}),
+            (1, "secondary", {1: 0}),
+            (2, "primary", {2: 0}),
+            (2, "secondary", {2: 0}),
+            (3, "primary", {}),
+        )
+        footers: list[str] = []
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((100, 24))):
-            frame = portal.frame(identity, 1, "secondary", {1: 0}, {}, 0, animate=False)
-        footer = screen._ANSI_RE.sub("", frame.lines[-1])
+            for selected, focus, secondary in states:
+                frame = portal.frame(identity, selected, focus, secondary, {}, 0, animate=False)
+                footers.append(screen._ANSI_RE.sub("", frame.lines[-1]))
+
+        self.assertEqual(len(set(footers)), 1)
+        footer = footers[0]
         self.assertIn("方向键 移动", footer)
-        self.assertNotIn("方向键 选择", footer)
-        self.assertIn("Enter 打开", footer)
-        self.assertIn("Esc 返回", footer)
+        self.assertIn("Enter 确认", footer)
+        self.assertIn("Esc 返回 / 退出", footer)
 
     def test_logout_is_an_explicit_action_not_a_right_arrow_destination(self) -> None:
         identity = Identity("Administrator", "admin")
