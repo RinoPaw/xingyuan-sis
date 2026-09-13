@@ -70,26 +70,34 @@ class TuiRegressionAuditTests(unittest.TestCase):
                 state = workspace.Workspace(key)
                 focused = workspace_view.Board(60, 35)
                 workspace_view._roster(focused, state, self.catalog, 59)
-                focused_line = focused.frame().lines[10]
+                focused_frame = focused.frame()
+                focused_region = next(r for r in focused_frame.regions if r.action == "row:0")
+                focused_line = focused_frame.lines[focused_region.y - 1]
                 self.assertIn(screen._SURFACE_SELECTED, focused_line)
 
                 state.details = True
                 context = workspace_view.Board(60, 35)
                 workspace_view._roster(context, state, self.catalog, 59)
-                context_line = context.frame().lines[10]
+                context_frame = context.frame()
+                context_region = next(r for r in context_frame.regions if r.action == "row:0")
+                context_line = context_frame.lines[context_region.y - 1]
                 self.assertIn(screen._SURFACE_INTERACTIVE, context_line)
                 self.assertNotIn(screen._SURFACE_SELECTED, context_line)
 
                 inspector = workspace_view.Board(60, 35)
                 workspace_view._inspector(inspector, state, self.catalog, 1, 55)
-                detail_lines = inspector.frame().lines
+                inspector_frame = inspector.frame()
                 targets = workspace_view.detail_targets(key, state.current(self.catalog), self.catalog, 55)
                 self.assertTrue(targets)
-                selected_line = 9 + targets[state.detail_selected][0] - state.detail_scroll
-                self.assertIn(screen._SURFACE_SELECTED, detail_lines[selected_line])
+                selected_action = targets[state.detail_selected][1]
+                selected_region = next(r for r in inspector_frame.regions if r.action == selected_action)
+                self.assertIn(screen._SURFACE_SELECTED, inspector_frame.lines[selected_region.y - 1])
 
     def test_counts_stay_attached_to_their_matching_views(self):
-        for key in ("students", "courses", "grades"):
+        students = self.render(workspace.Workspace("students"))
+        self.assertFalse(any(region.action.startswith("view:") for region in students.regions))
+
+        for key in ("courses", "grades"):
             with self.subTest(key=key):
                 state = workspace.Workspace(key)
                 frame = self.render(state)
