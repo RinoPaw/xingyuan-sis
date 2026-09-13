@@ -81,7 +81,7 @@ def frame(
 
     board = Board(width, height)
     board.put(0, 0, _topbar(width, identity, name, database))
-    footer_line, controls = _footer(width, height, selected, focus, bool(items), animate)
+    footer_line, controls = _footer(width, height)
     board.put(0, height - 1, footer_line)
     board.regions.extend(controls)
 
@@ -157,33 +157,17 @@ def _topbar(
     return theme.topbar(width, database=database, context=f"{display_name} · {role}")
 
 
-def _footer(
-    width: int,
-    height: int,
-    selected: int,
-    focus: str,
-    has_secondary: bool,
-    animate: bool,
-) -> tuple[str, list[screen.HitRegion]]:
-    if focus == "secondary":
-        buttons = (
+def _footer(width: int, height: int) -> tuple[str, list[screen.HitRegion]]:
+    """Use one stable navigation contract at every portal level."""
+    return theme.footer(
+        width,
+        (
             ("方向键 移动", "方向", "down"),
-            ("Enter 打开", "↵", "select"),
-            ("Esc 返回", "Esc", "back"),
-        )
-    else:
-        buttons: tuple[tuple[str, str, str], ...] = (
-            ("↑↓ 移动", "↑↓", "down"),
-        )
-        if has_secondary:
-            buttons += (("Enter / → 进入", "↵/→", "select"),)
-        elif selected == 3:
-            buttons += (("Enter 退出登录", "↵退出", "select"),)
-        if selected == 0:
-            motion = "暂停动画" if animate else "播放动画"
-            buttons += ((f"p {motion}", "p", "pause"),)
-        buttons += (("Esc 退出", "Esc", "back"),)
-    return theme.footer(width, buttons, height)
+            ("Enter 确认", "↵", "select"),
+            ("Esc 返回 / 退出", "Esc", "back"),
+        ),
+        height,
+    )
 
 
 def _compact_body(
