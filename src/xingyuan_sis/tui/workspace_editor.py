@@ -26,8 +26,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         capacity = max(1, board.height - option_row - 3)
         first = min(max(0, form.option_index - capacity + 1), max(0, len(form.options) - capacity))
         for i, (_, label) in enumerate(form.options[first:first + capacity], start=first):
-            marker = "› " if i == form.option_index else "  "
-            text = screen._pad_cells(screen._clip_cells(marker + safe(label), width), width)
+            text = screen._pad_cells(screen._clip_cells(safe(label), width), width)
             selected_style = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED if i == form.option_index else ""
             board.put(x, option_row + i - first, text, selected_style, f"option:{i}", width)
         if not form.options:
@@ -75,7 +74,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
             label_width = min(12, max(4, width // 3))
             label = screen._pad_cells(screen._clip_cells(field.label + ("*" if field.required else ""), label_width), label_width)
             if i == form.position:
-                text = screen._pad_cells(screen._clip_cells(f"› {label}  {value}", width), width)
+                text = screen._pad_cells(screen._clip_cells(f"{label}  {value}", width), width)
                 board.put(
                     x, field_row + i - first, text,
                     screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED,
@@ -83,7 +82,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
                 )
             else:
                 text = (
-                    screen._ansi("  " + label, screen._TEXT_SECONDARY)
+                    screen._ansi(label, screen._TEXT_SECONDARY)
                     + "  "
                     + screen._ansi(value, screen._TEXT_PRIMARY)
                 )
@@ -95,4 +94,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
                 screen._TEXT_SECONDARY, width=width,
             )
 
-    board.put(x, board.height - 3, "Esc 取消", screen._TEXT_SECONDARY, width=width)
+    save_label = " 保存 " if form.mode in {"create", "edit"} else " 确认 "
+    next_x = board.button(x, board.height - 3, save_label, "save")
+    if next_x < x + width:
+        board.put(next_x, board.height - 3, "Esc 取消", screen._TEXT_SECONDARY, width=max(1, x + width - next_x))
