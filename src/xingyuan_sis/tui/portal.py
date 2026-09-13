@@ -164,7 +164,7 @@ def _footer(width: int, height: int) -> tuple[str, list[screen.HitRegion]]:
         (
             ("方向键 移动", "方向", "down"),
             ("Enter 确认", "↵", "select"),
-            ("Esc 返回 / 退出", "Esc", "back"),
+            ("Esc 返回", "Esc", "back"),
         ),
         height,
     )
