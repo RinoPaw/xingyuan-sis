@@ -49,10 +49,13 @@ class WorkspaceLayout:
 
     @property
     def split_x(self) -> int:
-        """Prefer the roster on wide screens without starving the inspector."""
+        """Give surplus width to the roster while keeping a useful inspector."""
         if not self.split:
             return self.width
-        return min(self.width * 3 // 5, self.width - 38)
+        # panel_width = width - split_x - 4. Keep the inspector at roughly
+        # 42 cells once the terminal is wide enough instead of growing it
+        # indefinitely and wasting space that the roster can use.
+        return max(self.width // 2, self.width - 46)
 
     @property
     def panel_x(self) -> int:
