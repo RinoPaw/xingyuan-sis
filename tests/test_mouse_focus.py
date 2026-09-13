@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
-from xingyuan_sis.tui import keys, screen, workspace
+from xingyuan_sis.tui import keys, screen, workspace, workspace_view
 from xingyuan_sis.tui.workspace_data import Catalog
 
 
@@ -21,12 +21,18 @@ class MouseFocusTests(unittest.TestCase):
 
     def test_right_wheel_scrolls_without_stealing_roster_focus(self):
         state = workspace.Workspace("students")
+        size = os.terminal_size((120, 24))
+        with patch.object(screen, "_terminal_size", return_value=size):
+            frame = workspace_view.render(state, self.catalog)
+        region = next(region for region in frame.regions if region.action == "focus-details")
+        x, y = region.x, min(region.y, 12)
+
         with patch.object(
             keys,
             "_read_key",
-            side_effect=[keys.MouseScroll(90, 12, "down"), "back"],
+            side_effect=[keys.MouseScroll(x, y, "down"), "back", "back"],
         ), patch.object(screen, "_paint"), patch.object(
-            screen, "_terminal_size", return_value=os.terminal_size((120, 24))
+            screen, "_terminal_size", return_value=size
         ):
             self.assertIsNone(workspace._interact(state, self.catalog))
 
