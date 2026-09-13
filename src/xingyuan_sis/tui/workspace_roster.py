@@ -18,7 +18,7 @@ def roster_window(state: Workspace, row_count: int, capacity: int) -> int:
 
 def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) -> None:
     rows = state.rows(catalog)
-    focused = not state.details and state.form is None
+    focused = not state.details and not state.action_focus and state.form is None
     capacity = max(1, board.height - 12)
     first = roster_window(state, len(rows), capacity)
     heading = panel_heading("名册", focused)
@@ -79,7 +79,7 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
         if state.query or state.view:
             board.put(1, 13, "清除搜索或切换上方视图。", screen._TEXT_SECONDARY, width=width - 1)
         else:
-            board.button(1, 13, "a 新建", "create")
+            board.button(1, 13, "增加", "create")
             if state.key == "students":
                 board.button(1, 15, "导入学生 CSV", "import")
             if not any(catalog.records.values()):
