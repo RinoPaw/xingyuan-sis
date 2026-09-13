@@ -43,6 +43,15 @@ class WorkspaceTests(unittest.TestCase):
                         if region.action != "focus-details":
                             self.assertEqual(screen._hit_action(keys.MouseClick(region.x, region.y), frame.regions), region.action)
 
+    def test_student_workspace_header_has_no_ghost_rows(self):
+        frame = self.render(workspace.Workspace("students"))
+        plain = [screen._ANSI_RE.sub("", line) for line in frame.lines]
+        self.assertIn("搜索", plain[3])
+        self.assertTrue(plain[4].lstrip().startswith("─"))
+        self.assertIn("名册", plain[5])
+        self.assertIn("档案", plain[5])
+        self.assertNotIn("学生档案", "\n".join(plain[:6]))
+
     def test_wheel_scrolls_the_panel_under_the_pointer(self):
         state = workspace.Workspace("students")
         with patch.object(keys, "_read_key", side_effect=[keys.MouseScroll(70, 12, "down"), "back", "back"]), \
@@ -63,8 +72,8 @@ class WorkspaceTests(unittest.TestCase):
             workspace._interact(state, self.catalog)
         self.assertEqual(state.current(self.catalog)["name"], expected["name"])
         last_frame = paint.call_args_list[-1].args[0]
-        self.assertIn(expected["name"], last_frame[9])
-        self.assertGreater(screen._display_width(last_frame[9].split(expected["name"])[0]), 60)
+        profile_line = next(line for line in last_frame if expected["name"] in line)
+        self.assertGreater(screen._display_width(profile_line.split(expected["name"])[0]), 60)
         self.assertIn(expected["department_name"], "".join(last_frame))
         self.assertNotIn("Enter 查询", "".join(last_frame))
 
