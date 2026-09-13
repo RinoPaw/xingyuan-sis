@@ -200,7 +200,8 @@ class WorkspaceTests(unittest.TestCase):
              patch("sys.stdin.isatty", return_value=True), patch("sys.stdout.isatty", return_value=True):
             app.run(self.db)
         frames = [screen._ANSI_RE.sub("", "\n".join(call.args[0])) for call in paint.call_args_list]
-        self.assertIn("首页  教务  班级", frames[-2])
+        self.assertIn("首页 / 班级", frames[-2])
+        self.assertNotIn("首页 / 教务 / 班级", frames[-2])
         self.assertIn("LOCAL  test.db", frames[-1])
 
     def test_empty_database_offers_explicit_start_actions_without_seeding(self):
