@@ -7,7 +7,7 @@ from .workspace_forms import open_form
 from .workspace_state import Workspace
 
 
-_RECORD_ACTIONS = ("create", "edit", "delete")
+_RECORD_ACTIONS = ("search", "create", "edit", "delete")
 _DATA_ACTIONS = ("import", "export", "seed")
 
 
