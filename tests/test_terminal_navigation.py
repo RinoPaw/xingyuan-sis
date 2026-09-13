@@ -17,7 +17,7 @@ class BreadcrumbTests(unittest.TestCase):
             home = menu._home_frame(("学生", "教务", "课程", "成绩", "数据", "退出"), 0, {}, 0)
             child, _ = screen._breadcrumb("学生", 79)
         self.assertIn("首页", home.lines[1])
-        self.assertIn("首页 / 学生", child)
+        self.assertIn("首页  学生", child)
         with patch.object(basic_ui, "_clear"), patch("builtins.input", return_value="q"), \
              redirect_stdout(StringIO()) as output:
             basic_ui.run()
@@ -36,7 +36,7 @@ class BreadcrumbTests(unittest.TestCase):
                 self.assertIsNone(screen._hit_action(keys.MouseClick(6, 2), regions))
                 self.assertIsNone(screen._hit_action(keys.MouseClick(15, 2), regions))
                 self.assertEqual([region.action for region in regions],
-                                 ([] if width < 4 else ["navigate:"] if width < 11
+                                 ([] if width < 4 else ["navigate:"] if width < 10
                                   else ["navigate:", "navigate:教务"]))
 
     def test_query_titles_include_academic_entity(self):
