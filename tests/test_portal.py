@@ -59,11 +59,12 @@ class PortalLayoutTests(unittest.TestCase):
             os.environ.pop("NO_COLOR", None)
             weak = theme.button("学生", current=True)
             strong = theme.button("学生", selected=True)
+        self.assertEqual(screen._TEXT_ON_SELECTED, screen._TEXT_ACCENT)
         self.assertIn(screen._SURFACE_INTERACTIVE, weak)
         self.assertIn(screen._TEXT_ACCENT, weak)
         self.assertNotIn(screen._SURFACE_SELECTED, weak)
         self.assertIn(screen._SURFACE_SELECTED, strong)
-        self.assertIn(screen._TEXT_ON_SELECTED, strong)
+        self.assertIn(screen._TEXT_ACCENT, strong)
         self.assertNotEqual(weak, strong)
 
     def test_portal_footer_is_identical_at_every_navigation_level(self) -> None:
