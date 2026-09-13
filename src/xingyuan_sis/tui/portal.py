@@ -12,8 +12,9 @@ from .layout import visible_start
 
 PRIMARY_LABELS = ("首页", "教务", "个人中心", "退出登录")
 NARROW_WIDTH = 38
-_SECONDARY_SLOT_WIDTH = 10
-_SECONDARY_MAX_COLUMNS = 7
+_SECONDARY_SLOT_WIDTH = 14
+_SECONDARY_CARD_WIDTH = 10
+_SECONDARY_MAX_COLUMNS = 4
 
 
 @dataclass(frozen=True)
@@ -182,14 +183,15 @@ def _compact_body(
         board.put(0, 1, PRIMARY_LABELS[selected], screen._BOLD + screen._TEXT_ACCENT)
         capacity = max(1, height - 4)
         first = visible_start(secondary, len(items), capacity)
+        card_width = min(_SECONDARY_CARD_WIDTH, width)
         for index in range(first, min(len(items), first + capacity)):
             item = items[index]
             y = 3 + index - first
             board.put(
                 0, y,
-                theme.secondary_item(item.label, selected=index == secondary),
+                theme.secondary_item(item.label, selected=index == secondary, width=card_width),
                 action=f"secondary:{index}",
-                width=width,
+                width=card_width,
             )
         return
 
@@ -277,6 +279,7 @@ def _secondary_grid(
         return
     columns = min(len(items), secondary_columns(board.width, "secondary", height=board.height))
     slot_width = max(1, min(_SECONDARY_SLOT_WIDTH, width // columns))
+    card_width = max(1, min(_SECONDARY_CARD_WIDTH, slot_width))
     total_rows = (len(items) + columns - 1) // columns
     capacity = max(1, (board.height - y) // 2)
     first = visible_start(secondary // columns, total_rows, capacity)
@@ -289,9 +292,13 @@ def _secondary_grid(
         board.put(
             x + col * slot_width,
             item_y,
-            theme.secondary_item(item.label, selected=focused and index == secondary),
+            theme.secondary_item(
+                item.label,
+                selected=focused and index == secondary,
+                width=card_width,
+            ),
             action=f"secondary:{index}",
-            width=slot_width,
+            width=card_width,
         )
 
 
