@@ -77,9 +77,26 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         plain = "\n".join(screen._ANSI_RE.sub("", line) for line in frame.lines)
         self.assertIn("档案", plain)
         self.assertIn("编辑中", plain)
+        self.assertIn("物种", plain)
+        self.assertIn("选课与成绩", plain)
+        self.assertIn("详细信息", plain)
         self.assertNotIn("编辑 · 学生档案", plain)
+        self.assertNotIn("族系*", plain)
+        self.assertNotIn("支系*", plain)
         self.assertTrue(any(region.action == "field:0" for region in frame.regions))
         self.assertTrue(any(region.action == "save" for region in frame.regions))
+
+    def test_student_edit_navigation_order_matches_archive_layout(self):
+        state = workspace.Workspace("students")
+        workspace._open_form(state, self.catalog, "edit")
+        self.assertEqual(
+            [field.key for field in state.form.fields],
+            [
+                "name", "student_no", "family", "branch", "enrollment_year",
+                "primary_affinity", "class_code", "status", "primary_element",
+                "gender", "birth_date", "contact", "dormitory", "notes",
+            ],
+        )
 
     def test_enum_picker_expands_inside_the_inspector(self):
         state = workspace.Workspace("students")
