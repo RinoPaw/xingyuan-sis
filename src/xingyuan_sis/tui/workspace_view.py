@@ -6,14 +6,38 @@ from .view_common import Board, metric_pair, metric_summary, safe
 from .workspace_dashboard import render_dashboard
 from .workspace_data import ACADEMICS, COLLECTIONS, Catalog
 from .workspace_detail import (
-    detail_targets,
+    detail_targets as _generic_detail_targets,
     details as _details,
-    preferred_width as _preferred_inspector_width,
-    render_inspector as _inspector,
+    preferred_width as _generic_preferred_inspector_width,
+    render_inspector as _generic_inspector,
 )
 from .workspace_editor import render_editor
 from .workspace_roster import render_roster as _roster
 from .workspace_state import Workspace
+from .workspace_student_inspector import (
+    detail_targets as _student_detail_targets,
+    preferred_width as _student_preferred_inspector_width,
+    render_inspector as _student_inspector,
+)
+
+
+def detail_targets(key: str, row, catalog: Catalog, width: int):
+    if key == "students":
+        return _student_detail_targets(row, catalog, width)
+    return _generic_detail_targets(key, row, catalog, width)
+
+
+def _preferred_inspector_width(key: str, row, catalog: Catalog) -> int:
+    if key == "students":
+        return _student_preferred_inspector_width(row, catalog)
+    return _generic_preferred_inspector_width(key, row, catalog)
+
+
+def _inspector(board: Board, state: Workspace, catalog: Catalog, x: int, width: int) -> None:
+    if state.key == "students":
+        _student_inspector(board, state, catalog, x, width)
+    else:
+        _generic_inspector(board, state, catalog, x, width)
 
 
 def _breadcrumb(state: Workspace) -> list[tuple[str, str]]:
