@@ -23,7 +23,9 @@ from .workspace_student_inspector import (
 
 def detail_targets(key: str, row, catalog: Catalog, width: int):
     if key == "students":
-        return _student_detail_targets(row, catalog, width)
+        targets = _student_detail_targets(row, catalog, width)
+        offset = WorkspaceLayout.measure().detail_offset
+        return [(line, action) for line, action in targets if line >= offset]
     return _generic_detail_targets(key, row, catalog, width)
 
 
