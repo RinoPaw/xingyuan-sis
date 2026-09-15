@@ -68,6 +68,7 @@ class WorkspaceInlineEditTests(unittest.TestCase):
     def test_edit_form_stays_inside_the_same_record_inspector(self):
         state = workspace.Workspace("students")
         workspace._open_form(state, self.catalog, "edit")
+        row = state.current(self.catalog)
 
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((140, 35))), \
              patch.object(workspace_view, "render_editor") as detached_editor:
@@ -78,14 +79,20 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         self.assertIn("档案", plain)
         self.assertNotIn("编辑中", plain)
         self.assertIn("物种", plain)
+        self.assertIn("性别", plain)
+        self.assertRegex(plain, r"\d+岁")
         self.assertIn("入学", plain)
         self.assertIn("学院", plain)
         self.assertIn("班级", plain)
         self.assertIn("学籍", plain)
         self.assertIn("元素", plain)
-        self.assertIn("亲和", plain)
+        self.assertIn(f"{row['primary_element']} · {row['primary_affinity']}", plain)
+        self.assertNotIn("亲和  ", plain)
         self.assertIn("选课与成绩", plain)
-        self.assertIn("详细信息", plain)
+        self.assertIn("个人信息", plain)
+        personal = plain.split("个人信息", 1)[1]
+        self.assertNotIn("性别", personal)
+        self.assertIn("出生日期", personal)
         self.assertNotIn("编辑 · 学生档案", plain)
         self.assertNotIn("族系*", plain)
         self.assertNotIn("支系*", plain)
