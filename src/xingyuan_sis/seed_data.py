@@ -163,6 +163,25 @@ _CHARACTER_PROFILES = (
     ("林虎", "猫科", "虎", "男", None, None, "家有大猫"),
     ("李克劳", "猫科", "云豹", "男", None, None, "家有大猫"),
     ("颜书齐", "猫科", "石虎", "男", None, None, "家有大猫"),
+    # 骑士学院
+    ("Argo Northrop", "犬科", "狼", "男", None, None, "骑士学院"),
+    ("Grantly Bell", "猫科", "虎", "男", None, None, "骑士学院"),
+    ("Oscar Lawrence", "犬科", "犬", "男", None, None, "骑士学院"),
+    ("Theo Prinz von Hirschreich", "猫科", "黑豹", "男", None, None, "骑士学院"),
+    ("Diederich Olsen", "犬科", "狼狐混血", "男", None, None, "骑士学院"),
+    ("Celio Delatorre", "犬科", "犬", "男", None, None, "骑士学院"),
+    ("Julius Quingnard", "猫科", "狮", "男", None, None, "骑士学院"),
+    ("Paul Pfitzner", "熊科", "北极熊", "男", None, None, "骑士学院"),
+    ("Hermann Fürst von Eden", "猪科", "野猪", "男", None, None, "骑士学院"),
+    ("Scheat", "龙科", "龙", "男", None, None, "骑士学院"),
+    # Password
+    ("Dave Halloway", "鬣狗科", "鬣狗", "男", None, None, "Password"),
+    ("Tyson Grey", "犬科", "狼犬混血", "男", 20, None, "Password"),
+    ("Dean Orson", "熊科", "熊", "男", None, None, "Password"),
+    ("Orlando Noble", "龙科", "龙", "男", None, None, "Password"),
+    ("Hoss Warner", "猫科", "狮", "男", None, None, "Password"),
+    ("Sal Warden", "鳄科", "鳄鱼", "男", None, None, "Password"),
+    ("Roswell Sinclair", "猪科", "野猪", "男", None, None, "Password"),
 )
 
 _YEAR_CLASS_CODES = {
