@@ -194,17 +194,24 @@ def render_inspector(
         return
 
     editing = _editing(state)
+    heading = safe(row["name"]) if layout.compact else "档案"
     board.put(
         x,
         layout.panel_heading_row(state.key),
-        panel_heading("档案", state.details or editing),
+        panel_heading(heading, state.details or editing),
         action="focus" if not editing else None,
         width=width,
     )
 
-    lines = _lines(row, catalog, state if editing else None)
+    offset = layout.detail_offset
+    raw_lines = _lines(row, catalog, state if editing else None)
+    lines = raw_lines[offset:]
     save_row = board.height - 3 if editing else None
-    capacity = max(1, (save_row if save_row is not None else bottom) - top)
+    capacity = (
+        max(1, save_row - top)
+        if editing
+        else layout.panel_capacity(state.key)
+    )
 
     selected_action = ""
     target_line = 0
@@ -220,7 +227,11 @@ def render_inspector(
             0,
         )
     else:
-        targets = detail_targets(row, catalog, width)
+        targets = [
+            (line - offset, action)
+            for line, action in detail_targets(row, catalog, width)
+            if line >= offset
+        ]
         if targets:
             state.detail_selected = min(max(0, state.detail_selected), len(targets) - 1)
             target_line, selected_action = targets[state.detail_selected]
@@ -233,8 +244,8 @@ def render_inspector(
         state.detail_scroll = visible_start(target_line, len(lines), capacity, state.detail_scroll)
 
     visible = lines[state.detail_scroll:state.detail_scroll + capacity]
-    for offset, segments in enumerate(visible):
-        y = top + offset
+    for offset_in_view, segments in enumerate(visible):
+        y = top + offset_in_view
         cursor = x
         for segment_index, (text, style, action) in enumerate(segments):
             remaining = max(0, x + width - cursor)
@@ -243,7 +254,11 @@ def render_inspector(
             shown = screen._clip_cells(text, remaining)
             display = screen._display_width(shown)
             selected = action and action == selected_action and (editing or state.details)
-            drawn_style = screen._BOLD + screen._TEXT_ACCENT if selected else style
+            drawn_style = (
+                screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
+                if selected
+                else style
+            )
 
             if action:
                 hit_width = max(1, display)
@@ -260,6 +275,15 @@ def render_inspector(
     if editing:
         board.button(x, save_row, " 保存 ", "save")
     else:
+        if len(lines) > capacity and not layout.compact:
+            board.put(
+                x,
+                bottom - 1,
+                f"{state.detail_scroll + 1}–{min(len(lines), state.detail_scroll + capacity)} / {len(lines)}",
+                screen._TEXT_SECONDARY,
+                action="focus",
+                width=width,
+            )
         board.regions.extend(
             screen.HitRegion(x + 1, y + 1, width, "focus-details")
             for y in range(top, bottom)
