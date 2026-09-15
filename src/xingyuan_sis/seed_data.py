@@ -56,31 +56,63 @@ CLASSES = (
     ("MED2301", "医学2301班", "MED", 2023),
 )
 
-# Ages are normalized to this demo-world reference date. Exact month/day is
-# retained when the source gives a birthday; otherwise Jan 1 is only a
-# placeholder for producing the sourced age and is not a canonical birthday.
+# Age is descriptive source data only. It never controls admission eligibility,
+# enrollment year, class assignment, or whether a character may appear in seed.
 DEMO_REFERENCE_DATE = date(2026, 9, 15)
 
 # name, family, branch, gender, sourced age, sourced birthday (month, day), work
 _CHARACTER_PROFILES = (
     # BEASTARS
     ("雷格西", "犬科", "灰狼", "男", 19, (4, 9), "BEASTARS"),
-    ("春", "兔科", "荷兰侏儒兔", "女", 20, (10, 19), "BEASTARS"),
     ("路易", "鹿科", "红鹿", "男", 20, (3, 29), "BEASTARS"),
     ("茱诺", "犬科", "灰狼", "女", 18, (2, 12), "BEASTARS"),
     ("杰克", "犬科", "拉布拉多猎犬", "男", 19, (12, 22), "BEASTARS"),
     ("比尔", "猫科", "孟加拉虎", "男", 18, (8, 16), "BEASTARS"),
     ("里兹", "熊科", "棕熊", "男", 19, (12, 11), "BEASTARS"),
+    ("刚兵", "熊科", "大熊猫", "男", None, None, "BEASTARS"),
     ("皮纳", "牛科", "白大角羊", "男", 18, (12, 27), "BEASTARS"),
     ("席拉", "猫科", "猎豹", "女", 18, (6, 21), "BEASTARS"),
     ("米古诺", "鬣狗科", "斑鬣狗", "男", 19, (8, 2), "BEASTARS"),
+    ("青叶", "鹰科", "白头海雕", "男", None, None, "BEASTARS"),
     # 疯狂动物城
-    ("朱迪·霍普斯", "兔科", "棉尾兔", "女", 24, None, "疯狂动物城"),
+    ("尼克·王尔德", "犬科", "赤狐", "男", None, None, "疯狂动物城"),
+    ("牛局长", "牛科", "非洲水牛", "男", None, None, "疯狂动物城"),
+    ("本杰明警官", "猫科", "猎豹", "男", None, None, "疯狂动物城"),
+    ("羊副市长", "牛科", "绵羊", "女", None, None, "疯狂动物城"),
+    ("狮市长", "猫科", "狮", "男", None, None, "疯狂动物城"),
+    ("闪电", "树懒科", "三趾树懒", "男", None, None, "疯狂动物城"),
+    ("大先生", "鼩鼱科", "鼩鼱", "男", None, None, "疯狂动物城"),
+    ("夏奇羊", "牛科", "瞪羚", "女", None, None, "疯狂动物城"),
+    ("芬尼克", "犬科", "耳廓狐", "男", None, None, "疯狂动物城"),
+    ("杜克·威斯顿", "鼬科", "白鼬", "男", None, None, "疯狂动物城"),
+    ("吉丁", "犬科", "赤狐", "男", None, None, "疯狂动物城"),
+    # 功夫熊猫
+    ("阿宝", "熊科", "大熊猫", "男", None, None, "功夫熊猫"),
+    ("师父", "小熊猫科", "小熊猫", "男", None, None, "功夫熊猫"),
+    ("悍娇虎", "猫科", "华南虎", "女", None, None, "功夫熊猫"),
+    ("残豹", "猫科", "雪豹", "男", None, None, "功夫熊猫"),
+    ("龟大仙", "陆龟科", "加拉帕戈斯象龟", "男", None, None, "功夫熊猫"),
+    ("猴王", "猴科", "川金丝猴", "男", None, None, "功夫熊猫"),
+    ("快螳螂", "螳科", "中华大刀螳", "男", None, None, "功夫熊猫"),
+    ("灵鹤", "鹤科", "丹顶鹤", "男", None, None, "功夫熊猫"),
+    ("俏小龙", "蝰科", "赤尾青竹丝", "女", None, None, "功夫熊猫"),
+    ("鹅阿爹", "鸭科", "鹅", "男", None, None, "功夫熊猫"),
     # BNA
     ("影森满", "犬科", "日本狸", "女", 18, (5, 13), "BNA"),
+    ("大神士郎", "犬科", "狼", "男", None, None, "BNA"),
+    ("玛丽伊丹", "鼬科", "水貂", "女", None, None, "BNA"),
+    ("杰姆·霍纳", "雉科", "鸡", "男", None, None, "BNA"),
+    ("梅丽莎·霍纳", "袋熊科", "袋熊", "女", None, None, "BNA"),
+    ("尼娜", "海豚科", "海豚", "女", None, None, "BNA"),
+    ("Pinga", "信天翁科", "漂泊信天翁", "男", None, None, "BNA"),
     # 冲吧烈子
     ("烈子", "小熊猫科", "小熊猫", "女", 25, (11, 6), "冲吧烈子"),
+    ("灰田", "鬣狗科", "斑鬣狗", "男", None, None, "冲吧烈子"),
     ("芬妮可", "犬科", "耳廓狐", "女", 25, (12, 31), "冲吧烈子"),
+    ("鹫美", "鹰科", "蛇鹫", "女", None, None, "冲吧烈子"),
+    ("五里", "猩猩科", "大猩猩", "女", None, None, "冲吧烈子"),
+    ("角田", "牛科", "瞪羚", "女", None, None, "冲吧烈子"),
+    ("只野", "马科", "驴", "男", None, None, "冲吧烈子"),
     # Echo
     ("Chase Hunter", "鼬科", "北美河獭", "男", 21, None, "Echo"),
     ("Leo Alvarez", "犬科", "红狼", "男", 24, None, "Echo"),
@@ -92,20 +124,45 @@ _CHARACTER_PROFILES = (
     ("Rocky Rickaby", "猫科", "家猫", "男", 22, (12, 19), "Lackadaisy"),
     ("Calvin McMurray", "猫科", "家猫", "男", 18, (3, 10), "Lackadaisy"),
     ("Ivy Pepper", "猫科", "家猫", "女", 18, (5, 20), "Lackadaisy"),
+    ("Mordecai Heller", "猫科", "家猫", "男", None, None, "Lackadaisy"),
+    ("Mitzi May", "猫科", "家猫", "女", None, None, "Lackadaisy"),
+    ("Viktor Vasko", "猫科", "家猫", "男", None, None, "Lackadaisy"),
     ("Serafine Savoy", "猫科", "家猫", "女", 24, (10, 25), "Lackadaisy"),
+    ("Nicodeme Savoy", "猫科", "家猫", "男", None, None, "Lackadaisy"),
+    # Blacksad
+    ("John Blacksad", "猫科", "家猫", "男", None, None, "Blacksad"),
+    ("Weekly", "鼬科", "鼬", "男", None, None, "Blacksad"),
+    ("Smirnov", "犬科", "德国牧羊犬", "男", None, None, "Blacksad"),
+    ("Alma Mayer", "猫科", "家猫", "女", None, None, "Blacksad"),
     # Night in the Woods
     ("Mae Borowski", "猫科", "家猫", "女", 20, None, "Night in the Woods"),
     ("Gregg Lee", "犬科", "赤狐", "男", 21, None, "Night in the Woods"),
     ("Angus Delaney", "熊科", "熊", "男", 21, None, "Night in the Woods"),
     ("Bea Santello", "鳄科", "鳄鱼", "女", 20, None, "Night in the Woods"),
     # 刺猬索尼克
+    ("刺猬索尼克", "猬科", "刺猬", "男", None, None, "刺猬索尼克"),
+    ("麦尔斯·“塔尔斯”·普劳尔", "犬科", "双尾狐", "男", None, None, "刺猬索尼克"),
+    ("针鼹纳克鲁斯", "针鼹科", "针鼹", "男", None, None, "刺猬索尼克"),
+    ("艾咪·罗斯", "猬科", "刺猬", "女", None, None, "刺猬索尼克"),
+    ("刺猬夏特", "猬科", "刺猬", "男", None, None, "刺猬索尼克"),
     ("露姬", "蝙蝠科", "蝙蝠", "女", 18, None, "刺猬索尼克"),
     ("鳄鱼贝库特", "鳄科", "鳄鱼", "男", 20, None, "刺猬索尼克"),
+    ("艾斯皮欧", "避役科", "变色龙", "男", None, None, "刺猬索尼克"),
+    ("猫咪布蕾姿", "猫科", "家猫", "女", None, None, "刺猬索尼克"),
     # Adastra
     ("Amicus", "犬科", "狼", "男", 23, (12, 14), "Adastra"),
+    ("Neferu", "犬科", "胡狼", "男", None, None, "Adastra"),
+    ("Cassius", "犬科", "狼", "男", 21, None, "Adastra"),
+    ("Alexios", "猫科", "家猫", "男", None, None, "Adastra"),
     # Star Fox
     ("Fox McCloud", "犬科", "赤狐", "男", 18, None, "Star Fox"),
     ("Krystal", "犬科", "狐", "女", 19, None, "Star Fox"),
+    ("Wolf O'Donnell", "犬科", "狼", "男", None, None, "Star Fox"),
+    ("Leon Powalski", "避役科", "变色龙", "男", None, None, "Star Fox"),
+    # 家有大猫
+    ("林虎", "猫科", "虎", "男", None, None, "家有大猫"),
+    ("李克劳", "猫科", "云豹", "男", None, None, "家有大猫"),
+    ("猫妖（颜书齐）", "猫科", "石虎", "男", None, None, "家有大猫"),
 )
 
 _YEAR_CLASS_CODES = {
@@ -120,37 +177,33 @@ _AFFINITIES = ("A", "B", "B", "C", "A", "B")
 _NOTES = ("元素学社活动成员", "校刊编辑组", "实验室值班助理", "校运动会志愿者", "交换培养申请中")
 
 
-def _birth_date(age: int, birthday: tuple[int, int] | None) -> str:
+def _birth_date(age: int | None, birthday: tuple[int, int] | None) -> str | None:
+    if age is None:
+        return None
     month, day = birthday or (1, 1)
     year = DEMO_REFERENCE_DATE.year - age
     if (month, day) > (DEMO_REFERENCE_DATE.month, DEMO_REFERENCE_DATE.day):
         year -= 1
+    if not 1 <= year <= 9999:
+        return None
     return f"{year:04d}-{month:02d}-{day:02d}"
 
 
-def _enrollment_year(age: int) -> int:
-    if age <= 18:
-        return 2026
-    if age == 19:
-        return 2025
-    if age == 20:
-        return 2024
-    return 2023
-
-
 def _character_students() -> tuple[tuple[object, ...], ...]:
-    counters = {2026: 0, 2025: 0, 2024: 0, 2023: 0}
-    class_offsets = {year: 0 for year in counters}
+    year_order = (2026, 2025, 2024, 2023)
+    counters = {year: 0 for year in year_order}
+    class_offsets = {year: 0 for year in year_order}
     rows: list[tuple[object, ...]] = []
 
     for index, (name, family, branch, gender, age, birthday, _source) in enumerate(
         _CHARACTER_PROFILES,
         start=1,
     ):
-        if not 18 <= age <= 25:
-            raise ValueError(f"演示学生年龄超出 18～25 岁：{name} ({age})")
+        if family == "兔科":
+            raise ValueError(f"演示数据不收录兔科角色：{name}")
 
-        year = _enrollment_year(age)
+        # Academic placement is demo data and intentionally independent of age.
+        year = year_order[(index - 1) % len(year_order)]
         counters[year] += 1
         student_no = f"{year}{counters[year]:04d}"
         class_codes = _YEAR_CLASS_CODES[year]
