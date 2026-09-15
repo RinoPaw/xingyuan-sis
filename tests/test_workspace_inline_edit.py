@@ -7,7 +7,7 @@ from unittest.mock import patch
 from xingyuan_sis import terminal_input
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
-from xingyuan_sis.tui import screen, workspace, workspace_forms
+from xingyuan_sis.tui import screen, workspace, workspace_forms, workspace_view
 from xingyuan_sis.tui.workspace_data import Catalog
 
 
@@ -64,6 +64,36 @@ class WorkspaceInlineEditTests(unittest.TestCase):
             with self.subTest(collection=collection, field=field):
                 values = self.catalog.defaults(collection, self.catalog.records[collection][0])
                 self.assertIsNotNone(self.catalog.options(collection, field, values))
+
+    def test_edit_form_stays_inside_the_record_inspector(self):
+        state = workspace.Workspace("students")
+        workspace._open_form(state, self.catalog, "edit")
+
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((140, 35))), \
+             patch.object(workspace_view, "render_editor") as detached_editor:
+            frame = workspace_view.render(state, self.catalog)
+
+        detached_editor.assert_not_called()
+        plain = "\n".join(screen._ANSI_RE.sub("", line) for line in frame.lines)
+        self.assertIn("档案", plain)
+        self.assertIn("编辑中", plain)
+        self.assertNotIn("编辑 · 学生档案", plain)
+        self.assertTrue(any(region.action == "field:0" for region in frame.regions))
+        self.assertTrue(any(region.action == "save" for region in frame.regions))
+
+    def test_enum_picker_expands_inside_the_inspector(self):
+        state = workspace.Workspace("students")
+        workspace._open_form(state, self.catalog, "edit")
+        index = next(i for i, field in enumerate(state.form.fields) if field.key == "status")
+        workspace._read_value(state, self.catalog, ("field", index))
+
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((140, 35))), \
+             patch.object(workspace_view, "render_editor") as detached_editor:
+            frame = workspace_view.render(state, self.catalog)
+
+        detached_editor.assert_not_called()
+        self.assertTrue(any(region.action.startswith("option:") for region in frame.regions))
+        self.assertTrue(any(region.action == f"field:{index}" for region in frame.regions))
 
     def test_freeform_edit_uses_the_field_row_instead_of_bottom_prompt(self):
         state = workspace.Workspace("students")
