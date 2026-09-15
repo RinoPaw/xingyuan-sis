@@ -10,41 +10,19 @@ from .workspace_data import Catalog, Field
 from .workspace_state import Form, Workspace
 
 
-_STUDENT_EDIT_ORDER = (
-    "name",
-    "student_no",
-    "family",
-    "branch",
-    "enrollment_year",
-    "primary_affinity",
-    "class_code",
-    "status",
-    "primary_element",
-    "gender",
-    "birth_date",
-    "contact",
-    "dormitory",
-    "notes",
-)
-
-
 def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
     row = state.current(catalog)
     if mode in {"edit", "delete"} and row is None:
         state.notice = "先选择一条记录。"
         return
     if mode in {"create", "edit"}:
-        fields = catalog.fields(state.key, mode == "edit")
-        if mode == "edit" and state.key == "students":
-            by_key = {field.key: field for field in fields}
-            fields = tuple(by_key[key] for key in _STUDENT_EDIT_ORDER if key in by_key)
         state.form = Form(
             mode,
-            fields,
+            catalog.fields(state.key, mode == "edit"),
             catalog.defaults(state.key, row if mode == "edit" else None),
             row if mode == "edit" else None,
         )
-        if state.key == "grades" and mode == "edit":
+        if mode == "edit" and state.key in {"students", "grades"}:
             state.form.position = 1
     elif mode in {"import", "export"}:
         state.form = Form(mode, (Field("path", "CSV 文件路径", True),), {"path": "data/students.csv"})
