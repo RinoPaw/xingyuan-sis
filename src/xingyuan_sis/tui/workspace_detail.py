@@ -174,14 +174,14 @@ def _student_edit_lines(
         return (text, screen._TEXT_SECONDARY, "")
 
     lines: list[_EditLine] = [
-        [field("name", style=screen._BOLD + screen._TEXT_ACCENT)],
+        [field("name", style=screen._BOLD + screen._TEXT_PRIMARY)],
         [label("学号  "), field("student_no")],
         [label("物种  "), field("family"), (" · ", screen._TEXT_SECONDARY, ""), field("branch")],
         [label("入学  "), field("enrollment_year", f"{safe(form.values.get('enrollment_year'))}级")],
-        [label("亲和  "), field("primary_affinity")],
         [label("学院  "), (_student_department(catalog, state, row), screen._TEXT_PRIMARY, "")],
         [label("班级  "), field("class_code")],
-        [label("学籍  "), field("status"), ("    ", "", ""), label("元素  "), field("primary_element")],
+        [label("学籍  "), field("status")],
+        [label("元素  "), field("primary_element"), ("    ", "", ""), label("亲和  "), field("primary_affinity")],
     ]
 
     related_key, related = catalog.related("students", row)
