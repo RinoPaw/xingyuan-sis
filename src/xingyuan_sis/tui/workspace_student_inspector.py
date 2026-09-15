@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from . import screen
@@ -41,6 +42,19 @@ def _display_value(
         if options is not None:
             return next((label for option, label in options if option == value), safe(value))
     return safe(value)
+
+
+def _age(state: Workspace | None, row: dict[str, Any]) -> str:
+    value = _raw_value(state, row, "birth_date")
+    try:
+        born = date.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return "—"
+    today = date.today()
+    if born > today:
+        return "—"
+    years = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+    return f"{years}岁"
 
 
 def _department(state: Workspace | None, catalog: Catalog, row: dict[str, Any]) -> str:
@@ -98,11 +112,12 @@ def _lines(
         [field("name", style=screen._BOLD + screen._TEXT_PRIMARY)],
         [label("学号  "), field("student_no")],
         [label("物种  "), field("family"), (" · ", screen._TEXT_SECONDARY, ""), field("branch")],
+        [label("性别  "), field("gender"), (" · ", screen._TEXT_SECONDARY, ""), (_age(state, row), screen._TEXT_PRIMARY, "")],
         [label("入学  "), field("enrollment_year", f"{safe(year)}级")],
         [label("学院  "), (_department(state, catalog, row), screen._TEXT_PRIMARY, "")],
         [label("班级  "), field("class_code")],
         [label("学籍  "), field("status")],
-        [label("元素  "), field("primary_element"), ("    ", "", ""), label("亲和  "), field("primary_affinity")],
+        [label("元素  "), field("primary_element"), (" · ", screen._TEXT_SECONDARY, ""), field("primary_affinity")],
     ]
 
     related_key, related = catalog.related("students", row)
@@ -124,8 +139,7 @@ def _lines(
 
     lines.extend((
         [],
-        [("详细信息", screen._BOLD + screen._TEXT_PRIMARY, "")],
-        [label("性别      "), field("gender")],
+        [("个人信息", screen._BOLD + screen._TEXT_PRIMARY, "")],
         [label("出生日期  "), field("birth_date")],
         [label("联系方式  "), field("contact")],
         [label("宿舍      "), field("dormitory")],
