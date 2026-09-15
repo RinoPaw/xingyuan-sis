@@ -6,9 +6,9 @@ import os
 import re
 
 from .screen import (
-    _ACCENT,
     _ANSI_RE,
-    _GOLD,
+    _TEXT_ACCENT,
+    _DECORATIVE_GOLD,
     _ansi,
     _cell_width,
     _hit_action,
@@ -58,7 +58,6 @@ def _orbit(width: int, height: int, angle: float, selected: int) -> list[str]:
             dots[py // 4][px // 2] |= bits[py % 4][px % 2]
             colors[py // 4][px // 2] = max(colors[py // 4][px // 2], color)
 
-    # Moving longitude lines and lit dots give the globe depth and rotation.
     for y in range(-math.ceil(radius), math.ceil(radius) + 1):
         for x in range(-math.ceil(radius), math.ceil(radius) + 1):
             nx, ny = x / radius, y / radius
@@ -76,8 +75,6 @@ def _orbit(width: int, height: int, angle: float, selected: int) -> list[str]:
         t = step * math.tau / max(90, width * 4)
         point(radius * math.cos(t), radius * math.sin(t), 2)
 
-    # Draw only the inner and outer boundaries. They are the visible outline of
-    # one solid ring; the physical band between them is handled by the sparkle mask.
     tilt = -0.32 + math.sin(angle * 0.18) * 0.1
 
     def ring(t: float, scale: float) -> tuple[float, float]:
@@ -97,9 +94,6 @@ def _orbit(width: int, height: int, angle: float, selected: int) -> list[str]:
                 continue
             point(x, y, 3)
 
-    # The bright marker rides the same physical orbit as the ring. Occlude each
-    # subpixel independently so it passes behind the globe instead of floating
-    # over the globe face, and reappears progressively at the limb.
     t = angle * 0.9 + selected * math.tau / 6
     x, y = ring(t, _RING_OUTER_SCALE)
     for dx, dy in ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)):
@@ -108,10 +102,9 @@ def _orbit(width: int, height: int, angle: float, selected: int) -> list[str]:
             continue
         point(marker_x, marker_y, 4)
 
-    styles = ("", "\x1b[38;5;60m", _ACCENT, _GOLD, "\x1b[38;5;252m")
+    styles = ("", "\x1b[38;5;60m", _TEXT_ACCENT, _DECORATIVE_GOLD, "\x1b[38;5;252m")
     lines = []
     for row in range(height):
-        # Group adjacent equal colors, avoiding an escape sequence per dot.
         chunks: list[str] = []
         run, last_color = "", 0
         for col in range(width):
@@ -129,12 +122,7 @@ def _orbit(width: int, height: int, angle: float, selected: int) -> list[str]:
 
 
 def _orbit_exclusion_mask(width: int, height: int, angle: float) -> set[tuple[int, int]]:
-    """Protect the globe interior and the ring's physical band from sparkles.
-
-    The ring is rendered as two outlines, but the whole band between the inner
-    and outer boundary is treated as solid. The gap from the globe to the inner
-    ring edge remains ordinary sky and can contain sparkles.
-    """
+    """Protect the globe interior and the ring's physical band from sparkles."""
     width, height = max(1, width), max(1, height)
     pixels_w, pixels_h = width * 2, height * 4
     radius = min(pixels_w / 4.8, pixels_h / 2.5)
@@ -145,8 +133,6 @@ def _orbit_exclusion_mask(width: int, height: int, angle: float) -> set[tuple[in
 
     for row in range(height):
         for col in range(width):
-            # A terminal cell contains 2×4 Braille pixels. Protect the whole
-            # cell when any subpixel lies in the globe or in the solid ring band.
             for dy in range(4):
                 for dx in range(2):
                     x = col * 2 + dx - cx
@@ -172,22 +158,13 @@ def _starlight(
     phase: float,
     protected_cells: set[tuple[int, int]] | None = None,
 ) -> ScreenFrame:
-    """Render a stable Codex-style sparkle field over untouched empty cells.
-
-    A coordinate hash fixes each star's position, Braille glyph, period and phase.
-    The layout therefore stays still while individual dots briefly brighten, which
-    avoids the particle-like popping of the previous random star lifecycle.
-    """
-    # ``phase`` is the globe angle (monotonic seconds * 0.85). Convert it back
-    # to seconds and quantize to Codex's 150 ms sparkle cadence.
+    """Render a stable sparkle field over untouched empty cells."""
     seconds = max(0.0, phase / 0.85)
     seconds = math.floor(seconds / _SPARKLE_FRAME) * _SPARKLE_FRAME
     mask = (1 << 64) - 1
     truecolor = os.environ.get("COLORTERM", "").lower() in {"truecolor", "24bit"}
     protected_cells = protected_cells or set()
 
-    # Leave the top bar and footer untouched. Within the body, only use the
-    # interior of blank runs and exclude clickable/protected regions.
     for row in range(1, len(frame.lines) - 1):
         original = frame.lines[row]
         plain = _ANSI_RE.sub("", original)
@@ -215,7 +192,6 @@ def _starlight(
 
         targets: dict[int, str] = {}
         for x in allowed:
-            # Same coordinate hash as Codex, with a 10% candidate density.
             hash_value = ((row - 1) * 65537 + x) & mask
             hash_value = ((hash_value ^ (hash_value >> 16)) * 0x45D9F3B) & mask
             hash_value = ((hash_value ^ (hash_value >> 16)) * 0x45D9F3B) & mask
@@ -223,7 +199,6 @@ def _starlight(
             if hash_value % _SPARKLE_DENSITY_DENOMINATOR != 0:
                 continue
 
-            # Keep the same phase curve while varying each cycle from 6.0 to 10.0 seconds.
             period = 6.0 + (hash_value % 41) / 10.0
             sparkle_phase = (seconds / period + (hash_value % 997) / 997.0) % 1.0
             brightness = math.sin(sparkle_phase * math.pi) ** 12 * 0.55
@@ -235,7 +210,6 @@ def _starlight(
             if truecolor:
                 style = f"\x1b[38;2;{level};{level};{level}m"
             else:
-                # xterm's grayscale ramp approximates the same foreground/background blend.
                 gray = max(235, min(244, 232 + round((level - 8) / 10)))
                 style = f"\x1b[38;5;{gray}m"
             targets[x] = _ansi(glyph, style)

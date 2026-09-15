@@ -7,16 +7,13 @@ import unittest
 from unittest.mock import Mock, patch
 
 from xingyuan_sis import basic_ui, terminal_ui
-from xingyuan_sis.tui import app as menu, screen, keys, animation, theme
+from xingyuan_sis.tui import keys, screen
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.entry import main
 from xingyuan_sis.seed_data import STUDENTS, seed_demo
 
 
-LABELS = ("学生", "教务", "课程", "成绩", "数据", "退出")
-
-
-class KeyboardMenuTests(unittest.TestCase):
+class KeyboardAndTerminalTests(unittest.TestCase):
     def test_plain_keys_and_interrupts(self) -> None:
         for char, expected in (("\r", "select"), (" ", "select"), ("j", "down"),
                                ("K", "up"), ("0", "back"), ("\x7f", "back"),
@@ -28,35 +25,14 @@ class KeyboardMenuTests(unittest.TestCase):
         with self.assertRaises(EOFError):
             keys._plain_key("")
 
-    def test_home_remembers_selection_after_return(self) -> None:
-        with patch.object(menu.sys.stdin, "isatty", return_value=True), \
-             patch.object(menu.sys.stdout, "isatty", return_value=True), \
-             patch.object(menu, "_home", side_effect=[2, None]) as home, \
-             patch.object(menu, "_courses") as courses, patch.object(screen, "_clear"), \
-             redirect_stdout(StringIO()):
-            # Redirecting stdout changes the object tested by run().
-            with patch("sys.stdout.isatty", return_value=True):
-                menu.run("example.db")
-        self.assertEqual(home.call_args_list[1].kwargs["selected"], 2)
-        courses.assert_called_once_with("example.db")
-
-    def test_layout_fits_terminal_and_keeps_every_action(self) -> None:
-        for size in ((80, 24), (40, 16), (30, 12), (120, 30)):
-            for selected in range(6):
-                with self.subTest(size=size, selected=selected), \
-                     patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
-                    lines = menu._home_lines(LABELS, selected, {}, 1.0)
-                self.assertEqual(len(lines), size[1])
-                self.assertTrue(all(screen._display_width(line) < size[0] for line in lines))
-                for label in LABELS:
-                    self.assertIn(label, "\n".join(lines))
-
-    def test_highlight_uses_explicit_colors_and_clipping_preserves_them(self) -> None:
+    def test_highlight_uses_semantic_selection_tokens_and_clipping_preserves_them(self) -> None:
         with patch("sys.stdout.isatty", return_value=True), patch.dict(os.environ):
             os.environ.pop("NO_COLOR", None)
-            highlighted = screen._ansi("学生档案      ", screen._SELECTED)
+            selected_style = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
+            highlighted = screen._ansi("学生档案      ", selected_style)
             clipped = screen._clip_cells(highlighted, 6)
-        self.assertIn("\x1b[48;5;238m", clipped)
+        self.assertIn(screen._SURFACE_SELECTED, clipped)
+        self.assertIn(screen._TEXT_ON_SELECTED, clipped)
         self.assertTrue(clipped.endswith(screen._RESET))
         self.assertEqual(screen._display_width(clipped), 5)
         self.assertNotIn(";7m", highlighted)
@@ -71,66 +47,11 @@ class KeyboardMenuTests(unittest.TestCase):
                          "\x1b[1;1H\x1b[0m\x1b[2Kone\x1b[0m"
                          "\x1b[2;1H\x1b[0m\x1b[2Ktwo\x1b[0m")
 
-    def test_animation_and_single_bottom_bar_at_every_size(self) -> None:
-        for size in ((30, 12), (40, 16), (80, 20), (80, 24), (160, 48)):
-            with self.subTest(size=size), patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
-                first = menu._home_lines(LABELS, 0, {}, 0)
-                second = menu._home_lines(LABELS, 0, {}, 1)
-                self.assertNotEqual(first[:-1], second[:-1])
-                self.assertTrue(any(0x2800 < ord(char) <= 0x28ff for line in first for char in line))
-                self.assertEqual(first[-1], second[-1])
-                self.assertIn("方向键", first[-1])
-                self.assertNotIn("p", first[-1])
-                self.assertNotIn("q/0", first[-1])
-                self.assertNotIn("\n", first[-1])
-                self.assertLess(screen._display_width(first[-1]), size[0])
-
     def test_live_terminal_dimensions_override_stale_environment(self) -> None:
         with patch.dict(os.environ, {"COLUMNS": "200", "LINES": "60"}), \
              patch("sys.stdout.fileno", return_value=1), \
              patch("os.get_terminal_size", return_value=os.terminal_size((80, 20))):
             self.assertEqual(screen._terminal_size(), (80, 20))
-
-    def test_home_preview_changes_with_selection(self) -> None:
-        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 24))):
-            text = "\n".join(menu._home_lines(LABELS, 3, {}, 0, animate=False))
-        self.assertIn("选课与成绩", text)
-        self.assertNotIn("p 播放", text)
-        self.assertIn("记录选课", text)
-
-    def test_pausing_animation_and_interrupt_restore_cursor(self) -> None:
-        output = StringIO()
-        preferences = {"animate": True}
-        with redirect_stdout(output), patch("sys.stdout.isatty", return_value=True), \
-             patch("xingyuan_sis.service.XingyuanService") as service, \
-             patch.object(keys, "_read_key", side_effect=["pause", KeyboardInterrupt]), \
-             patch.object(screen, "_clear"):
-            service.return_value.stats.return_value = {}
-            with self.assertRaises(KeyboardInterrupt):
-                menu._home(None, LABELS, preferences=preferences)
-        self.assertFalse(preferences["animate"])
-        self.assertTrue(output.getvalue().endswith("\x1b[?25h"))
-
-    def test_animation_resume_continues_from_paused_phase(self) -> None:
-        preferences = {"animate": True, "angle": 10.0}
-        angles = []
-
-        def frame(*args, **kwargs):
-            angles.append(args[3])
-            return screen.ScreenFrame([""], [])
-
-        with patch.object(menu.time, "monotonic", side_effect=[0.0, 1.0, 5.0, 6.0, 7.0]), \
-             patch.object(menu, "_home_frame", side_effect=frame), \
-             patch.object(keys, "_read_key", side_effect=["pause", None, "pause", "back"]), \
-             patch.object(screen, "_paint"):
-            result = menu._home_loop(LABELS, {}, None, 0, preferences, 10.0, [])
-
-        self.assertIsNone(result)
-        self.assertEqual(len(angles), 4)
-        self.assertAlmostEqual(angles[0], 10.85)
-        self.assertAlmostEqual(angles[1], 10.85)
-        self.assertAlmostEqual(angles[2], 10.85)
-        self.assertAlmostEqual(angles[3], 11.70)
 
     @unittest.skipIf(os.name == "nt", "POSIX terminal sequences")
     def test_key_typed_before_read_is_preserved(self) -> None:
@@ -153,7 +74,6 @@ class KeyboardMenuTests(unittest.TestCase):
 
     @unittest.skipIf(os.name == "nt", "POSIX terminal sequences")
     def test_escape_sequences_and_terminal_restore(self) -> None:
-        # tty imports termios functions by value; load it before mocking them.
         import tty
 
         for sequence, expected in ((b"[A", "up"), (b"OB", "down"),
@@ -174,10 +94,12 @@ class InteractionTests(unittest.TestCase):
     def test_paging_forward_back_and_exit(self) -> None:
         frames = []
         output = StringIO()
+
         def clear() -> None:
             frames.append(output.getvalue())
             output.seek(0)
             output.truncate()
+
         with patch.object(terminal_ui.shutil, "get_terminal_size", return_value=os.terminal_size((80, 8))), \
              patch("builtins.input", side_effect=["", "p", "q"]), redirect_stdout(output):
             terminal_ui.show_output("\n".join(f"row-{i}" for i in range(7)), clear)
@@ -219,20 +141,19 @@ class InteractionTests(unittest.TestCase):
             basic_ui.run()
         self.assertIn("已退出", output.getvalue())
 
-    def test_both_menus_search_real_student_data(self) -> None:
+    def test_basic_menu_searches_current_seed_data(self) -> None:
         target_no, target_name = str(STUDENTS[0][0]), str(STUDENTS[0][1])
         other_no = str(STUDENTS[1][0])
         with TemporaryDirectory() as directory:
             db = Path(directory) / "test.db"
             initialize_database(db)
             seed_demo(db)
-            for ui in (basic_ui,):
-                with self.subTest(ui=ui.__name__), patch.object(ui, "_clear"), \
-                     patch("builtins.input", side_effect=[target_name, ""]), \
-                     redirect_stdout(StringIO()) as output:
-                    terminal_ui.search_students(lambda args: ui._command(db, args))
-                self.assertIn(target_no, output.getvalue())
-                self.assertNotIn(other_no, output.getvalue())
+            with patch.object(basic_ui, "_clear"), \
+                 patch("builtins.input", side_effect=[target_name, ""]), \
+                 redirect_stdout(StringIO()) as output:
+                terminal_ui.search_students(lambda args: basic_ui._command(db, args))
+            self.assertIn(target_no, output.getvalue())
+            self.assertNotIn(other_no, output.getvalue())
 
     def test_database_failure_is_readable_and_has_nonzero_exit(self) -> None:
         with TemporaryDirectory() as directory, redirect_stderr(StringIO()) as errors:

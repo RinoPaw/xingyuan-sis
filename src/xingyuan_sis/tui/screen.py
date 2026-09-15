@@ -8,10 +8,8 @@ import shutil
 import sys
 import unicodedata
 from typing import Sequence
+
 from .keys import MouseClick
-
-
-# Re-export tokens for existing renderers; values live in one palette.
 from .tokens import (
     _RESET,
     _BOLD,
@@ -27,14 +25,10 @@ from .tokens import (
     _SURFACE_SELECTED,
     _TEXT_DANGER,
     _DECORATIVE_GOLD,
-    _ACCENT,
-    _DIM,
-    _SELECTED,
-    _GOLD,
-    _SURFACE,
 )
 
 
+_PAGE_STYLE = _SURFACE_DEFAULT + _TEXT_PRIMARY
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 
 
@@ -70,7 +64,7 @@ def _terminal_size() -> os.terminal_size:
 
 def _clear() -> None:
     if sys.stdout.isatty():
-        surface = _SURFACE if os.environ.get("NO_COLOR") is None else ""
+        surface = _PAGE_STYLE if os.environ.get("NO_COLOR") is None else ""
         print(_RESET + surface + "\x1b[2J\x1b[H", end="", flush=True)
     else:
         print("\n" * 40)
@@ -78,7 +72,7 @@ def _clear() -> None:
 
 @contextmanager
 def _terminal_session():
-    """Keep the terminal padding and unused cells on the menu surface."""
+    """Keep the terminal padding and unused cells on the application surface."""
     try:
         sys.stdout.write("\x1b[?1049h")
         _clear()
@@ -155,15 +149,18 @@ def _clip_cells(text: str, width: int) -> str:
 def _paint(lines: Sequence[str], previous: Sequence[str] = ()) -> None:
     if sys.stdout.isatty():
         # Absolute row positions work even when the terminal disables ONLCR.
-        # Reset BEFORE erasing, so the selection background cannot bleed.
-        surface = _SURFACE if os.environ.get("NO_COLOR") is None else ""
+        # Reset before erasing so a selected background cannot bleed.
+        surface = _PAGE_STYLE if os.environ.get("NO_COLOR") is None else ""
         if len(lines) != len(previous) or max(map(_display_width, lines), default=0) != max(map(_display_width, previous), default=0):
             _clear()
             previous = ()
-        frame = "".join(f"\x1b[{row};1H{_RESET}{surface}\x1b[2K"
-                        + line.replace(_RESET, _RESET + surface) + _RESET
-                        for row, line in enumerate(lines, start=1)
-                        if row > len(previous) or line != previous[row - 1])
+        frame = "".join(
+            f"\x1b[{row};1H{_RESET}{surface}\x1b[2K"
+            + line.replace(_RESET, _RESET + surface)
+            + _RESET
+            for row, line in enumerate(lines, start=1)
+            if row > len(previous) or line != previous[row - 1]
+        )
         sys.stdout.write(frame)
         sys.stdout.flush()
         return

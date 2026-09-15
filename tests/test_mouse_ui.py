@@ -5,17 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from xingyuan_sis import terminal_input
-from xingyuan_sis.tui import (
-    app as menu,
-    screen,
-    keys,
-    animation,
-    theme,
-    text_edit,
-    viewer as terminal_viewer,
-)
-
-LABELS = ("学生", "教务", "课程", "成绩", "数据", "退出")
+from xingyuan_sis.tui import screen, keys, animation, theme, text_edit, viewer as terminal_viewer
 
 
 class MouseAndLayoutTests(unittest.TestCase):
@@ -51,26 +41,9 @@ class MouseAndLayoutTests(unittest.TestCase):
             os.close(master)
             os.close(slave)
 
-    def test_home_click_regions_follow_reflow(self):
-        for size in ((80, 24), (40, 16), (30, 12), (120, 36)):
-            with self.subTest(size=size), patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
-                frame = menu._home_frame(LABELS, 0, {}, 0)
-            items = [r for r in frame.regions if r.action.startswith("item:")]
-            self.assertEqual(len(items), len(LABELS))
-            for region in items:
-                number = int(region.action.split(":")[1])
-                self.assertIn(LABELS[number], screen._ANSI_RE.sub("", frame.lines[region.y - 1]))
-                self.assertEqual(screen._hit_action(keys.MouseClick(region.x, region.y), frame.regions), region.action)
-                self.assertLess(region.y, size[1])
-                self.assertLessEqual(region.x + region.width, size[0])
-            if size[0] < 39:
-                self.assertEqual(items[0].y, items[1].y)
-            else:
-                self.assertNotEqual(items[0].y, items[1].y)
-
     def test_starlight_preserves_text_and_clickable_regions(self):
         base = [" " * 79 for _ in range(20)]
-        base[5] = "学生姓名 林岚" + " " * 60
+        base[5] = "学生姓名 测试" + " " * 60
         protected = screen.HitRegion(1, 6, 79, "item:0")
         with patch("sys.stdout.isatty", return_value=True), patch.dict(os.environ):
             os.environ.pop("NO_COLOR", None)
@@ -89,12 +62,14 @@ class MouseAndLayoutTests(unittest.TestCase):
         self.assertNotIn("44m", bar)
         self.assertTrue(all(232 <= int(color) <= 238 for color in screen.re.findall(r"48;5;(\d+)m", bar)))
 
-    def test_gray_surface_is_reapplied_after_inline_style_reset(self):
+    def test_page_surface_is_reapplied_after_inline_style_reset(self):
+        page_style = screen._SURFACE_DEFAULT + screen._TEXT_PRIMARY
+        selected_style = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
         with redirect_stdout(StringIO()) as output, patch("sys.stdout.isatty", return_value=True), patch.dict(os.environ):
             os.environ.pop("NO_COLOR", None)
-            screen._paint([screen._ansi("学生", screen._SELECTED) + " rest"])
-        self.assertIn(screen._RESET + screen._SURFACE + " rest", output.getvalue())
-        self.assertIn(screen._SURFACE + "\x1b[2K", output.getvalue())
+            screen._paint([screen._ansi("学生", selected_style) + " rest"])
+        self.assertIn(screen._RESET + page_style + " rest", output.getvalue())
+        self.assertIn(page_style + "\x1b[2K", output.getvalue())
 
 
 class ViewerAndInputTests(unittest.TestCase):
@@ -128,11 +103,11 @@ class ViewerAndInputTests(unittest.TestCase):
 
     def test_native_input_keeps_chinese_and_resets_color_on_cancel(self):
         with patch("sys.stdin.isatty", return_value=True), patch("sys.stdout.isatty", return_value=True), \
-             patch.object(terminal_input, "_read_interactive_line", return_value="林岚") as read, \
+             patch.object(terminal_input, "_read_interactive_line", return_value="测试") as read, \
              patch("sys.stdout.write") as write, patch("sys.stdout.flush"), patch.dict(os.environ):
             os.environ.pop("NO_COLOR", None)
             with terminal_input.input_style(True):
-                self.assertEqual(terminal_input.read_input("姓名: "), "林岚")
+                self.assertEqual(terminal_input.read_input("姓名: "), "测试")
             read.assert_called_once_with("姓名: ", colored=True)
             self.assertEqual(write.call_args_list[-1].args[0], "\x1b[0m")
 
@@ -183,8 +158,8 @@ class ViewerAndInputTests(unittest.TestCase):
         self.assertEqual(buffer.value, "林X岚")
 
     def test_cli_prompts_remain_plain(self):
-        with patch("builtins.input", return_value="林岚") as read:
-            self.assertEqual(terminal_input.read_input("姓名: "), "林岚")
+        with patch("builtins.input", return_value="测试") as read:
+            self.assertEqual(terminal_input.read_input("姓名: "), "测试")
         read.assert_called_once_with("姓名: ")
 
 

@@ -1,4 +1,4 @@
-from contextlib import nullcontext, redirect_stdout
+from contextlib import redirect_stdout
 from io import StringIO
 import os
 from pathlib import Path
@@ -7,18 +7,20 @@ import unittest
 from unittest.mock import patch
 
 from xingyuan_sis import basic_ui, terminal_ui
-from xingyuan_sis.tui import app as menu, screen, keys, animation, theme, workspace
+from xingyuan_sis.auth import Identity
+from xingyuan_sis.tui import app as menu, portal, screen, keys, workspace
 from xingyuan_sis.tui.workspace import view as workspace_view
 from xingyuan_sis.tui.workspace.data import Catalog
 from xingyuan_sis.database import initialize_database
 
 
 class BreadcrumbTests(unittest.TestCase):
-    def test_home_name_matches_breadcrumb_in_both_menus(self):
+    def test_portal_home_name_matches_workspace_breadcrumb(self):
+        identity = Identity("Administrator", "admin")
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 24))):
-            home = menu._home_frame(("学生", "教务", "课程", "成绩", "数据", "退出"), 0, {}, 0)
+            home = portal.frame(identity, 0, "primary", {}, {}, 0, animate=False)
             child, _ = screen._breadcrumb("学生", 79)
-        self.assertIn("首页", home.lines[1])
+        self.assertIn("首页", "\n".join(home.lines))
         self.assertIn("首页 / 学生", child)
         with patch.object(basic_ui, "_clear"), patch("builtins.input", return_value="q"), \
              redirect_stdout(StringIO()) as output:
@@ -37,9 +39,11 @@ class BreadcrumbTests(unittest.TestCase):
                         self.assertEqual(screen._hit_action(keys.MouseClick(cell, 2), regions), region.action)
                 self.assertIsNone(screen._hit_action(keys.MouseClick(6, 2), regions))
                 self.assertIsNone(screen._hit_action(keys.MouseClick(15, 2), regions))
-                self.assertEqual([region.action for region in regions],
-                                 ([] if width < 4 else ["navigate:"] if width < 11
-                                  else ["navigate:", "navigate:教务"]))
+                self.assertEqual(
+                    [region.action for region in regions],
+                    ([] if width < 4 else ["navigate:"] if width < 11
+                     else ["navigate:", "navigate:教务"]),
+                )
 
     def test_workspace_breadcrumb_skips_portal_grouping(self):
         with TemporaryDirectory() as temp:
@@ -64,7 +68,7 @@ class TerminalSurfaceTests(unittest.TestCase):
         for failure in (None, KeyboardInterrupt, EOFError, RuntimeError):
             with self.subTest(failure=failure), redirect_stdout(StringIO()) as output, \
                  patch("sys.stdout.isatty", return_value=True), patch("sys.stdin.isatty", return_value=True), \
-                 patch.dict(os.environ), patch.object(menu, "_home", side_effect=failure, return_value=None):
+                 patch.dict(os.environ), patch.object(menu, "_portal_home", side_effect=failure, return_value=None):
                 os.environ.pop("NO_COLOR", None)
                 if failure is RuntimeError:
                     with self.assertRaises(RuntimeError):
@@ -80,20 +84,21 @@ class TerminalSurfaceTests(unittest.TestCase):
     def test_no_color_does_not_change_terminal_palette(self):
         with redirect_stdout(StringIO()) as output, patch("sys.stdout.isatty", return_value=True), \
              patch("sys.stdin.isatty", return_value=True), patch.dict(os.environ, {"NO_COLOR": "1"}), \
-             patch.object(menu, "_home", return_value=None):
+             patch.object(menu, "_portal_home", return_value=None):
             menu.run()
         self.assertNotIn("\x1b]", output.getvalue())
         self.assertNotIn("48;", output.getvalue())
         self.assertIn("\x1b[?1049l", output.getvalue())
 
-    def test_clear_and_resize_erase_with_surface_color(self):
+    def test_clear_and_resize_erase_with_default_surface(self):
+        page_style = screen._SURFACE_DEFAULT + screen._TEXT_PRIMARY
         with redirect_stdout(StringIO()) as output, patch("sys.stdout.isatty", return_value=True), \
              patch.dict(os.environ):
             os.environ.pop("NO_COLOR", None)
             screen._clear()
             screen._paint(["wide first row", "", "footer"])
             screen._paint(["short", ""], ["wide first row", "", "footer"])
-        self.assertEqual(output.getvalue().count(screen._RESET + screen._SURFACE + "\x1b[2J"), 3)
+        self.assertEqual(output.getvalue().count(screen._RESET + page_style + "\x1b[2J"), 3)
         self.assertNotIn(screen._RESET + "\x1b[2J", output.getvalue())
 
 

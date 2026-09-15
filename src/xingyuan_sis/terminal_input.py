@@ -13,10 +13,18 @@ import shutil
 import sys
 
 from .tui.text_edit import TextBuffer, display_width, input_mode, read_event
-from .tui.tokens import _RESET, _SURFACE, _SELECTED as _FIELD_SURFACE
+from .tui.tokens import (
+    _RESET,
+    _TEXT_PRIMARY,
+    _TEXT_ON_SELECTED,
+    _SURFACE_DEFAULT,
+    _SURFACE_SELECTED,
+)
 
 
 _ACTIVE = ContextVar("menu_input_style", default=False)
+_PAGE_STYLE = _SURFACE_DEFAULT + _TEXT_PRIMARY
+_FIELD_STYLE = _SURFACE_SELECTED + _TEXT_ON_SELECTED
 
 
 @contextmanager
@@ -39,18 +47,9 @@ def _terminal_columns() -> int:
         return max(8, shutil.get_terminal_size((80, 24)).columns)
 
 
-def _visible_input(
-    chars: list[str], cursor: int, width: int, *, secret: bool = False
-) -> tuple[str, int]:
-    """Compatibility wrapper around the shared TUI text buffer viewport."""
-    buffer = TextBuffer(list(chars), max(0, min(cursor, len(chars))))
-    return buffer.view(width, secret=secret)
-
-
 def _redraw_line(
     prompt: str,
-    chars: list[str],
-    cursor: int,
+    buffer: TextBuffer,
     *,
     colored: bool,
     secret: bool = False,
@@ -59,9 +58,9 @@ def _redraw_line(
     prefix = f"  {prompt}" if colored else prompt
     if field_width is None:
         available = max(1, _terminal_columns() - _display_width(prefix) - 1)
-        visible, cursor_cells = _visible_input(chars, cursor, available, secret=secret)
-        style = _SURFACE if colored else ""
-        sys.stdout.write("\r" + style + "\x1b[2K" + prefix + visible)
+        visible, cursor_cells = buffer.view(available, secret=secret)
+        surface = _PAGE_STYLE if colored else ""
+        sys.stdout.write("\r" + surface + "\x1b[2K" + prefix + visible)
         tail = _display_width(visible) - cursor_cells
         if tail > 0:
             sys.stdout.write(f"\x1b[{tail}D")
@@ -70,11 +69,11 @@ def _redraw_line(
 
     box_width = max(3, field_width)
     inner_width = max(1, box_width - 2)
-    visible, cursor_cells = _visible_input(chars, cursor, inner_width, secret=secret)
+    visible, cursor_cells = buffer.view(inner_width, secret=secret)
     content = " " + visible
     content += " " * max(0, box_width - _display_width(content))
-    surface = _SURFACE if colored else ""
-    field_surface = _FIELD_SURFACE if colored else ""
+    surface = _PAGE_STYLE if colored else ""
+    field_surface = _FIELD_STYLE if colored else ""
     sys.stdout.write("\r" + surface + "\x1b[2K" + prefix + field_surface + content + surface)
     tail = box_width - 1 - cursor_cells
     if tail > 0:
@@ -86,18 +85,17 @@ def _redraw_inline(
     row: int,
     column: int,
     width: int,
-    chars: list[str],
-    cursor: int,
+    buffer: TextBuffer,
     *,
     colored: bool,
     secret: bool = False,
 ) -> None:
     """Redraw only an existing field value without clearing its terminal row."""
     field_width = max(1, width)
-    visible, cursor_cells = _visible_input(chars, cursor, field_width, secret=secret)
+    visible, cursor_cells = buffer.view(field_width, secret=secret)
     content = visible + " " * max(0, field_width - _display_width(visible))
-    style = _FIELD_SURFACE if colored else ""
-    surface = _SURFACE if colored else ""
+    style = _FIELD_STYLE if colored else ""
+    surface = _PAGE_STYLE if colored else ""
     sys.stdout.write(f"\x1b[{max(1, row)};{max(1, column)}H" + style + content + surface)
     sys.stdout.write(f"\x1b[{max(1, row)};{max(1, column) + cursor_cells}H")
     sys.stdout.flush()
@@ -133,8 +131,7 @@ def _read_interactive_line(
     def redraw() -> None:
         _redraw_line(
             prompt,
-            buffer.chars,
-            buffer.cursor,
+            buffer,
             colored=colored,
             secret=secret,
             field_width=field_width,
@@ -175,8 +172,7 @@ def _read_interactive_inline(
             row,
             column,
             width,
-            buffer.chars,
-            buffer.cursor,
+            buffer,
             colored=colored,
             secret=secret,
         )
@@ -262,6 +258,6 @@ def read_inline_input(
 def heading(title: str) -> None:
     text = f"✦ 星原 / {title}"
     if _ACTIVE.get() and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None:
-        print(f"{_SURFACE}{text}{_RESET}\n")
+        print(f"{_PAGE_STYLE}{text}{_RESET}\n")
     else:
         print(text + "\n")
