@@ -10,15 +10,37 @@ from .workspace_data import Catalog, Field
 from .workspace_state import Form, Workspace
 
 
+_STUDENT_EDIT_ORDER = (
+    "name",
+    "student_no",
+    "family",
+    "branch",
+    "enrollment_year",
+    "primary_affinity",
+    "class_code",
+    "status",
+    "primary_element",
+    "gender",
+    "birth_date",
+    "contact",
+    "dormitory",
+    "notes",
+)
+
+
 def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
     row = state.current(catalog)
     if mode in {"edit", "delete"} and row is None:
         state.notice = "先选择一条记录。"
         return
     if mode in {"create", "edit"}:
+        fields = catalog.fields(state.key, mode == "edit")
+        if mode == "edit" and state.key == "students":
+            by_key = {field.key: field for field in fields}
+            fields = tuple(by_key[key] for key in _STUDENT_EDIT_ORDER if key in by_key)
         state.form = Form(
             mode,
-            catalog.fields(state.key, mode == "edit"),
+            fields,
             catalog.defaults(state.key, row if mode == "edit" else None),
             row if mode == "edit" else None,
         )
@@ -74,8 +96,15 @@ def apply_form(state: Workspace, catalog: Catalog) -> None:
     state.detail_scroll = 0
 
 
-def _inline_field_geometry(frame: screen.ScreenFrame, index: int) -> tuple[int, int, int]:
+def _inline_field_geometry(
+    frame: screen.ScreenFrame,
+    index: int,
+    *,
+    direct: bool = False,
+) -> tuple[int, int, int]:
     region = next(region for region in frame.regions if region.action == f"field:{index}")
+    if direct:
+        return region.y, region.x, max(1, region.width)
     label_width = min(12, max(4, region.width // 3))
     value_column = region.x + label_width + 2
     value_width = max(1, region.width - label_width - 2)
@@ -137,7 +166,11 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
     )
     frame = render(state, catalog)
     screen._paint(frame.lines)
-    row, column, width = _inline_field_geometry(frame, index)
+    row, column, width = _inline_field_geometry(
+        frame,
+        index,
+        direct=state.form.mode == "edit" and state.key == "students",
+    )
     with input_style(True):
         raw = read_inline_input(
             f"{field_.label} > ",
