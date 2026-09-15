@@ -199,9 +199,6 @@ def _character_students() -> tuple[tuple[object, ...], ...]:
         _CHARACTER_PROFILES,
         start=1,
     ):
-        if family == "兔科":
-            raise ValueError(f"演示数据不收录兔科角色：{name}")
-
         # Academic placement is demo data and intentionally independent of age.
         year = year_order[(index - 1) % len(year_order)]
         counters[year] += 1
