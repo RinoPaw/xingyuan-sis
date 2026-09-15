@@ -65,7 +65,7 @@ class WorkspaceInlineEditTests(unittest.TestCase):
                 values = self.catalog.defaults(collection, self.catalog.records[collection][0])
                 self.assertIsNotNone(self.catalog.options(collection, field, values))
 
-    def test_edit_form_stays_inside_the_record_inspector(self):
+    def test_edit_form_stays_inside_the_same_record_inspector(self):
         state = workspace.Workspace("students")
         workspace._open_form(state, self.catalog, "edit")
 
@@ -76,8 +76,14 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         detached_editor.assert_not_called()
         plain = "\n".join(screen._ANSI_RE.sub("", line) for line in frame.lines)
         self.assertIn("档案", plain)
-        self.assertIn("编辑中", plain)
+        self.assertNotIn("编辑中", plain)
         self.assertIn("物种", plain)
+        self.assertIn("入学", plain)
+        self.assertIn("学院", plain)
+        self.assertIn("班级", plain)
+        self.assertIn("学籍", plain)
+        self.assertIn("元素", plain)
+        self.assertIn("亲和", plain)
         self.assertIn("选课与成绩", plain)
         self.assertIn("详细信息", plain)
         self.assertNotIn("编辑 · 学生档案", plain)
