@@ -128,12 +128,104 @@ def detail_targets(key: str, row: dict[str, Any], catalog: Catalog, width: int) 
     return result
 
 
+def _form_value(catalog: Catalog, state: Workspace, field_key: str) -> str:
+    form = state.form
+    value = form.values.get(field_key)
+    options = catalog.options(state.key, field_key, form.values)
+    if options is not None:
+        return next((label for option, label in options if option == value), safe(value))
+    return safe(value)
+
+
+def _render_edit_inspector(
+    board: Board,
+    state: Workspace,
+    catalog: Catalog,
+    x: int,
+    width: int,
+    top: int,
+) -> None:
+    form = state.form
+    board.put(
+        x,
+        WorkspaceLayout(board.width, board.height).panel_heading_row(state.key),
+        panel_heading("档案", True) + screen._ansi("  编辑中", screen._TEXT_SECONDARY),
+        width=width,
+    )
+
+    if form.options is not None:
+        field = form.fields[form.position]
+        label_width = min(12, max(4, width // 3))
+        label = screen._pad_cells(field.label + ("*" if field.required else ""), label_width)
+        value = _form_value(catalog, state, field.key)
+        text = screen._pad_cells(screen._clip_cells(f"{label}  {value}", width), width)
+        board.put(
+            x, top, text,
+            screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED,
+            f"field:{form.position}", width,
+        )
+
+        option_row = top + 2
+        capacity = max(1, board.height - option_row - 3)
+        first = min(
+            max(0, form.option_index - capacity + 1),
+            max(0, len(form.options) - capacity),
+        )
+        for i, (_, option_label) in enumerate(form.options[first:first + capacity], start=first):
+            shown = "  " + safe(option_label)
+            shown = screen._pad_cells(screen._clip_cells(shown, width), width)
+            style = (
+                screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
+                if i == form.option_index
+                else screen._TEXT_PRIMARY
+            )
+            board.put(x, option_row + i - first, shown, style, f"option:{i}", width)
+        if not form.options:
+            board.put(x, option_row, "暂无可选记录。", screen._TEXT_SECONDARY, width=width)
+        return
+
+    save_row = board.height - 3
+    capacity = max(1, save_row - top - 1)
+    first = visible_start(form.position, len(form.fields), capacity, state.detail_scroll)
+    state.detail_scroll = first
+    label_width = min(12, max(4, width // 3))
+
+    for i, field in enumerate(form.fields[first:first + capacity], start=first):
+        label = screen._pad_cells(
+            screen._clip_cells(field.label + ("*" if field.required else ""), label_width),
+            label_width,
+        )
+        value = _form_value(catalog, state, field.key)
+        text = screen._pad_cells(screen._clip_cells(f"{label}  {value}", width), width)
+        style = (
+            screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
+            if i == form.position
+            else screen._TEXT_PRIMARY
+        )
+        board.put(x, top + i - first, text, style, f"field:{i}", width)
+
+    next_x = board.button(x, save_row, " 保存 ", "save")
+    if next_x < x + width:
+        board.put(
+            next_x,
+            save_row,
+            "Esc 取消",
+            screen._TEXT_SECONDARY,
+            width=max(1, x + width - next_x),
+        )
+
+
 def render_inspector(board: Board, state: Workspace, catalog: Catalog, x: int, width: int) -> None:
     layout = WorkspaceLayout(board.width, board.height)
     heading_row = layout.panel_heading_row(state.key)
     top, bottom = layout.panel_content_row(state.key), board.height - 2
     row = state.current(catalog)
     heading = identity(state.key, row)[0] if layout.compact and row else "档案"
+
+    if row is not None and state.form is not None and state.form.mode == "edit":
+        _render_edit_inspector(board, state, catalog, x, width, top)
+        return
+
     board.put(x, heading_row, panel_heading(heading, state.details), action="focus", width=width)
     if row is None:
         if state.query or state.view:
