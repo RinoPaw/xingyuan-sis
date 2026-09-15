@@ -22,7 +22,7 @@ def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
             catalog.defaults(state.key, row if mode == "edit" else None),
             row if mode == "edit" else None,
         )
-        if state.key == "grades" and mode == "edit":
+        if mode == "edit" and state.key in {"students", "grades"}:
             state.form.position = 1
     elif mode in {"import", "export"}:
         state.form = Form(mode, (Field("path", "CSV 文件路径", True),), {"path": "data/students.csv"})
@@ -74,8 +74,15 @@ def apply_form(state: Workspace, catalog: Catalog) -> None:
     state.detail_scroll = 0
 
 
-def _inline_field_geometry(frame: screen.ScreenFrame, index: int) -> tuple[int, int, int]:
+def _inline_field_geometry(
+    frame: screen.ScreenFrame,
+    index: int,
+    *,
+    direct: bool = False,
+) -> tuple[int, int, int]:
     region = next(region for region in frame.regions if region.action == f"field:{index}")
+    if direct:
+        return region.y, region.x, max(1, region.width)
     label_width = min(12, max(4, region.width // 3))
     value_column = region.x + label_width + 2
     value_width = max(1, region.width - label_width - 2)
@@ -137,7 +144,11 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
     )
     frame = render(state, catalog)
     screen._paint(frame.lines)
-    row, column, width = _inline_field_geometry(frame, index)
+    row, column, width = _inline_field_geometry(
+        frame,
+        index,
+        direct=state.form.mode == "edit" and state.key == "students",
+    )
     with input_style(True):
         raw = read_inline_input(
             f"{field_.label} > ",
