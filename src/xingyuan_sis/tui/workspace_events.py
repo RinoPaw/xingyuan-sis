@@ -3,7 +3,7 @@ from __future__ import annotations
 from . import keys, screen
 from .layout import WorkspaceLayout
 from .workspace_data import ACADEMICS, COLLECTIONS, Catalog
-from .workspace_forms import open_form
+from .workspace_forms import move_form_position, open_form
 from .workspace_state import Workspace
 
 
@@ -125,9 +125,6 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                     state.action_focus = False
                     return None
             elif state.key != "data":
-                # Esc first moves from the roster into the page action bar.
-                # The selected record remains unchanged and is rendered as
-                # weak context while the action bar owns keyboard focus.
                 state.action_focus = True
             elif state.history:
                 state.restore(catalog)
@@ -159,13 +156,8 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             if key.startswith("field:"):
                 state.form.position = int(key.split(":")[1])
                 return "field", state.form.position
-            if key in {"up", "down", "home", "end"}:
-                position = state.form.position + (-1 if key == "up" else 1)
-                if key == "home":
-                    position = 0
-                elif key == "end":
-                    position = len(state.form.fields) - 1
-                state.form.position = min(max(0, position), max(0, len(state.form.fields) - 1))
+            if key in {"up", "down", "left", "right", "home", "end"}:
+                move_form_position(state, key)
             continue
 
         if key.startswith("navigate:"):
