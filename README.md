@@ -199,12 +199,21 @@ xy data seed --reset
 ## 结构
 
 ```text
-Terminal Workspace ─┐
-Basic Menu ──────────┼── XingyuanService ── Repository ── SQLite
-CLI ─────────────────┘
+                 ┌─ CLI
+entry ───────────┼─ Basic UI
+                 └─ TUI
+                    │
+                    ▼
+              XingyuanService
+                    │
+                    ▼
+                Repository
+                    │
+                    ▼
+                  SQLite
 ```
 
-入口层先检测终端能力并选择交互界面。CLI 已按业务域拆分命令执行模块；工作台视图也拆成名册、档案、编辑器和数据概览面板，布局编排与具体面板渲染彼此分离。学生结构化查询由独立的 `student_filters` 查询层处理。
+CLI、基础菜单和 TUI 只是三个入口，共享同一套业务服务与持久化。CLI 自身收在 `cli/` 子包中；TUI 工作台收在 `tui/workspace/` 子包中，学生档案只有 `student_inspector.py` 一份实现。完整依赖与扩展约定见 [架构文档](docs/architecture.md)。
 
 ## 测试
 
@@ -218,21 +227,20 @@ python -m unittest discover -s tests
 xingyuan-sis/
 ├── src/xingyuan_sis/
 │   ├── __main__.py              # python -m 入口
-│   ├── entry.py                 # 统一入口、终端模式选择与学生查询分流
-│   ├── terminal_capabilities.py # TTY / ANSI / 即时输入能力检测
-│   ├── cli.py                   # CLI 初始化、分发和错误处理
-│   ├── cli_schema.py            # argparse 命令树
-│   ├── commands/                # student / academic / course / grade / data
-│   ├── tui/                     # 首页、工作台状态与拆分后的视图面板
-│   ├── basic_ui.py              # while True + 清屏 + 数字输入备用菜单
-│   ├── terminal_ui.py           # 两种菜单共用的分页、搜索与输入辅助
-│   ├── terminal_input.py        # 菜单表单主题与原生逐行输入
+│   ├── entry.py                 # 唯一入口与终端模式选择
+│   ├── cli/                     # parser + 各业务域 CLI runner
+│   ├── tui/
+│   │   └── workspace/           # state / events / forms / data / view / panels
+│   ├── basic_ui.py              # 数字输入备用菜单
+│   ├── terminal_ui.py           # 基础菜单 / CLI 输出与分页
+│   ├── terminal_input.py        # 普通输入与 TUI 单行编辑
 │   ├── student_filters.py       # 学生结构化过滤
+│   ├── student_query.py         # 学生查询语法
 │   ├── seed_data.py             # 默认演示数据
 │   ├── schema.py                # 表单、服务与 CSV 共用字段契约
 │   ├── service.py               # 业务接口
 │   ├── repository.py            # SQLite 数据访问层
-│   ├── database.py              # 连接与表结构初始化
+│   ├── database.py              # 当前表结构、连接与事务
 │   ├── reports.py               # 统计查询
 │   └── csv_io.py                # CSV 导入导出
 ├── docs/

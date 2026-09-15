@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from . import keys, screen
-from .layout import WorkspaceLayout
-from .workspace_data import ACADEMICS, COLLECTIONS, Catalog
-from .workspace_forms import move_form_position, open_form
-from .workspace_state import Workspace
+from .. import keys, screen
+from ..layout import WorkspaceLayout
+from .data import ACADEMICS, COLLECTIONS, Catalog
+from .forms import move_form_position, open_form
+from .state import Workspace
 
 
 _RECORD_ACTIONS = ("search", "create", "edit", "delete")
@@ -21,7 +21,7 @@ def _detail_geometry(state: Workspace) -> tuple[int, int]:
 
 
 def detail_targets(state: Workspace, catalog: Catalog) -> list[tuple[int, str]]:
-    from .workspace_view import detail_targets as view_targets
+    from .view import detail_targets as view_targets
 
     row = state.current(catalog)
     if row is None:
@@ -63,7 +63,7 @@ def select_visible_detail_target(state: Workspace, catalog: Catalog) -> None:
 
 
 def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
-    from .workspace_view import render
+    from .view import render
 
     previous: list[str] = []
     while True:
@@ -82,7 +82,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                     for region in frame.regions
                 )
             key = key.direction
-        if isinstance(key, keys.MouseClick):
+        if isinstance(key, screen.MouseClick):
             key = screen._hit_action(key, frame.regions)
         if not key:
             continue

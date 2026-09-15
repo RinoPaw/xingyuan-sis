@@ -4,10 +4,10 @@ import unittest
 
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
-from xingyuan_sis.tui import screen, workspace_view
+from xingyuan_sis.tui import screen
 from xingyuan_sis.tui.layout import WorkspaceLayout
-from xingyuan_sis.tui.workspace_data import Catalog
-from xingyuan_sis.tui.workspace_detail import preferred_width
+from xingyuan_sis.tui.workspace import student_inspector
+from xingyuan_sis.tui.workspace.data import Catalog
 
 
 class WorkspaceLayoutDensityTests(unittest.TestCase):
@@ -37,25 +37,29 @@ class WorkspaceLayoutDensityTests(unittest.TestCase):
 
     def test_student_inspector_width_tracks_actual_content(self):
         row = self.catalog.records["students"][0]
-        width = preferred_width("students", row, self.catalog)
+        width = student_inspector.preferred_width(row, self.catalog)
         self.assertGreaterEqual(width, 28)
-        self.assertLess(width, 42)
+        self.assertLessEqual(width, 42)
 
-    def test_student_inspector_does_not_repeat_roster_fields(self):
+    def test_student_inspector_summary_matches_archive_identity(self):
         row = self.catalog.records["students"][0]
-        rendered = workspace_view._details("students", row, self.catalog, 60)
-        plain = "\n".join(screen._ANSI_RE.sub("", text) for text, _, _ in rendered)
+        rendered = student_inspector._lines(row, self.catalog)
+        plain = "\n".join(
+            screen._ANSI_RE.sub("", "".join(text for text, _, _ in line))
+            for line in rendered
+        )
         summary = plain.split("选课与成绩", 1)[0]
 
         self.assertIn(row["name"], summary)
+        self.assertIn(str(row["student_no"]), summary)
         self.assertIn("物种", summary)
+        self.assertIn("性别", summary)
+        self.assertIn("年龄", summary)
         self.assertIn("入学", summary)
-        self.assertIn("亲和", summary)
         self.assertIn("学院", summary)
-        self.assertNotIn(str(row["student_no"]), summary)
-        self.assertNotIn(str(row["class_name"]), summary)
-        self.assertNotIn(str(row["status"]), summary)
-        self.assertNotIn(str(row["primary_element"]), summary)
+        self.assertIn("班级", summary)
+        self.assertIn("学籍", summary)
+        self.assertIn("元素", summary)
 
 
 if __name__ == "__main__":

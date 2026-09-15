@@ -4,17 +4,17 @@ from __future__ import annotations
 from pathlib import Path
 import sqlite3
 
-from . import keys
-from .workspace_data import Catalog
-from .workspace_events import (
+from .. import keys
+from .data import Catalog
+from .events import (
     _detail_geometry,
     detail_targets as _detail_targets,
     interact as _interact,
     reveal_detail_selection as _reveal_detail_selection,
     select_visible_detail_target as _select_visible_detail_target,
 )
-from .workspace_forms import apply_form as _apply_form, open_form as _open_form, read_value as _read_value
-from .workspace_state import Form, Workspace
+from .forms import apply_form as _apply_form, open_form as _open_form, read_value as _read_value
+from .state import Form, Workspace
 
 
 __all__ = ["Form", "Workspace", "run"]

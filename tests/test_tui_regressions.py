@@ -7,8 +7,9 @@ from unittest.mock import patch
 
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
-from xingyuan_sis.tui import keys, screen, workspace, workspace_view
-from xingyuan_sis.tui.workspace_data import ACADEMICS, Catalog
+from xingyuan_sis.tui import keys, screen, workspace
+from xingyuan_sis.tui.workspace import student_inspector, view as workspace_view
+from xingyuan_sis.tui.workspace.data import ACADEMICS, Catalog
 
 
 WORKSPACES = ("students", "departments", "majors", "classes", "courses", "grades", "data")
@@ -155,24 +156,29 @@ class TuiRegressionAuditTests(unittest.TestCase):
             self.assertIsNone(workspace._interact(state, self.catalog))
         self.assertFalse(state.details)
 
-    def test_student_inspector_keeps_compact_information_hierarchy(self):
+    def test_student_inspector_keeps_one_current_information_hierarchy(self):
         state = workspace.Workspace("students")
         row = state.current(self.catalog)
-        details = workspace_view._details("students", row, self.catalog, 55)
-        plain = "\n".join(screen._ANSI_RE.sub("", text) for text, _, _ in details)
+        rendered = student_inspector._lines(row, self.catalog)
+        plain = "\n".join(
+            screen._ANSI_RE.sub("", "".join(text for text, _, _ in line))
+            for line in rendered
+        )
         summary = plain.split("选课与成绩", 1)[0]
 
         self.assertIn(row["name"], summary)
+        self.assertIn(str(row["student_no"]), summary)
         self.assertIn("物种", summary)
+        self.assertIn("性别", summary)
+        self.assertIn("年龄", summary)
         self.assertIn("入学", summary)
-        self.assertIn("亲和", summary)
         self.assertIn("学院", summary)
-        self.assertNotIn(str(row["student_no"]), summary)
-        self.assertNotIn(str(row["class_name"]), summary)
-        self.assertNotIn(str(row["status"]), summary)
-        self.assertNotIn(str(row["primary_element"]), summary)
+        self.assertIn("班级", summary)
+        self.assertIn("学籍", summary)
+        self.assertIn("元素", summary)
         self.assertIn("选课与成绩", plain)
-        self.assertIn("详细信息", plain)
+        self.assertIn("个人信息", plain)
+        self.assertNotIn("详细信息", plain)
         self.assertNotIn("即时预览", plain)
         self.assertNotIn("阅读中", plain)
         self.assertNotIn("档案字段", plain)

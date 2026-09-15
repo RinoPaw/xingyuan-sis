@@ -6,8 +6,9 @@ from unittest.mock import patch
 
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
-from xingyuan_sis.tui import keys, screen, workspace, workspace_view
-from xingyuan_sis.tui.workspace_data import Catalog
+from xingyuan_sis.tui import keys, screen, workspace
+from xingyuan_sis.tui.workspace import student_inspector, view as workspace_view
+from xingyuan_sis.tui.workspace.data import Catalog
 
 
 class DetailFocusTests(unittest.TestCase):
@@ -41,21 +42,24 @@ class DetailFocusTests(unittest.TestCase):
         self.assertNotIn("阅读中", plain)
         self.assertTrue(any(screen._SURFACE_SELECTED in line for line in detail.lines))
 
-    def test_student_inspector_uses_summary_relationships_and_supplemental_details(self):
+    def test_student_inspector_uses_current_archive_hierarchy(self):
         state = workspace.Workspace("students")
         row = state.current(self.catalog)
-        details = workspace_view._details("students", row, self.catalog, 55)
-        plain = "\n".join(screen._ANSI_RE.sub("", line) for line, _, _ in details)
+        lines = student_inspector._lines(row, self.catalog)
+        plain = "\n".join(
+            screen._ANSI_RE.sub("", "".join(text for text, _, _ in line))
+            for line in lines
+        )
 
         self.assertIn(row["name"], plain)
-        self.assertNotIn(row["student_no"], plain)
-        self.assertIn("选课与成绩", plain)
-        self.assertIn("详细信息", plain)
-        self.assertNotIn("档案字段", plain)
-        self.assertNotIn("学号      ", plain)
-        self.assertNotIn("姓名      ", plain)
+        self.assertIn(row["student_no"], plain)
         self.assertIn("性别", plain)
+        self.assertIn("年龄", plain)
+        self.assertIn("选课与成绩", plain)
+        self.assertIn("个人信息", plain)
         self.assertIn("出生日期", plain)
+        self.assertNotIn("详细信息", plain)
+        self.assertNotIn("档案字段", plain)
 
     def test_arrows_move_selection_inside_focused_detail_pane(self):
         state = workspace.Workspace("students", details=True)

@@ -1,6 +1,6 @@
 import unittest
 
-from xingyuan_sis.cli_schema import build_parser
+from xingyuan_sis.cli import build_parser
 
 
 class CliSchemaTests(unittest.TestCase):

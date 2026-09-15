@@ -4,9 +4,10 @@ import unittest
 
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
-from xingyuan_sis.tui import screen, workspace_detail, workspace_forms
-from xingyuan_sis.tui.workspace_data import Catalog
-from xingyuan_sis.tui.workspace_state import Workspace
+from xingyuan_sis.tui import screen
+from xingyuan_sis.tui.workspace import forms as workspace_forms, student_inspector
+from xingyuan_sis.tui.workspace.data import Catalog
+from xingyuan_sis.tui.workspace.state import Workspace
 
 
 class StudentEditNavigationTests(unittest.TestCase):
@@ -54,7 +55,7 @@ class StudentEditNavigationTests(unittest.TestCase):
 
     def test_render_groups_element_with_affinity_not_status(self):
         row = self.state.current(self.catalog)
-        lines = workspace_detail._student_edit_lines(self.state, self.catalog, row)
+        lines = student_inspector._lines(row, self.catalog, self.state)
         actions = [[action for _, _, action in line if action.startswith("field:")] for line in lines]
         index_by_key = {
             field.key: index for index, field in enumerate(self.state.form.fields)
@@ -70,11 +71,11 @@ class StudentEditNavigationTests(unittest.TestCase):
     def test_name_is_blue_only_when_focused(self):
         row = self.state.current(self.catalog)
         self._focus("student_no")
-        lines = workspace_detail._student_edit_lines(self.state, self.catalog, row)
+        lines = student_inspector._lines(row, self.catalog, self.state)
         self.assertEqual(lines[0][0][1], screen._BOLD + screen._TEXT_PRIMARY)
 
         self._focus("name")
-        lines = workspace_detail._student_edit_lines(self.state, self.catalog, row)
+        lines = student_inspector._lines(row, self.catalog, self.state)
         self.assertEqual(lines[0][0][1], screen._BOLD + screen._TEXT_ACCENT)
 
 

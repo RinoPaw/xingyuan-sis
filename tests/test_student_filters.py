@@ -10,7 +10,7 @@ from xingyuan_sis.cli import main as cli_main
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.student_query import parse_student_query
-from xingyuan_sis.tui.workspace_data import Catalog
+from xingyuan_sis.tui.workspace.data import Catalog
 
 
 class StudentFilterCliTests(unittest.TestCase):

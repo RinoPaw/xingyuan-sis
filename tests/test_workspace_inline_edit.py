@@ -7,8 +7,9 @@ from unittest.mock import patch
 from xingyuan_sis import terminal_input
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
-from xingyuan_sis.tui import screen, workspace, workspace_forms, workspace_view
-from xingyuan_sis.tui.workspace_data import Catalog
+from xingyuan_sis.tui import screen, workspace
+from xingyuan_sis.tui.workspace import forms as workspace_forms, view as workspace_view
+from xingyuan_sis.tui.workspace.data import Catalog
 
 
 class WorkspaceInlineEditTests(unittest.TestCase):

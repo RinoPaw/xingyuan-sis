@@ -1,41 +1,21 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from ..terminal_ui import _wrap_line
-from . import screen
-from .layout import WorkspaceLayout, visible_start
-from .view_common import Board, identity, metric_pair, panel_heading, safe
-from .workspace_data import COLLECTIONS, Catalog
-
-if TYPE_CHECKING:
-    from .workspace import Workspace
-
-
-_EditSegment = tuple[str, str, str]
-_EditLine = list[_EditSegment]
-
-
-def _student_summary(row: dict[str, Any]) -> list[tuple[str, str, str]]:
-    species = f"{safe(row['family'])} · {safe(row['branch'])}"
-    return [
-        (safe(row["name"]), screen._BOLD + screen._TEXT_ACCENT, ""),
-        (screen._ansi("物种  ", screen._TEXT_SECONDARY) + screen._ansi(species, screen._TEXT_PRIMARY), "", ""),
-        (screen._ansi("入学  ", screen._TEXT_SECONDARY) + screen._ansi(f"{safe(row['enrollment_year'])}级", screen._TEXT_PRIMARY), "", ""),
-        (screen._ansi("亲和  ", screen._TEXT_SECONDARY) + screen._ansi(safe(row["primary_affinity"]), screen._TEXT_PRIMARY), "", ""),
-        (screen._ansi("学院  ", screen._TEXT_SECONDARY) + screen._ansi(safe(row["department_name"]), screen._TEXT_PRIMARY), "", ""),
-    ]
+from ...terminal_ui import _wrap_line
+from .. import screen
+from ..layout import WorkspaceLayout, visible_start
+from ..view_common import Board, identity, metric_pair, panel_heading, safe
+from .data import COLLECTIONS, Catalog
+from .state import Workspace
 
 
 def details(key: str, row: dict[str, Any], catalog: Catalog, width: int) -> list[tuple[str, str, str]]:
-    if key == "students":
-        lines = _student_summary(row)
-    else:
-        title, identifier = identity(key, row)
-        lines = [
-            (title, screen._BOLD + screen._TEXT_ACCENT, ""),
-            (identifier, screen._TEXT_SECONDARY, ""),
-        ]
+    title, identifier = identity(key, row)
+    lines = [
+        (title, screen._BOLD + screen._TEXT_ACCENT, ""),
+        (identifier, screen._TEXT_SECONDARY, ""),
+    ]
 
     if key == "courses":
         lines.append((
@@ -58,17 +38,15 @@ def details(key: str, row: dict[str, Any], catalog: Catalog, width: int) -> list
             lines.append(("━" * filled + "·" * (size - filled), screen._TEXT_ACCENT, "edit-field:score"))
 
     related_key, related = catalog.related(key, row)
-    related_title = "选课与成绩" if key == "students" else f"关联{COLLECTIONS[related_key].noun}"
     lines.extend([
         ("", "", ""),
-        (f"{related_title}  {len(related):02d}", screen._BOLD + screen._TEXT_PRIMARY, ""),
+        (f"关联{COLLECTIONS[related_key].noun}  {len(related):02d}", screen._BOLD + screen._TEXT_PRIMARY, ""),
     ])
     if not related:
         lines.append(("暂无关联记录", screen._TEXT_SECONDARY, ""))
     for item in related:
         if related_key == "grades":
-            label = item["course_name"] if key == "students" else item["student_name"]
-            label = f"{label}  ·  {safe(item['score']) if item['score'] is not None else '待录入'}"
+            label = f"{item['student_name']}  ·  {safe(item['score']) if item['score'] is not None else '待录入'}"
         else:
             label = item["name"]
         lines.append((
@@ -78,17 +56,11 @@ def details(key: str, row: dict[str, Any], catalog: Catalog, width: int) -> list
         ))
 
     editable = {f.key for f in catalog.fields(key, True)}
-    if key == "students":
-        detail_keys = {"gender", "birth_date", "contact", "dormitory", "notes"}
-        fields = [field for field in COLLECTIONS[key].fields if field.key in detail_keys]
-    else:
-        fields = list(COLLECTIONS[key].fields)
-
     lines.extend([
         ("", "", ""),
         ("详细信息", screen._BOLD + screen._TEXT_PRIMARY, ""),
     ])
-    for field in fields:
+    for field in COLLECTIONS[key].fields:
         action = f"edit-field:{field.key}" if field.key in editable else ""
         value = safe(row.get(field.key))
         chunks = _wrap_line(value, max(2, width - 12))
@@ -141,152 +113,7 @@ def _form_value(catalog: Catalog, state: Workspace, field_key: str) -> str:
     return safe(value)
 
 
-def _student_department(catalog: Catalog, state: Workspace, row: dict[str, Any]) -> str:
-    class_code = state.form.values.get("class_code")
-    selected_class = next((item for item in catalog.records["classes"] if item["code"] == class_code), None)
-    if selected_class is None:
-        return safe(row.get("department_name"))
-    major = next((item for item in catalog.records["majors"] if item["id"] == selected_class["major_id"]), None)
-    if major is None:
-        return safe(row.get("department_name"))
-    department = next((item for item in catalog.records["departments"] if item["id"] == major["department_id"]), None)
-    return safe(department["name"] if department else row.get("department_name"))
-
-
-def _student_edit_lines(
-    state: Workspace,
-    catalog: Catalog,
-    row: dict[str, Any],
-) -> list[_EditLine]:
-    form = state.form
-    positions = {field.key: index for index, field in enumerate(form.fields)}
-
-    def field(key: str, text: str | None = None, style: str = screen._TEXT_PRIMARY) -> _EditSegment:
-        index = positions[key]
-        selected = index == form.position
-        return (
-            _form_value(catalog, state, key) if text is None else text,
-            screen._BOLD + screen._TEXT_ACCENT if selected else style,
-            f"field:{index}",
-        )
-
-    def label(text: str) -> _EditSegment:
-        return (text, screen._TEXT_SECONDARY, "")
-
-    lines: list[_EditLine] = [
-        [field("name", style=screen._BOLD + screen._TEXT_PRIMARY)],
-        [label("学号  "), field("student_no")],
-        [label("物种  "), field("family"), (" · ", screen._TEXT_SECONDARY, ""), field("branch")],
-        [label("入学  "), field("enrollment_year", f"{safe(form.values.get('enrollment_year'))}级")],
-        [label("学院  "), (_student_department(catalog, state, row), screen._TEXT_PRIMARY, "")],
-        [label("班级  "), field("class_code")],
-        [label("学籍  "), field("status")],
-        [label("元素  "), field("primary_element"), ("    ", "", ""), label("亲和  "), field("primary_affinity")],
-    ]
-
-    related_key, related = catalog.related("students", row)
-    lines.extend([
-        [],
-        [(f"选课与成绩  {len(related):02d}", screen._BOLD + screen._TEXT_PRIMARY, "")],
-    ])
-    if not related:
-        lines.append([("暂无关联记录", screen._TEXT_SECONDARY, "")])
-    else:
-        for item in related:
-            score = safe(item["score"]) if item["score"] is not None else "待录入"
-            lines.append([(f"↗ {safe(item['course_name'])}  ·  {score}", screen._TEXT_ACCENT + "\x1b[4m", "")])
-
-    lines.extend([
-        [],
-        [("详细信息", screen._BOLD + screen._TEXT_PRIMARY, "")],
-        [label("性别      "), field("gender")],
-        [label("出生日期  "), field("birth_date")],
-        [label("联系方式  "), field("contact")],
-        [label("宿舍      "), field("dormitory")],
-        [label("备注      "), field("notes")],
-    ])
-
-    if form.options is not None:
-        target = f"field:{form.position}"
-        insert_at = next(
-            (index + 1 for index, line in enumerate(lines) if any(action == target for _, _, action in line)),
-            len(lines),
-        )
-        option_lines: list[_EditLine] = []
-        if form.options:
-            for index, (_, option_label) in enumerate(form.options):
-                style = (
-                    screen._BOLD + screen._TEXT_ACCENT
-                    if index == form.option_index
-                    else screen._TEXT_PRIMARY
-                )
-                option_lines.append([("  " + safe(option_label), style, f"option:{index}")])
-        else:
-            option_lines.append([("  暂无可选记录", screen._TEXT_SECONDARY, "")])
-        lines[insert_at:insert_at] = option_lines
-
-    return lines
-
-
-def _render_student_edit_inspector(
-    board: Board,
-    state: Workspace,
-    catalog: Catalog,
-    row: dict[str, Any],
-    x: int,
-    width: int,
-    top: int,
-) -> None:
-    layout = WorkspaceLayout(board.width, board.height)
-    board.put(
-        x,
-        layout.panel_heading_row(state.key),
-        panel_heading("档案", True) + screen._ansi("  编辑中", screen._TEXT_SECONDARY),
-        width=width,
-    )
-
-    lines = _student_edit_lines(state, catalog, row)
-    save_row = board.height - 3
-    capacity = max(1, save_row - top - 1)
-    target_action = (
-        f"option:{state.form.option_index}"
-        if state.form.options is not None and state.form.options
-        else f"field:{state.form.position}"
-    )
-    target_line = next(
-        (index for index, line in enumerate(lines) if any(action == target_action for _, _, action in line)),
-        0,
-    )
-    state.detail_scroll = visible_start(target_line, len(lines), capacity, state.detail_scroll)
-    visible = lines[state.detail_scroll:state.detail_scroll + capacity]
-
-    for offset, segments in enumerate(visible):
-        y = top + offset
-        cursor = x
-        for segment_index, (text, style, action) in enumerate(segments):
-            remaining = max(0, x + width - cursor)
-            if remaining <= 0:
-                break
-            shown = screen._clip_cells(text, remaining)
-            display = screen._display_width(shown)
-            if action.startswith("field:"):
-                field_index = int(action.split(":")[1])
-                selected = field_index == state.form.position
-                field_key = state.form.fields[field_index].key
-                freeform = catalog.options(state.key, field_key, state.form.values) is None
-                hit_width = display
-                if selected and state.form.options is None and freeform and segment_index == len(segments) - 1:
-                    hit_width = max(display, remaining)
-                board.regions.append(screen.HitRegion(cursor + 1, y + 1, max(1, hit_width), action))
-                board.put(cursor, y, shown, style, width=remaining)
-            else:
-                board.put(cursor, y, shown, style, action, width=remaining)
-            cursor += display
-
-    board.button(x, save_row, " 保存 ", "save")
-
-
-def _render_generic_edit_inspector(
+def _render_edit_inspector(
     board: Board,
     state: Workspace,
     catalog: Catalog,
@@ -364,10 +191,7 @@ def render_inspector(board: Board, state: Workspace, catalog: Catalog, x: int, w
     heading = identity(state.key, row)[0] if layout.compact and row else "档案"
 
     if row is not None and state.form is not None and state.form.mode == "edit":
-        if state.key == "students":
-            _render_student_edit_inspector(board, state, catalog, row, x, width, top)
-        else:
-            _render_generic_edit_inspector(board, state, catalog, x, width, top)
+        _render_edit_inspector(board, state, catalog, x, width, top)
         return
 
     board.put(x, heading_row, panel_heading(heading, state.details), action="focus", width=width)

@@ -8,8 +8,9 @@ from unittest.mock import patch
 
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import ENROLLMENTS, STUDENTS, seed_demo
-from xingyuan_sis.tui import app, keys, screen, workspace, workspace_view
-from xingyuan_sis.tui.workspace_data import COLLECTIONS, Catalog
+from xingyuan_sis.tui import app, keys, screen, workspace
+from xingyuan_sis.tui.workspace import view as workspace_view
+from xingyuan_sis.tui.workspace.data import COLLECTIONS, Catalog
 
 
 class WorkspaceTests(unittest.TestCase):

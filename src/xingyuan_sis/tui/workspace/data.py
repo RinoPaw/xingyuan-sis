@@ -7,10 +7,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from ..schema import FIELDS, Field
-from ..service import XingyuanService
-from ..student_filters import query_students
-from ..student_query import parse_student_query
+from ...schema import FIELDS, Field
+from ...service import XingyuanService
+from ...student_filters import query_students
+from ...student_query import parse_student_query
 
 
 @dataclass(frozen=True)
@@ -144,7 +144,6 @@ class Catalog:
         return values
 
     def fields(self, key: str, editing: bool = False) -> tuple[Field, ...]:
-        # An enrollment's student/course remain attached while editing its score.
         return tuple(f for f in COLLECTIONS[key].fields if not (key == "grades" and editing and f.key in {"student_no", "course_code"}))
 
     def options(

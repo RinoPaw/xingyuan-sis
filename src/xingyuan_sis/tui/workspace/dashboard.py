@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..terminal_ui import _wrap_line
-from . import screen
-from .layout import WorkspaceLayout
-from .view_common import Board, safe
-from .workspace_data import Catalog
+from ...terminal_ui import _wrap_line
+from .. import screen
+from ..layout import WorkspaceLayout
+from ..view_common import Board, safe
+from .data import Catalog
 
 if TYPE_CHECKING:
-    from .workspace import Workspace
+    from .state import Workspace
 
 
 def render_dashboard(board: Board, state: Workspace, catalog: Catalog) -> None:

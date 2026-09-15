@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .student_query import add_student_query_arguments
+from ..student_query import add_student_query_arguments
 
 
 def build_parser() -> argparse.ArgumentParser:

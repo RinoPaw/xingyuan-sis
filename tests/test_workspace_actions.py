@@ -6,8 +6,9 @@ from unittest.mock import patch
 
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
-from xingyuan_sis.tui import keys, screen, workspace, workspace_events, workspace_view
-from xingyuan_sis.tui.workspace_data import Catalog
+from xingyuan_sis.tui import keys, screen, workspace
+from xingyuan_sis.tui.workspace import events as workspace_events, view as workspace_view
+from xingyuan_sis.tui.workspace.data import Catalog
 
 
 class WorkspaceActionTests(unittest.TestCase):

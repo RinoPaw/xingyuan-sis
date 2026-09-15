@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from . import screen
-from .layout import WorkspaceLayout, visible_start
-from .view_common import Board, panel_heading, safe
-from .workspace_data import COLLECTIONS, Catalog
+from .. import screen
+from ..layout import WorkspaceLayout, visible_start
+from ..view_common import Board, panel_heading, safe
+from .data import COLLECTIONS, Catalog
 
 if TYPE_CHECKING:
-    from .workspace import Workspace
+    from .state import Workspace
 
 
 def roster_window(state: Workspace, row_count: int, capacity: int) -> int:

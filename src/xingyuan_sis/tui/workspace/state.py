@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from .workspace_data import Catalog, Field
+from .data import Catalog, Field
 
 
 @dataclass

@@ -2,8 +2,8 @@ import unittest
 
 from xingyuan_sis.tui import screen
 from xingyuan_sis.tui.view_common import Board
-from xingyuan_sis.tui.workspace_data import COLLECTIONS
-from xingyuan_sis.tui.workspace_roster import _fit_columns, render_roster
+from xingyuan_sis.tui.workspace.data import COLLECTIONS
+from xingyuan_sis.tui.workspace.roster import _fit_columns, render_roster
 
 
 class _State:

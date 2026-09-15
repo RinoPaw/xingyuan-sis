@@ -1,20 +1,19 @@
 from __future__ import annotations
 
-from . import screen, theme
-from .layout import WorkspaceLayout
-from .view_common import Board, metric_pair, metric_summary, safe
-from .workspace_dashboard import render_dashboard
-from .workspace_data import ACADEMICS, COLLECTIONS, Catalog
-from .workspace_detail import (
+from .. import screen, theme
+from ..layout import WorkspaceLayout
+from ..view_common import Board, metric_pair, metric_summary, safe
+from .dashboard import render_dashboard
+from .data import ACADEMICS, COLLECTIONS, Catalog
+from .detail import (
     detail_targets as _generic_detail_targets,
-    details as _details,
     preferred_width as _generic_preferred_inspector_width,
     render_inspector as _generic_inspector,
 )
-from .workspace_editor import render_editor
-from .workspace_roster import render_roster as _roster
-from .workspace_state import Workspace
-from .workspace_student_inspector import (
+from .editor import render_editor
+from .roster import render_roster as _roster
+from .state import Workspace
+from .student_inspector import (
     detail_targets as _student_detail_targets,
     preferred_width as _student_preferred_inspector_width,
     render_inspector as _student_inspector,

@@ -5,10 +5,11 @@ import sqlite3
 import sys
 from typing import Sequence
 
-from .cli_schema import build_parser
-from .commands import print_table, run_group
-from .database import initialize_database
-from .service import XingyuanService
+from .common import print_table
+from .dispatcher import run_group
+from .parser import build_parser
+from ..database import initialize_database
+from ..service import XingyuanService
 
 
 __all__ = ["build_parser", "main", "print_table", "run"]
@@ -23,7 +24,7 @@ def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
 
     initialize_database(args.db)
     if args.group == "auth":
-        from .auth_cli import run as run_auth
+        from ..auth_cli import run as run_auth
 
         return run_auth(args.db, args)
 
@@ -45,9 +46,3 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (ValueError, sqlite3.Error, OSError) as error:
         print(f"操作失败：{error}", file=sys.stderr)
         return 1
-
-
-if __name__ == "__main__":
-    from .entry import main as entry_main
-
-    raise SystemExit(entry_main())

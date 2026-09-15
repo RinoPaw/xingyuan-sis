@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from . import screen
-from .layout import WorkspaceLayout, visible_start
-from .view_common import Board, panel_heading, safe
-from .workspace_data import Catalog
-from .workspace_state import Workspace
+from .. import screen
+from ..layout import WorkspaceLayout, visible_start
+from ..view_common import Board, panel_heading, safe
+from .data import Catalog
+from .state import Workspace
 
 
 _Segment = tuple[str, str, str]
@@ -268,7 +268,7 @@ def render_inspector(
                 break
             shown = screen._clip_cells(text, remaining)
             display = screen._display_width(shown)
-            selected = action and action == selected_action and (editing or state.details)
+            selected = bool(action and action == selected_action and (editing or state.details))
             drawn_style = (
                 screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
                 if selected

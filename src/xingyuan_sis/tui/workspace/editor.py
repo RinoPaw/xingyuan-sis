@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import screen
-from .layout import WorkspaceLayout
-from .view_common import Board, identity, safe
-from .workspace_data import COLLECTIONS, Catalog
+from .. import screen
+from ..layout import WorkspaceLayout
+from ..view_common import Board, identity, safe
+from .data import COLLECTIONS, Catalog
 
 if TYPE_CHECKING:
-    from .workspace import Workspace
+    from .state import Workspace
 
 
 def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, width: int) -> None:

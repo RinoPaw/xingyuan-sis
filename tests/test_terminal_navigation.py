@@ -7,8 +7,9 @@ import unittest
 from unittest.mock import patch
 
 from xingyuan_sis import basic_ui, terminal_ui
-from xingyuan_sis.tui import app as menu, screen, keys, animation, theme, workspace, workspace_view
-from xingyuan_sis.tui.workspace_data import Catalog
+from xingyuan_sis.tui import app as menu, screen, keys, animation, theme, workspace
+from xingyuan_sis.tui.workspace import view as workspace_view
+from xingyuan_sis.tui.workspace.data import Catalog
 from xingyuan_sis.database import initialize_database
 
 

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..student_query import parse_student_query
-from ..terminal_input import input_style, read_inline_input, read_input
-from . import screen
-from .view_common import safe
-from .workspace_data import Catalog, Field
-from .workspace_state import Form, Workspace
+from ...student_query import parse_student_query
+from ...terminal_input import input_style, read_inline_input, read_input
+from .. import screen
+from ..view_common import safe
+from .data import Catalog, Field
+from .state import Form, Workspace
 
 
 _STUDENT_EDIT_ROWS: tuple[tuple[str, ...], ...] = (
@@ -123,8 +123,8 @@ def apply_form(state: Workspace, catalog: Catalog) -> None:
         catalog.delete(state.key, form.original)
         state.notice = "记录已删除。"
     elif form.mode == "seed":
-        from ..auth import DEMO_STUDENT_PASSWORD, provision_demo_passwords
-        from ..seed_data import seed_demo
+        from ...auth import DEMO_STUDENT_PASSWORD, provision_demo_passwords
+        from ...seed_data import seed_demo
 
         if any(catalog.records.values()):
             raise ValueError("已有校园记录，请使用空数据库体验演示校园。")
@@ -164,7 +164,7 @@ def _inline_field_geometry(
 
 
 def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> None:
-    from .workspace_view import render
+    from .view import render
 
     kind, index = event
     if kind == "search":
