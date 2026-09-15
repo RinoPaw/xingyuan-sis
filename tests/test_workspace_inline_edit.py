@@ -83,20 +83,15 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         self.assertNotIn("编辑 · 学生档案", plain)
         self.assertNotIn("族系*", plain)
         self.assertNotIn("支系*", plain)
-        self.assertTrue(any(region.action == "field:0" for region in frame.regions))
+        self.assertTrue(any(region.action == "field:1" for region in frame.regions))
         self.assertTrue(any(region.action == "save" for region in frame.regions))
 
-    def test_student_edit_navigation_order_matches_archive_layout(self):
+    def test_student_edit_starts_on_name_without_reordering_schema_fields(self):
         state = workspace.Workspace("students")
         workspace._open_form(state, self.catalog, "edit")
-        self.assertEqual(
-            [field.key for field in state.form.fields],
-            [
-                "name", "student_no", "family", "branch", "enrollment_year",
-                "primary_affinity", "class_code", "status", "primary_element",
-                "gender", "birth_date", "contact", "dormitory", "notes",
-            ],
-        )
+        self.assertEqual(state.form.fields[0].key, "student_no")
+        self.assertEqual(state.form.fields[1].key, "name")
+        self.assertEqual(state.form.position, 1)
 
     def test_enum_picker_expands_inside_the_inspector(self):
         state = workspace.Workspace("students")
