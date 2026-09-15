@@ -10,7 +10,7 @@ from xingyuan_sis import basic_ui, terminal_ui
 from xingyuan_sis.tui import app as menu, screen, keys, animation, theme
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.entry import main
-from xingyuan_sis.seed_data import seed_demo
+from xingyuan_sis.seed_data import STUDENTS, seed_demo
 
 
 LABELS = ("学生", "教务", "课程", "成绩", "数据", "退出")
@@ -220,17 +220,19 @@ class InteractionTests(unittest.TestCase):
         self.assertIn("已退出", output.getvalue())
 
     def test_both_menus_search_real_student_data(self) -> None:
+        target_no, target_name = str(STUDENTS[0][0]), str(STUDENTS[0][1])
+        other_no = str(STUDENTS[1][0])
         with TemporaryDirectory() as directory:
             db = Path(directory) / "test.db"
             initialize_database(db)
             seed_demo(db)
             for ui in (basic_ui,):
                 with self.subTest(ui=ui.__name__), patch.object(ui, "_clear"), \
-                     patch("builtins.input", side_effect=["林岚", ""]), \
+                     patch("builtins.input", side_effect=[target_name, ""]), \
                      redirect_stdout(StringIO()) as output:
                     terminal_ui.search_students(lambda args: ui._command(db, args))
-                self.assertIn("20260001", output.getvalue())
-                self.assertNotIn("20260002", output.getvalue())
+                self.assertIn(target_no, output.getvalue())
+                self.assertNotIn(other_no, output.getvalue())
 
     def test_database_failure_is_readable_and_has_nonzero_exit(self) -> None:
         with TemporaryDirectory() as directory, redirect_stderr(StringIO()) as errors:
