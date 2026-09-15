@@ -10,6 +10,22 @@ from .workspace_data import Catalog, Field
 from .workspace_state import Form, Workspace
 
 
+_STUDENT_EDIT_ROWS: tuple[tuple[str, ...], ...] = (
+    ("name",),
+    ("student_no",),
+    ("family", "branch"),
+    ("enrollment_year",),
+    ("primary_affinity",),
+    ("class_code",),
+    ("status", "primary_element"),
+    ("gender",),
+    ("birth_date",),
+    ("contact",),
+    ("dormitory",),
+    ("notes",),
+)
+
+
 def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
     row = state.current(catalog)
     if mode in {"edit", "delete"} and row is None:
@@ -30,6 +46,64 @@ def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
         state.form = Form(mode, original=row)
     state.notice = "更改尚未保存。Esc 取消。"
     state.detail_scroll = 0
+
+
+def _move_linear_form_position(form: Form, direction: str) -> None:
+    if not form.fields:
+        return
+    if direction == "home":
+        form.position = 0
+    elif direction == "end":
+        form.position = len(form.fields) - 1
+    elif direction == "up":
+        form.position = max(0, form.position - 1)
+    elif direction == "down":
+        form.position = min(len(form.fields) - 1, form.position + 1)
+
+
+def move_form_position(state: Workspace, direction: str) -> None:
+    """Move form focus according to the rendered geometry when one exists."""
+    form = state.form
+    if form is None or not form.fields:
+        return
+    if form.mode != "edit" or state.key != "students":
+        _move_linear_form_position(form, direction)
+        return
+
+    positions = {field.key: index for index, field in enumerate(form.fields)}
+    rows = [tuple(key for key in row if key in positions) for row in _STUDENT_EDIT_ROWS]
+    rows = [row for row in rows if row]
+    current_key = form.fields[form.position].key
+    location = next(
+        ((row_index, row.index(current_key)) for row_index, row in enumerate(rows) if current_key in row),
+        None,
+    )
+    if location is None:
+        _move_linear_form_position(form, direction)
+        return
+
+    row_index, column_index = location
+    if direction == "home":
+        target = rows[0][0]
+    elif direction == "end":
+        target = rows[-1][-1]
+    elif direction == "left":
+        if column_index == 0:
+            return
+        target = rows[row_index][column_index - 1]
+    elif direction == "right":
+        if column_index + 1 >= len(rows[row_index]):
+            return
+        target = rows[row_index][column_index + 1]
+    elif direction in {"up", "down"}:
+        next_row = row_index + (-1 if direction == "up" else 1)
+        if not 0 <= next_row < len(rows):
+            return
+        target_row = rows[next_row]
+        target = target_row[min(column_index, len(target_row) - 1)]
+    else:
+        return
+    form.position = positions[target]
 
 
 def apply_form(state: Workspace, catalog: Catalog) -> None:
