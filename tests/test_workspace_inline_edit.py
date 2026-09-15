@@ -8,6 +8,7 @@ from xingyuan_sis import terminal_input
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import screen, workspace
+from xingyuan_sis.tui.text_edit import TextBuffer
 from xingyuan_sis.tui.workspace import forms as workspace_forms, view as workspace_view
 from xingyuan_sis.tui.workspace.data import Catalog
 
@@ -154,8 +155,9 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         self.assertEqual([value for value, _ in state.form.options], ["在读", "休学", "保留学籍"])
 
     def test_inline_redraw_never_clears_the_whole_terminal_row(self):
+        buffer = TextBuffer.from_value("林岚")
         with patch("sys.stdout.write") as write, patch("sys.stdout.flush"):
-            terminal_input._redraw_inline(7, 13, 8, list("林岚"), 2, colored=True)
+            terminal_input._redraw_inline(7, 13, 8, buffer, colored=True)
 
         output = "".join(call.args[0] for call in write.call_args_list)
         self.assertIn("\x1b[7;13H", output)

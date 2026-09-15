@@ -44,7 +44,7 @@ class TuiInputGuardTests(unittest.TestCase):
             with terminal_input.input_style(True):
                 self.assertEqual(terminal_input.read_input("密码: ", secret=True), "s3cret")
         read.assert_called_once_with("密码: ", colored=True, secret=True)
-        shown, cursor = terminal_input._visible_input(list("s3cret"), 6, 20, secret=True)
+        shown, cursor = TextBuffer.from_value("s3cret").view(20, secret=True)
         self.assertEqual(shown, "••••••")
         self.assertEqual(cursor, 6)
         self.assertNotIn("s3cret", shown)
