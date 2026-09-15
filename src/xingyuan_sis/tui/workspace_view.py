@@ -38,8 +38,9 @@ def render(state: Workspace, catalog: Catalog):
     terminal = screen._terminal_size()
     width, height = max(1, terminal.columns - 1), max(4, terminal.lines)
     current = state.current(catalog) if state.key != "data" else None
+    inline_edit = current is not None and state.form is not None and state.form.mode == "edit"
     inspector_width = None
-    if current is not None and state.form is None:
+    if current is not None and (state.form is None or inline_edit):
         inspector_width = _preferred_inspector_width(state.key, current, catalog)
     layout = WorkspaceLayout(width, height, inspector_width)
     board = Board(width, height)
@@ -59,7 +60,7 @@ def render(state: Workspace, catalog: Catalog):
         action_row = layout.action_row
         _render_actions(board, state, 0, action_row, width)
         content_row = action_row + 1
-        if state.form:
+        if state.form and not inline_edit:
             render_editor(board, state, catalog, layout.panel_x, layout.panel_width)
         elif current:
             _inspector(board, state, catalog, layout.panel_x, layout.panel_width)
@@ -120,9 +121,9 @@ def render(state: Workspace, catalog: Catalog):
             elif not state.details and not state.form:
                 _roster(board, state, catalog, width - 1)
             x, panel_width = layout.panel_x, layout.panel_width
-            if state.form:
+            if state.form and not inline_edit:
                 render_editor(board, state, catalog, x, panel_width)
-            elif layout.split or state.details:
+            elif layout.split or state.details or inline_edit:
                 _inspector(board, state, catalog, x, panel_width)
 
         board.put(0, height - 2,
