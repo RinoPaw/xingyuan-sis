@@ -36,15 +36,15 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertIn("Esc 返回", footer)
         self.assertFalse(any(region.y == 35 for region in frame.regions))
 
-    def test_escape_focus_can_choose_edit_and_enter_opens_it(self):
+    def test_escape_focus_can_choose_edit_and_enter_focuses_an_editable_field(self):
         state = workspace.Workspace("students")
-        with patch.object(keys, "_read_key", side_effect=["back", "right", "right", "select", "back", "back"]), \
+        with patch.object(keys, "_read_key", side_effect=["back", "right", "right", "select", "back"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
-             patch.object(workspace_events, "open_form") as open_form:
+             patch.object(workspace_events, "_focus_first_editable") as focus_editable:
             workspace._interact(state, self.catalog)
 
-        open_form.assert_called_once_with(state, self.catalog, "edit")
+        focus_editable.assert_called_once_with(state, self.catalog)
 
     def test_escape_to_actions_preserves_selected_record_for_delete(self):
         state = workspace.Workspace("students", selected=15)
@@ -83,8 +83,8 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertIn(screen._TEXT_PRIMARY, selected_line)
         self.assertNotIn(screen._SURFACE_SELECTED, selected_line)
 
-    def test_action_shortcuts_remain_direct(self):
-        for key, action in (("create", "create"), ("edit", "edit"), ("delete", "delete")):
+    def test_create_and_delete_shortcuts_open_forms_directly(self):
+        for key in ("create", "delete"):
             state = workspace.Workspace("students")
             with self.subTest(key=key), \
                  patch.object(keys, "_read_key", side_effect=[key, "back", "back"]), \
@@ -92,7 +92,18 @@ class WorkspaceActionTests(unittest.TestCase):
                  patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
                  patch.object(workspace_events, "open_form") as open_form:
                 workspace._interact(state, self.catalog)
-            open_form.assert_called_once_with(state, self.catalog, action)
+            open_form.assert_called_once_with(state, self.catalog, key)
+
+    def test_edit_shortcut_focuses_current_inspector_instead_of_opening_a_form(self):
+        state = workspace.Workspace("students")
+        with patch.object(keys, "_read_key", side_effect=["edit", "back", "back", "back"]), \
+             patch.object(screen, "_paint"), \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
+             patch.object(workspace_events, "open_form") as open_form:
+            workspace._interact(state, self.catalog)
+
+        open_form.assert_not_called()
+        self.assertIsNone(state.form)
 
 
 if __name__ == "__main__":
