@@ -5,6 +5,7 @@ from ..layout import WorkspaceLayout
 from .data import ACADEMICS, COLLECTIONS, Catalog
 from .forms import move_form_position, open_field, open_form
 from .state import Workspace
+from .student_inspector import directional_target as _student_directional_target
 
 
 _RECORD_ACTIONS = ("search", "create", "edit", "delete")
@@ -60,6 +61,21 @@ def select_visible_detail_target(state: Workspace, catalog: Catalog) -> None:
             range(len(targets)),
             key=lambda index: abs(targets[index][0] - first),
         )
+
+
+def _move_student_detail_selection(state: Workspace, catalog: Catalog, direction: str) -> None:
+    targets = detail_targets(state, catalog)
+    if not targets:
+        return
+    actions = [action for _, action in targets]
+    next_index = _student_directional_target(actions, state.detail_selected, direction)
+    if next_index is None:
+        if direction == "left":
+            state.details = False
+            state.detail_scroll = 0
+        return
+    state.detail_selected = next_index
+    reveal_detail_selection(state, catalog)
 
 
 def _focus_first_editable(state: Workspace, catalog: Catalog) -> None:
@@ -221,12 +237,16 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             if event is not None:
                 return event
         elif key == "right":
-            if state.key != "data":
+            if state.details and state.key == "students":
+                _move_student_detail_selection(state, catalog, "right")
+            elif state.key != "data":
                 state.action_focus = False
                 state.details = True
                 reveal_detail_selection(state, catalog)
         elif key == "left":
-            if state.key != "data":
+            if state.details and state.key == "students":
+                _move_student_detail_selection(state, catalog, "left")
+            elif state.key != "data":
                 state.action_focus = False
                 state.details = False
         elif key == "focus-details":
@@ -259,6 +279,9 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 if event is not None:
                     return event
         elif key in {"up", "down", "page_up", "page_down", "home", "end"}:
+            if state.details and state.key == "students" and key in {"up", "down"} and not wheel:
+                _move_student_detail_selection(state, catalog, key)
+                continue
             if not state.details and key == "up":
                 if state.key == "data" and state.detail_scroll == 0:
                     state.action_focus = True

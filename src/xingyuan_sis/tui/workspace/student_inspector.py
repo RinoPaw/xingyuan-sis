@@ -12,6 +12,44 @@ from .state import Workspace
 
 _Segment = tuple[str, str, str]
 _Line = list[_Segment]
+_COMPOSITE_TARGETS = (
+    ("edit-field:family", "edit-field:branch"),
+    ("edit-field:primary_element", "edit-field:primary_affinity"),
+)
+
+
+def directional_target(actions: list[str], selected: int, direction: str) -> int | None:
+    """Return the next student-inspector target for a spatial arrow move.
+
+    The right member of a composite row lives on the main vertical spine. The
+    left member is reached horizontally; moving left from a left member exits
+    the inspector and therefore returns None.
+    """
+    if not actions:
+        return None
+    selected = min(max(0, selected), len(actions) - 1)
+    current = actions[selected]
+    pairs = {
+        left: right
+        for left, right in _COMPOSITE_TARGETS
+        if left in actions and right in actions
+    }
+    reverse = {right: left for left, right in pairs.items()}
+
+    if direction == "left":
+        return actions.index(reverse[current]) if current in reverse else None
+    if direction == "right":
+        return actions.index(pairs[current]) if current in pairs else selected
+    if direction not in {"up", "down"}:
+        return selected
+
+    spine = [action for action in actions if action not in pairs]
+    anchor = pairs.get(current, current)
+    if anchor not in spine:
+        return selected
+    position = spine.index(anchor) + (-1 if direction == "up" else 1)
+    position = min(max(0, position), len(spine) - 1)
+    return actions.index(spine[position])
 
 
 def _editing(state: Workspace | None) -> bool:

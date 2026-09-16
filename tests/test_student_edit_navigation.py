@@ -25,20 +25,70 @@ class StudentEditNavigationTests(unittest.TestCase):
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             return workspace._detail_targets(self.state, self.catalog)
 
-    def test_browse_navigation_uses_one_target_sequence(self):
-        targets = self._targets()
-        actions = [action for _, action in targets]
-        self.assertIn("edit-field:family", actions)
-        self.assertIn("edit-field:branch", actions)
-        self.assertIn("edit-field:primary_element", actions)
-        self.assertIn("edit-field:primary_affinity", actions)
+    def _actions(self):
+        return [action for _, action in self._targets()]
 
-        family = actions.index("edit-field:family")
-        branch = actions.index("edit-field:branch")
-        element = actions.index("edit-field:primary_element")
+    @staticmethod
+    def _moved_action(actions, current, direction):
+        selected = actions.index(current)
+        moved = student_inspector.directional_target(actions, selected, direction)
+        return None if moved is None else actions[moved]
+
+    def test_species_composite_row_uses_spatial_navigation(self):
+        actions = self._actions()
+        self.assertEqual(
+            self._moved_action(actions, "edit-field:student_no", "down"),
+            "edit-field:branch",
+        )
+        self.assertEqual(
+            self._moved_action(actions, "edit-field:gender", "up"),
+            "edit-field:branch",
+        )
+        self.assertEqual(
+            self._moved_action(actions, "edit-field:branch", "left"),
+            "edit-field:family",
+        )
+        self.assertEqual(
+            self._moved_action(actions, "edit-field:family", "right"),
+            "edit-field:branch",
+        )
+        self.assertIsNone(
+            self._moved_action(actions, "edit-field:family", "left")
+        )
+
+    def test_element_composite_row_uses_the_same_spatial_navigation(self):
+        actions = self._actions()
+        self.assertEqual(
+            self._moved_action(actions, "edit-field:status", "down"),
+            "edit-field:primary_affinity",
+        )
+        self.assertEqual(
+            self._moved_action(actions, "edit-field:primary_affinity", "left"),
+            "edit-field:primary_element",
+        )
+        self.assertEqual(
+            self._moved_action(actions, "edit-field:primary_element", "right"),
+            "edit-field:primary_affinity",
+        )
+        self.assertIsNone(
+            self._moved_action(actions, "edit-field:primary_element", "left")
+        )
         affinity = actions.index("edit-field:primary_affinity")
-        self.assertEqual(branch, family + 1)
-        self.assertEqual(affinity, element + 1)
+        next_main = actions[affinity + 1]
+        self.assertEqual(
+            self._moved_action(actions, next_main, "up"),
+            "edit-field:primary_affinity",
+        )
+
+    def test_left_from_species_primary_returns_to_student_roster(self):
+        actions = self._actions()
+        self.state.detail_selected = actions.index("edit-field:family")
+        with patch.object(keys, "_read_key", side_effect=["left", "back", "back"]), \
+             patch.object(screen, "_paint"), \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+            workspace._interact(self.state, self.catalog)
+        self.assertFalse(self.state.details)
+        self.assertEqual(self.state.selected, 0)
 
     def test_arrows_move_the_same_detail_selection_before_editing(self):
         with patch.object(keys, "_read_key", side_effect=["down", "back", "back", "back"]), \
@@ -49,8 +99,7 @@ class StudentEditNavigationTests(unittest.TestCase):
         self.assertIsNone(self.state.form)
 
     def test_enter_opens_only_the_selected_field(self):
-        targets = self._targets()
-        actions = [action for _, action in targets]
+        actions = self._actions()
         self.state.detail_selected = actions.index("edit-field:primary_element")
 
         with patch.object(keys, "_read_key", side_effect=["select"]), \
