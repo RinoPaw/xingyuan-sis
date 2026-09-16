@@ -44,11 +44,12 @@ class TuiRegressionAuditTests(unittest.TestCase):
             with self.subTest(key=key):
                 self.assert_escape_footer(workspace.Workspace(key))
 
-    def test_every_form_and_confirmation_state_keeps_the_escape_contract(self):
+    def test_every_form_and_field_edit_state_keeps_the_escape_contract(self):
         for key in RECORD_WORKSPACES:
-            with self.subTest(key=key, mode="edit"):
+            with self.subTest(key=key, mode="field-edit"):
                 state = workspace.Workspace(key)
-                workspace._open_form(state, self.catalog, "edit")
+                field_key = self.catalog.fields(key, True)[0].key
+                workspace._open_field(state, self.catalog, field_key)
                 self.assert_escape_footer(state)
 
             with self.subTest(key=key, mode="delete"):
@@ -118,12 +119,13 @@ class TuiRegressionAuditTests(unittest.TestCase):
         self.assertIn("学生", data)
         self.assertIn(str(len(self.catalog.records["students"])), data)
 
-    def test_escape_cancels_edit_forms_without_writing_on_every_record_page(self):
+    def test_escape_cancels_field_edits_without_writing_on_every_record_page(self):
         for key in RECORD_WORKSPACES:
             with self.subTest(key=key):
                 state = workspace.Workspace(key)
                 before = deepcopy(state.current(self.catalog))
-                workspace._open_form(state, self.catalog, "edit")
+                field_key = self.catalog.fields(key, True)[0].key
+                workspace._open_field(state, self.catalog, field_key)
                 self.assertIsNotNone(state.form)
 
                 with patch.object(keys, "_read_key", side_effect=["back", "back", "back"]), \

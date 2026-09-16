@@ -3,7 +3,7 @@ from __future__ import annotations
 from .. import keys, screen
 from ..layout import WorkspaceLayout
 from .data import ACADEMICS, COLLECTIONS, Catalog
-from .forms import move_form_position, open_form
+from .forms import move_form_position, open_field, open_form
 from .state import Workspace
 
 
@@ -62,6 +62,27 @@ def select_visible_detail_target(state: Workspace, catalog: Catalog) -> None:
         )
 
 
+def _focus_first_editable(state: Workspace, catalog: Catalog) -> None:
+    targets = detail_targets(state, catalog)
+    editable = [index for index, (_, action) in enumerate(targets) if action.startswith("edit-field:")]
+    if not editable:
+        state.notice = "当前记录没有可直接修改的字段。"
+        return
+    state.action_focus = False
+    state.details = True
+    state.detail_selected = editable[0]
+    reveal_detail_selection(state, catalog)
+    state.notice = "选择字段并按 Enter 修改；Enter 再次确认后立即保存。"
+
+
+def _open_selected_field(state: Workspace, catalog: Catalog, action: str) -> tuple[str, int] | None:
+    field_key = action.split(":", 1)[1]
+    open_field(state, catalog, field_key)
+    if state.form is None:
+        return None
+    return "field", state.form.position
+
+
 def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
     from .view import render
 
@@ -110,7 +131,10 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 key = actions[state.action_selected]
 
         if key in {"back", "cancel"}:
-            if state.form and state.form.options is not None:
+            if state.form and state.form.mode == "edit":
+                state.form = None
+                state.notice = "已取消修改，记录保持原样。"
+            elif state.form and state.form.options is not None:
                 state.form.options = None
             elif state.form:
                 state.form = None
@@ -146,16 +170,33 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                     if form.options:
                         index = int(key.split(":")[1]) if key.startswith("option:") else form.option_index
                         form.values[form.fields[form.position].key] = form.options[index][0]
-                        form.options = None
-                        state.notice = "已选择，尚未保存。"
+                        if (
+                            form.mode == "edit"
+                            and state.key == "students"
+                            and form.fields[form.position].key == "family"
+                            and len(form.fields) > 1
+                        ):
+                            form.position = 1
+                            form.options = catalog.options("students", "branch", form.values)
+                            form.option_index = next(
+                                (i for i, (value, _) in enumerate(form.options or ())
+                                 if value == form.values.get("branch")),
+                                0,
+                            )
+                            state.notice = "选择支系，Enter 保存。Esc 取消。"
+                        elif form.mode == "edit":
+                            return "save", 0
+                        else:
+                            form.options = None
+                            state.notice = "已选择，尚未保存。"
                 continue
             if key == "save":
                 return "save", 0
-            if key == "select" and state.form.fields:
-                return "field", state.form.position
+            if key == "select" and form.fields:
+                return "field", form.position
             if key.startswith("field:"):
-                state.form.position = int(key.split(":")[1])
-                return "field", state.form.position
+                form.position = int(key.split(":")[1])
+                return "field", form.position
             if key in {"up", "down", "left", "right", "home", "end"}:
                 move_form_position(state, key)
             continue
@@ -176,10 +217,9 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             state.details = not WorkspaceLayout.measure().split
         elif key.startswith("edit-field:"):
             state.action_focus = False
-            open_form(state, catalog, "edit")
-            field_key = key.split(":")[1]
-            state.form.position = next(i for i, field in enumerate(state.form.fields) if field.key == field_key)
-            return "field", state.form.position
+            event = _open_selected_field(state, catalog, key)
+            if event is not None:
+                return event
         elif key == "right":
             if state.key != "data":
                 state.action_focus = False
@@ -203,7 +243,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 targets = detail_targets(state, catalog)
                 if targets:
                     state.detail_selected = min(max(0, state.detail_selected), len(targets) - 1)
-                    key = targets[state.detail_selected][1]
+                    action = targets[state.detail_selected][1]
                 else:
                     continue
             else:
@@ -211,14 +251,13 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 if state.details:
                     reveal_detail_selection(state, catalog)
                 continue
-            if key.startswith("related:"):
-                _, collection, identifier = key.split(":")
+            if action.startswith("related:"):
+                _, collection, identifier = action.split(":")
                 state.visit(collection, identifier, catalog)
-            elif key.startswith("edit-field:"):
-                open_form(state, catalog, "edit")
-                field_key = key.split(":")[1]
-                state.form.position = next(i for i, field in enumerate(state.form.fields) if field.key == field_key)
-                return "field", state.form.position
+            elif action.startswith("edit-field:"):
+                event = _open_selected_field(state, catalog, action)
+                if event is not None:
+                    return event
         elif key in {"up", "down", "page_up", "page_down", "home", "end"}:
             if not state.details and key == "up":
                 if state.key == "data" and state.detail_scroll == 0:
@@ -281,7 +320,9 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             state.detail_scroll, state.detail_selected = 0, 0
         elif key == "refresh":
             return "refresh", 0
-        elif key in _RECORD_ACTIONS and state.key != "data":
+        elif key == "edit" and state.key != "data":
+            _focus_first_editable(state, catalog)
+        elif key in {"create", "delete"} and state.key != "data":
             state.action_focus = False
             open_form(state, catalog, key)
         elif key in _DATA_ACTIONS and state.key == "data":

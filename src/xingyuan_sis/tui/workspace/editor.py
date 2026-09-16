@@ -35,7 +35,6 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
 
     titles = {
         "create": "新建 · " + COLLECTIONS[state.key].noun if state.key in COLLECTIONS else "新建",
-        "edit": "编辑 · " + COLLECTIONS[state.key].noun if state.key in COLLECTIONS else "编辑",
         "delete": "删除记录",
         "import": "导入学生 CSV",
         "export": "导出学生 CSV",
@@ -61,13 +60,13 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         for index, (message, style) in enumerate(messages):
             board.put(x, content_row + 1 + index * 2, message, style, width=width)
     else:
-        board.put(x, content_row, "* 必填  ·  更改暂存，保存后生效", screen._TEXT_SECONDARY, width=width)
+        board.put(x, content_row, "* 必填  ·  更改暂存，完成后保存", screen._TEXT_SECONDARY, width=width)
         field_row = content_row + 2
         capacity = max(1, board.height - field_row - 4)
         first = min(max(0, form.position - capacity + 1), max(0, len(form.fields) - capacity))
         for i, field in enumerate(form.fields[first:first + capacity], start=first):
             value = safe(form.values.get(field.key))
-            if form.mode in {"create", "edit"}:
+            if form.mode == "create":
                 options = catalog.options(state.key, field.key, form.values)
                 if options is not None:
                     value = next((label for key, label in options if key == form.values.get(field.key)), value)
@@ -94,7 +93,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
                 screen._TEXT_SECONDARY, width=width,
             )
 
-    save_label = " 保存 " if form.mode in {"create", "edit"} else " 确认 "
+    save_label = " 保存 " if form.mode == "create" else " 确认 "
     next_x = board.button(x, board.height - 3, save_label, "save")
     if next_x < x + width:
         board.put(next_x, board.height - 3, "Esc 取消", screen._TEXT_SECONDARY, width=max(1, x + width - next_x))

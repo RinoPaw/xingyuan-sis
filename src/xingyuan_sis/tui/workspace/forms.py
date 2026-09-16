@@ -5,41 +5,21 @@ from pathlib import Path
 from ...student_query import parse_student_query
 from ...terminal_input import input_style, read_inline_input, read_input
 from .. import screen
-from ..view_common import safe
 from .data import Catalog, Field
 from .state import Form, Workspace
 
 
-_STUDENT_EDIT_ROWS: tuple[tuple[str, ...], ...] = (
-    ("name",),
-    ("student_no",),
-    ("family", "branch"),
-    ("enrollment_year",),
-    ("class_code",),
-    ("status",),
-    ("primary_element", "primary_affinity"),
-    ("gender",),
-    ("birth_date",),
-    ("contact",),
-    ("dormitory",),
-    ("notes",),
-)
-
-
 def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
     row = state.current(catalog)
-    if mode in {"edit", "delete"} and row is None:
+    if mode == "delete" and row is None:
         state.notice = "先选择一条记录。"
         return
-    if mode in {"create", "edit"}:
+    if mode == "create":
         state.form = Form(
             mode,
-            catalog.fields(state.key, mode == "edit"),
-            catalog.defaults(state.key, row if mode == "edit" else None),
-            row if mode == "edit" else None,
+            catalog.fields(state.key, False),
+            catalog.defaults(state.key),
         )
-        if mode == "edit" and state.key in {"students", "grades"}:
-            state.form.position = 1
     elif mode in {"import", "export"}:
         state.form = Form(mode, (Field("path", "CSV 文件路径", True),), {"path": "data/students.csv"})
     else:
@@ -48,8 +28,34 @@ def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
     state.detail_scroll = 0
 
 
-def _move_linear_form_position(form: Form, direction: str) -> None:
-    if not form.fields:
+def open_field(state: Workspace, catalog: Catalog, field_key: str) -> None:
+    row = state.current(catalog)
+    if row is None:
+        state.notice = "先选择一条记录。"
+        return
+
+    fields = {field.key: field for field in catalog.fields(state.key, True)}
+    field = fields.get(field_key)
+    if field is None:
+        state.notice = "这个字段不能直接修改。"
+        return
+
+    selected = (field,)
+    if state.key == "students" and field_key == "family" and "branch" in fields:
+        selected = (field, fields["branch"])
+
+    state.form = Form(
+        "edit",
+        selected,
+        catalog.defaults(state.key, row),
+        row,
+    )
+    state.notice = "Enter 确认并保存 · Esc 取消。"
+
+
+def move_form_position(state: Workspace, direction: str) -> None:
+    form = state.form
+    if form is None or not form.fields or form.mode == "edit":
         return
     if direction == "home":
         form.position = 0
@@ -59,51 +65,6 @@ def _move_linear_form_position(form: Form, direction: str) -> None:
         form.position = max(0, form.position - 1)
     elif direction == "down":
         form.position = min(len(form.fields) - 1, form.position + 1)
-
-
-def move_form_position(state: Workspace, direction: str) -> None:
-    """Move form focus according to the rendered geometry when one exists."""
-    form = state.form
-    if form is None or not form.fields:
-        return
-    if form.mode != "edit" or state.key != "students":
-        _move_linear_form_position(form, direction)
-        return
-
-    positions = {field.key: index for index, field in enumerate(form.fields)}
-    rows = [tuple(key for key in row if key in positions) for row in _STUDENT_EDIT_ROWS]
-    rows = [row for row in rows if row]
-    current_key = form.fields[form.position].key
-    location = next(
-        ((row_index, row.index(current_key)) for row_index, row in enumerate(rows) if current_key in row),
-        None,
-    )
-    if location is None:
-        _move_linear_form_position(form, direction)
-        return
-
-    row_index, column_index = location
-    if direction == "home":
-        target = rows[0][0]
-    elif direction == "end":
-        target = rows[-1][-1]
-    elif direction == "left":
-        if column_index == 0:
-            return
-        target = rows[row_index][column_index - 1]
-    elif direction == "right":
-        if column_index + 1 >= len(rows[row_index]):
-            return
-        target = rows[row_index][column_index + 1]
-    elif direction in {"up", "down"}:
-        next_row = row_index + (-1 if direction == "up" else 1)
-        if not 0 <= next_row < len(rows):
-            return
-        target_row = rows[next_row]
-        target = target_row[min(column_index, len(target_row) - 1)]
-    else:
-        return
-    form.position = positions[target]
 
 
 def apply_form(state: Workspace, catalog: Catalog) -> None:
@@ -207,12 +168,16 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
             (i for i, (value, _) in enumerate(options) if value == state.form.values.get(field_.key)),
             0,
         )
-        state.notice = "↑↓ 选择，Enter 暂存。Esc 取消。"
+        if state.form.mode == "edit":
+            suffix = "继续" if state.key == "students" and field_.key == "family" and len(state.form.fields) > 1 else "保存"
+            state.notice = f"↑↓ 选择，Enter {suffix}。Esc 取消。"
+        else:
+            state.notice = "↑↓ 选择，Enter 暂存。Esc 取消。"
         return
 
     current = state.form.values.get(field_.key)
     state.notice = (
-        "直接在当前字段修改 · Enter 暂存"
+        "直接在当前字段修改 · Enter " + ("保存" if state.form.mode == "edit" else "暂存")
         + (" · 清空后 Enter 可置空" if not field_.required else "")
         + " · Esc 取消"
     )
@@ -234,4 +199,7 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
 
     value = field_.parse(raw if raw else None)
     state.form.values[field_.key] = value
-    state.notice = "字段已暂存。Esc 取消。"
+    if state.form.mode == "edit":
+        apply_form(state, catalog)
+    else:
+        state.notice = "字段已暂存。Esc 取消。"

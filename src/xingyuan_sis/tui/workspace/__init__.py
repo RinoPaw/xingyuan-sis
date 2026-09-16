@@ -13,7 +13,12 @@ from .events import (
     reveal_detail_selection as _reveal_detail_selection,
     select_visible_detail_target as _select_visible_detail_target,
 )
-from .forms import apply_form as _apply_form, open_form as _open_form, read_value as _read_value
+from .forms import (
+    apply_form as _apply_form,
+    open_field as _open_field,
+    open_form as _open_form,
+    read_value as _read_value,
+)
 from .state import Form, Workspace
 
 
@@ -32,6 +37,8 @@ def run(db_path: Path | str | None, collection: str) -> None:
                 try:
                     _read_value(state, catalog, event)
                 except KeyboardInterrupt:
+                    if state.form and state.form.mode == "edit":
+                        state.form = None
                     state.notice = "已取消输入。"
             elif event[0] == "save":
                 _apply_form(state, catalog)

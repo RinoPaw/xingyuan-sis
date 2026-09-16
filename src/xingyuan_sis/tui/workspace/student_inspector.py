@@ -221,12 +221,7 @@ def render_inspector(
     offset = layout.detail_offset
     raw_lines = _lines(row, catalog, state if editing else None)
     lines = raw_lines[offset:]
-    save_row = board.height - 3 if editing else None
-    capacity = (
-        max(1, save_row - top)
-        if editing
-        else layout.panel_capacity(state.key)
-    )
+    capacity = layout.panel_capacity(state.key)
 
     selected_action = ""
     target_line = 0
@@ -287,18 +282,16 @@ def render_inspector(
             board.put(cursor, y, shown, drawn_style, width=remaining)
             cursor += display
 
-    if editing:
-        board.button(x, save_row, " 保存 ", "save")
-    else:
-        if len(lines) > capacity and not layout.compact:
-            board.put(
-                x,
-                bottom - 1,
-                f"{state.detail_scroll + 1}–{min(len(lines), state.detail_scroll + capacity)} / {len(lines)}",
-                screen._TEXT_SECONDARY,
-                action="focus",
-                width=width,
-            )
+    if len(lines) > capacity and not layout.compact:
+        board.put(
+            x,
+            bottom - 1,
+            f"{state.detail_scroll + 1}–{min(len(lines), state.detail_scroll + capacity)} / {len(lines)}",
+            screen._TEXT_SECONDARY,
+            action=None if editing else "focus",
+            width=width,
+        )
+    if not editing:
         board.regions.extend(
             screen.HitRegion(x + 1, y + 1, width, "focus-details")
             for y in range(top, bottom)
