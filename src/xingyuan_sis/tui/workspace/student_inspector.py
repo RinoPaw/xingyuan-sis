@@ -56,6 +56,12 @@ def _editing(state: Workspace | None) -> bool:
     return state is not None and state.form is not None and state.form.mode == "edit"
 
 
+def _draft_keys(state: Workspace | None) -> set[str]:
+    if not _editing(state):
+        return set()
+    return {field.key for field in state.form.fields}
+
+
 def _positions(state: Workspace | None) -> dict[str, int]:
     if not _editing(state):
         return {}
@@ -63,9 +69,21 @@ def _positions(state: Workspace | None) -> dict[str, int]:
 
 
 def _raw_value(state: Workspace | None, row: dict[str, Any], key: str) -> Any:
-    if _editing(state) and key in state.form.values:
+    if key in _draft_keys(state):
         return state.form.values.get(key)
     return row.get(key)
+
+
+def _display_context(
+    state: Workspace | None,
+    catalog: Catalog,
+    row: dict[str, Any],
+) -> dict[str, Any]:
+    values = catalog.defaults("students", row)
+    if _editing(state):
+        for key in _draft_keys(state):
+            values[key] = state.form.values.get(key)
+    return values
 
 
 def _display_value(
@@ -75,10 +93,9 @@ def _display_value(
     key: str,
 ) -> str:
     value = _raw_value(state, row, key)
-    if _editing(state):
-        options = catalog.options("students", key, state.form.values)
-        if options is not None:
-            return next((label for option, label in options if option == value), safe(value))
+    options = catalog.options("students", key, _display_context(state, catalog, row))
+    if options is not None:
+        return next((label for option, label in options if option == value), safe(value))
     return safe(value)
 
 
@@ -95,27 +112,9 @@ def _age(state: Workspace | None, row: dict[str, Any]) -> str:
     return f"{years}岁"
 
 
-def _department(state: Workspace | None, catalog: Catalog, row: dict[str, Any]) -> str:
-    if not _editing(state):
-        return safe(row.get("department_name"))
-    class_code = state.form.values.get("class_code")
-    selected_class = next(
-        (item for item in catalog.records["classes"] if item["code"] == class_code),
-        None,
-    )
-    if selected_class is None:
-        return safe(row.get("department_name"))
-    major = next(
-        (item for item in catalog.records["majors"] if item["id"] == selected_class["major_id"]),
-        None,
-    )
-    if major is None:
-        return safe(row.get("department_name"))
-    department = next(
-        (item for item in catalog.records["departments"] if item["id"] == major["department_id"]),
-        None,
-    )
-    return safe(department["name"] if department else row.get("department_name"))
+def _department(row: dict[str, Any]) -> str:
+    # A field edit is local: unrelated derived values always reflect committed data.
+    return safe(row.get("department_name"))
 
 
 def _lines(
@@ -153,7 +152,7 @@ def _lines(
         [label("性别  "), field("gender")],
         [label("年龄  "), (_age(state, row), screen._TEXT_PRIMARY, "")],
         [label("入学  "), field("enrollment_year", f"{safe(year)}级")],
-        [label("学院  "), (_department(state, catalog, row), screen._TEXT_PRIMARY, "")],
+        [label("学院  "), (_department(row), screen._TEXT_PRIMARY, "")],
         [label("班级  "), field("class_code")],
         [label("学籍  "), field("status")],
         [label("元素  "), field("primary_element"), (" · ", screen._TEXT_SECONDARY, ""), field("primary_affinity")],
@@ -313,7 +312,7 @@ def render_inspector(
                 if editing and action.startswith("field:"):
                     field_index = int(action.split(":")[1])
                     field_key = state.form.fields[field_index].key
-                    freeform = catalog.options("students", field_key, state.form.values) is None
+                    freeform = catalog.options("students", field_key, _display_context(state, catalog, row)) is None
                     if selected and state.form.options is None and freeform and segment_index == len(segments) - 1:
                         hit_width = max(hit_width, remaining)
                 board.regions.append(screen.HitRegion(cursor + 1, y + 1, hit_width, action))

@@ -14,6 +14,12 @@ def _editing(state: Workspace | None) -> bool:
     return state is not None and state.form is not None and state.form.mode == "edit"
 
 
+def _draft_keys(state: Workspace | None) -> set[str]:
+    if not _editing(state):
+        return set()
+    return {field.key for field in state.form.fields}
+
+
 def _active_field(state: Workspace | None) -> str | None:
     if not _editing(state) or not state.form.fields:
         return None
@@ -21,17 +27,29 @@ def _active_field(state: Workspace | None) -> str | None:
 
 
 def _raw_value(state: Workspace | None, row: dict[str, Any], key: str) -> Any:
-    if _editing(state) and key in state.form.values:
+    if key in _draft_keys(state):
         return state.form.values.get(key)
     return row.get(key)
 
 
+def _display_context(
+    state: Workspace | None,
+    catalog: Catalog,
+    key: str,
+    row: dict[str, Any],
+) -> dict[str, Any]:
+    values = catalog.defaults(key, row)
+    if _editing(state):
+        for field_key in _draft_keys(state):
+            values[field_key] = state.form.values.get(field_key)
+    return values
+
+
 def _shown_value(state: Workspace | None, catalog: Catalog, key: str, field_key: str, row: dict[str, Any]) -> str:
     value = _raw_value(state, row, field_key)
-    if _editing(state):
-        options = catalog.options(key, field_key, state.form.values)
-        if options is not None:
-            return next((label for option, label in options if option == value), safe(value))
+    options = catalog.options(key, field_key, _display_context(state, catalog, key, row))
+    if options is not None:
+        return next((label for option, label in options if option == value), safe(value))
     return safe(value)
 
 
@@ -214,7 +232,6 @@ def render_inspector(board: Board, state: Workspace, catalog: Catalog, x: int, w
 
     visible = lines[state.detail_scroll:state.detail_scroll + capacity]
     for offset, (text, style, action) in enumerate(visible):
-        line_index = state.detail_scroll + offset
         selected = bool(action and action == selected_action and (editing or state.details))
         if selected:
             plain = screen._ANSI_RE.sub("", text)
