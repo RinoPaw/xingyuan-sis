@@ -23,7 +23,7 @@ class RepositoryTests(unittest.TestCase):
     def test_canonical_seed_supports_student_course_workflow(self) -> None:
         expected = STUDENTS[0]
         expected_class_name = next(
-            row[1] for row in CLASSES if row[0] == expected[7]
+            row[1] for row in CLASSES if row[0] == expected[8]
         )
         student = next(
             row for row in self.repository.list_students()
@@ -33,9 +33,11 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(student["name"], expected[1])
         self.assertEqual(student["family"], expected[2])
         self.assertEqual(student["branch"], expected[3])
-        self.assertEqual(student["class_code"], expected[7])
+        self.assertEqual(student["birth_date"], expected[5])
+        self.assertEqual(student["age"], expected[6])
+        self.assertEqual(student["class_code"], expected[8])
         self.assertEqual(student["class_name"], expected_class_name)
-        self.assertEqual(student["primary_affinity"], expected[10])
+        self.assertEqual(student["primary_affinity"], expected[11])
 
         self.repository.update_student(
             student["id"],

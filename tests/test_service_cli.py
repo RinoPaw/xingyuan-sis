@@ -94,7 +94,7 @@ class ServiceAndCliTests(unittest.TestCase):
         student_seed = STUDENTS[0]
         student_no = str(student_seed[0])
         class_name = next(
-            row[1] for row in CLASSES if row[0] == student_seed[7]
+            row[1] for row in CLASSES if row[0] == student_seed[8]
         )
         course_seed = COURSES[0]
         course_code = str(course_seed[0])

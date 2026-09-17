@@ -46,11 +46,13 @@ class SeedDataTests(unittest.TestCase):
         student = self.service.student_by_no(str(expected[0]))
         self.assertIsNotNone(student)
         self.assertEqual(student["name"], expected[1])
+        self.assertEqual(student["birth_date"], expected[5])
+        self.assertEqual(student["age"], expected[6])
         self.assertEqual(
             student["class_name"],
-            next(row[1] for row in CLASSES if row[0] == expected[7]),
+            next(row[1] for row in CLASSES if row[0] == expected[8]),
         )
-        self.assertEqual(student["primary_element"], expected[9])
+        self.assertEqual(student["primary_element"], expected[10])
 
         referenced_seed = next(row for row in STUDENTS if row[1] == "雷格西")
         referenced_student = self.service.student_by_no(str(referenced_seed[0]))
