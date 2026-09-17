@@ -42,28 +42,35 @@ class MouseFocusTests(unittest.TestCase):
         self.assertEqual(state.detail_selected, 0)
         self.assertGreater(state.detail_scroll, 0)
 
-    def test_focused_student_inspector_wheel_uses_the_same_target_navigation_as_arrows(self):
-        state = workspace.Workspace("students", details=True)
+    def test_focused_inspector_wheel_uses_the_same_geometry_as_arrow_navigation(self):
         size = os.terminal_size((120, 24))
-        with patch.object(screen, "_terminal_size", return_value=size):
-            frame = workspace_view.render(state, self.catalog)
-            targets = workspace_events.detail_targets(state, self.catalog)
-        self.assertEqual(targets[state.detail_selected][1], "edit-field:student_no")
-        region = next(region for region in frame.regions if region.action == "focus-details")
+        for collection in ("students", "courses"):
+            with self.subTest(collection=collection):
+                state = workspace.Workspace(collection, details=True)
+                with patch.object(screen, "_terminal_size", return_value=size):
+                    frame = workspace_view.render(state, self.catalog)
+                    targets = workspace_events.detail_targets(state, self.catalog)
+                actions = [action for _, action in targets]
+                expected = workspace_view.directional_target(
+                    collection,
+                    actions,
+                    state.detail_selected,
+                    "down",
+                )
+                region = next(region for region in frame.regions if region.action == "focus-details")
 
-        with patch.object(
-            keys,
-            "_read_key",
-            side_effect=[keys.MouseScroll(region.x, region.y, "down")],
-        ), patch.object(screen, "_paint"), patch.object(
-            screen, "_terminal_size", return_value=size
-        ):
-            with self.assertRaises(StopIteration):
-                workspace._interact(state, self.catalog)
+                with patch.object(
+                    keys,
+                    "_read_key",
+                    side_effect=[keys.MouseScroll(region.x, region.y, "down")],
+                ), patch.object(screen, "_paint"), patch.object(
+                    screen, "_terminal_size", return_value=size
+                ):
+                    with self.assertRaises(StopIteration):
+                        workspace._interact(state, self.catalog)
 
-        targets = workspace_events.detail_targets(state, self.catalog)
-        self.assertEqual(targets[state.detail_selected][1], "edit-field:branch")
-        self.assertTrue(state.details)
+                self.assertEqual(state.detail_selected, expected)
+                self.assertTrue(state.details)
 
     def test_left_wheel_does_not_take_focus_from_the_inspector(self):
         state = workspace.Workspace("students", details=True)

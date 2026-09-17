@@ -67,6 +67,42 @@ def move_form_position(state: Workspace, direction: str) -> None:
         form.position = min(len(form.fields) - 1, form.position + 1)
 
 
+def accept_option(
+    state: Workspace,
+    catalog: Catalog,
+    index: int,
+) -> tuple[str, int] | None:
+    """Commit one option choice and advance within the current form if needed."""
+    form = state.form
+    if form is None or form.options is None or not form.options:
+        return None
+
+    field = form.fields[form.position]
+    form.values[field.key] = form.options[index][0]
+
+    if form.mode == "edit":
+        next_position = form.position + 1
+        if next_position < len(form.fields):
+            form.position = next_position
+            next_field = form.fields[next_position]
+            form.options = catalog.options(state.key, next_field.key, form.values)
+            form.option_index = next(
+                (i for i, (value, _) in enumerate(form.options or ())
+                 if value == form.values.get(next_field.key)),
+                0,
+            )
+            if form.options is None:
+                return "field", next_position
+            suffix = "继续" if next_position + 1 < len(form.fields) else "保存"
+            state.notice = f"↑↓ 选择，Enter {suffix}。Esc 取消。"
+            return None
+        return "save", 0
+
+    form.options = None
+    state.notice = "已选择，尚未保存。"
+    return None
+
+
 def apply_form(state: Workspace, catalog: Catalog) -> None:
     form = state.form
     if form is None:
@@ -169,7 +205,7 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
             0,
         )
         if state.form.mode == "edit":
-            suffix = "继续" if state.key == "students" and field_.key == "family" and len(state.form.fields) > 1 else "保存"
+            suffix = "继续" if state.form.position + 1 < len(state.form.fields) else "保存"
             state.notice = f"↑↓ 选择，Enter {suffix}。Esc 取消。"
         else:
             state.notice = "↑↓ 选择，Enter 暂存。Esc 取消。"

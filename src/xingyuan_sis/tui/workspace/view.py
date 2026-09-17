@@ -7,6 +7,7 @@ from .dashboard import render_dashboard
 from .data import ACADEMICS, COLLECTIONS, Catalog
 from .detail import (
     detail_targets as _generic_detail_targets,
+    directional_target as _generic_directional_target,
     preferred_width as _generic_preferred_inspector_width,
     render_inspector as _generic_inspector,
 )
@@ -15,6 +16,7 @@ from .roster import render_roster as _roster
 from .state import Workspace
 from .student_inspector import (
     detail_targets as _student_detail_targets,
+    directional_target as _student_directional_target,
     preferred_width as _student_preferred_inspector_width,
     render_inspector as _student_inspector,
 )
@@ -26,6 +28,18 @@ def detail_targets(key: str, row, catalog: Catalog, width: int):
         offset = WorkspaceLayout.measure().detail_offset
         return [(line, action) for line, action in targets if line >= offset]
     return _generic_detail_targets(key, row, catalog, width)
+
+
+def directional_target(
+    key: str,
+    actions: list[str],
+    selected: int,
+    direction: str,
+) -> int | None:
+    """Delegate spatial navigation to the active inspector geometry."""
+    if key == "students":
+        return _student_directional_target(actions, selected, direction)
+    return _generic_directional_target(actions, selected, direction)
 
 
 def _preferred_inspector_width(key: str, row, catalog: Catalog) -> int:

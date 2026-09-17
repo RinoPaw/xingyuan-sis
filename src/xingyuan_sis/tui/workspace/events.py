@@ -3,9 +3,8 @@ from __future__ import annotations
 from .. import keys, screen
 from ..layout import WorkspaceLayout
 from .data import ACADEMICS, COLLECTIONS, Catalog
-from .forms import move_form_position, open_field, open_form
+from .forms import accept_option, move_form_position, open_field, open_form
 from .state import Workspace
-from .student_inspector import directional_target as _student_directional_target
 
 
 _RECORD_ACTIONS = ("search", "create", "edit", "delete")
@@ -63,30 +62,25 @@ def select_visible_detail_target(state: Workspace, catalog: Catalog) -> None:
         )
 
 
-def _move_student_detail_selection(state: Workspace, catalog: Catalog, direction: str) -> None:
+def _move_detail_selection(state: Workspace, catalog: Catalog, direction: str) -> None:
+    from .view import directional_target
+
     targets = detail_targets(state, catalog)
     if not targets:
+        if direction == "left":
+            state.details = False
+            state.detail_scroll = 0
         return
+
     actions = [action for _, action in targets]
-    next_index = _student_directional_target(actions, state.detail_selected, direction)
+    next_index = directional_target(state.key, actions, state.detail_selected, direction)
     if next_index is None:
         if direction == "left":
             state.details = False
             state.detail_scroll = 0
         return
+
     state.detail_selected = next_index
-    reveal_detail_selection(state, catalog)
-
-
-def _move_detail_selection(state: Workspace, catalog: Catalog, direction: str) -> None:
-    if state.key == "students":
-        _move_student_detail_selection(state, catalog, direction)
-        return
-    targets = detail_targets(state, catalog)
-    if not targets:
-        return
-    state.detail_selected += -1 if direction == "up" else 1
-    state.detail_selected = min(max(0, state.detail_selected), len(targets) - 1)
     reveal_detail_selection(state, catalog)
 
 
@@ -197,26 +191,9 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 elif key == "select" or key.startswith("option:"):
                     if form.options:
                         index = int(key.split(":")[1]) if key.startswith("option:") else form.option_index
-                        form.values[form.fields[form.position].key] = form.options[index][0]
-                        if (
-                            form.mode == "edit"
-                            and state.key == "students"
-                            and form.fields[form.position].key == "family"
-                            and len(form.fields) > 1
-                        ):
-                            form.position = 1
-                            form.options = catalog.options("students", "branch", form.values)
-                            form.option_index = next(
-                                (i for i, (value, _) in enumerate(form.options or ())
-                                 if value == form.values.get("branch")),
-                                0,
-                            )
-                            state.notice = "选择支系，Enter 保存。Esc 取消。"
-                        elif form.mode == "edit":
-                            return "save", 0
-                        else:
-                            form.options = None
-                            state.notice = "已选择，尚未保存。"
+                        event = accept_option(state, catalog, index)
+                        if event is not None:
+                            return event
                 continue
             if key == "save":
                 return "save", 0
@@ -248,19 +225,13 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             event = _open_selected_field(state, catalog, key)
             if event is not None:
                 return event
-        elif key == "right":
-            if state.details and state.key == "students":
-                _move_student_detail_selection(state, catalog, "right")
-            elif state.key != "data":
+        elif key in {"left", "right"}:
+            if state.details and state.key != "data":
+                _move_detail_selection(state, catalog, key)
+            elif key == "right" and state.key != "data":
                 state.action_focus = False
                 state.details = True
                 reveal_detail_selection(state, catalog)
-        elif key == "left":
-            if state.details and state.key == "students":
-                _move_student_detail_selection(state, catalog, "left")
-            elif state.key != "data":
-                state.action_focus = False
-                state.details = False
         elif key == "focus-details":
             state.action_focus = False
             state.details = True
@@ -319,8 +290,6 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                         state.detail_selected = 0
                     elif key == "end":
                         state.detail_selected = len(targets) - 1
-                    else:
-                        state.detail_selected += -1 if key == "up" else 1
                     state.detail_selected = min(max(0, state.detail_selected), len(targets) - 1)
                     reveal_detail_selection(state, catalog)
             elif state.key == "data":

@@ -11,6 +11,22 @@ from .presentation import display_value, project_record
 from .state import Workspace
 
 
+def directional_target(actions: list[str], selected: int, direction: str) -> int | None:
+    """Return the next target for a single-column inspector."""
+    if not actions:
+        return None
+    selected = min(max(0, selected), len(actions) - 1)
+    if direction == "left":
+        return None
+    if direction == "right":
+        return selected
+    if direction == "up":
+        return max(0, selected - 1)
+    if direction == "down":
+        return min(len(actions) - 1, selected + 1)
+    return selected
+
+
 def _editing(state: Workspace | None) -> bool:
     return state is not None and state.form is not None and state.form.mode == "edit"
 

@@ -7,7 +7,7 @@ from unittest.mock import patch
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import keys, screen, workspace
-from xingyuan_sis.tui.workspace import student_inspector
+from xingyuan_sis.tui.workspace import student_inspector, view as workspace_view
 from xingyuan_sis.tui.workspace.data import Catalog
 
 
@@ -31,7 +31,7 @@ class StudentEditNavigationTests(unittest.TestCase):
     @staticmethod
     def _moved_action(actions, current, direction):
         selected = actions.index(current)
-        moved = student_inspector.directional_target(actions, selected, direction)
+        moved = workspace_view.directional_target("students", actions, selected, direction)
         return None if moved is None else actions[moved]
 
     def test_species_composite_row_uses_spatial_navigation(self):
