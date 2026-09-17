@@ -78,6 +78,18 @@ def _move_student_detail_selection(state: Workspace, catalog: Catalog, direction
     reveal_detail_selection(state, catalog)
 
 
+def _move_detail_selection(state: Workspace, catalog: Catalog, direction: str) -> None:
+    if state.key == "students":
+        _move_student_detail_selection(state, catalog, direction)
+        return
+    targets = detail_targets(state, catalog)
+    if not targets:
+        return
+    state.detail_selected += -1 if direction == "up" else 1
+    state.detail_selected = min(max(0, state.detail_selected), len(targets) - 1)
+    reveal_detail_selection(state, catalog)
+
+
 def _focus_first_editable(state: Workspace, catalog: Catalog) -> None:
     targets = detail_targets(state, catalog)
     editable = [index for index, (_, action) in enumerate(targets) if action.startswith("edit-field:")]
@@ -279,8 +291,8 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 if event is not None:
                     return event
         elif key in {"up", "down", "page_up", "page_down", "home", "end"}:
-            if state.details and state.key == "students" and key in {"up", "down"} and not wheel:
-                _move_student_detail_selection(state, catalog, key)
+            if state.details and state.key != "data" and key in {"up", "down"} and (not wheel or wheel_over_details):
+                _move_detail_selection(state, catalog, key)
                 continue
             if not state.details and key == "up":
                 if state.key == "data" and state.detail_scroll == 0:
