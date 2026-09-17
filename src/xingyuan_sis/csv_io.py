@@ -4,12 +4,13 @@ import csv
 from dataclasses import dataclass
 from pathlib import Path
 import sqlite3
+from typing import Any
 
 from .database import connect
-from .schema import FIELDS, validate_values
+from .schema import FIELDS, is_complete_birth_date, validate_values
 
 STUDENT_FIELDS = [
-    "student_no", "name", "family", "branch", "gender", "birth_date",
+    "student_no", "name", "family", "branch", "gender", "birth_date", "age",
     "enrollment_year", "class_code", "status", "primary_element",
     "primary_affinity", "contact", "dormitory", "notes",
 ]
@@ -32,7 +33,7 @@ def export_students_csv(
             """
             SELECT s.student_no, s.name,
                    f.name AS family, b.name AS branch,
-                   s.gender, s.birth_date, s.enrollment_year,
+                   s.gender, s.birth_date, s.age, s.enrollment_year,
                    c.code AS class_code, s.status,
                    s.primary_element, s.primary_affinity,
                    s.contact, s.dormitory, s.notes
@@ -71,13 +72,13 @@ def import_students_csv(
         with connect(db_path) as connection:
             for line_number, row in enumerate(reader, start=2):
                 try:
-                    # Use the same contract as forms and service calls while
-                    # preserving per-row errors and the import transaction.
-                    row = validate_values("students", {
+                    values = validate_values("students", {
                         field.key: (row.get(field.key) or field.default)
                         for field in FIELDS["students"]
                     })
-                    class_code = (row.get("class_code") or "").strip()
+                    if is_complete_birth_date(values["birth_date"]):
+                        values["age"] = None
+                    class_code = (values.get("class_code") or "").strip()
                     class_id = None
                     if class_code:
                         class_row = connection.execute(
@@ -88,8 +89,8 @@ def import_students_csv(
                             raise ValueError(f"班级编号不存在：{class_code}")
                         class_id = int(class_row[0])
 
-                    family = _required(row, "family")
-                    branch = _required(row, "branch")
+                    family = _required(values, "family")
+                    branch = _required(values, "branch")
                     branch_row = connection.execute(
                         """
                         SELECT b.id
@@ -105,26 +106,27 @@ def import_students_csv(
                     connection.execute(
                         """
                         INSERT INTO students(
-                            student_no, name, species_branch_id, gender, birth_date,
+                            student_no, name, species_branch_id, gender, birth_date, age,
                             enrollment_year, class_id, status,
                             primary_element, primary_affinity,
                             contact, dormitory, notes
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
-                            _required(row, "student_no"),
-                            _required(row, "name"),
+                            _required(values, "student_no"),
+                            _required(values, "name"),
                             int(branch_row[0]),
-                            _optional(row.get("gender")),
-                            _optional(row.get("birth_date")),
-                            row["enrollment_year"],
+                            _optional(values.get("gender")),
+                            _optional(values.get("birth_date")),
+                            values.get("age"),
+                            values["enrollment_year"],
                             class_id,
-                            (row.get("status") or "在读").strip() or "在读",
-                            _optional(row.get("primary_element")),
-                            _optional(row.get("primary_affinity")),
-                            _optional(row.get("contact")),
-                            _optional(row.get("dormitory")),
-                            _optional(row.get("notes")),
+                            (values.get("status") or "在读").strip() or "在读",
+                            _optional(values.get("primary_element")),
+                            _optional(values.get("primary_affinity")),
+                            _optional(values.get("contact")),
+                            _optional(values.get("dormitory")),
+                            _optional(values.get("notes")),
                         ),
                     )
                     imported += 1
@@ -134,13 +136,14 @@ def import_students_csv(
     return ImportResult(imported=imported, errors=errors)
 
 
-def _required(row: dict[str, str | None], key: str) -> str:
-    value = (row.get(key) or "").strip()
-    if not value:
+def _required(row: dict[str, Any], key: str) -> str:
+    value = row.get(key)
+    text = "" if value is None else str(value).strip()
+    if not text:
         raise ValueError(f"{key} 不能为空")
-    return value
+    return text
 
 
-def _optional(value: str | None) -> str | None:
-    value = (value or "").strip()
-    return value or None
+def _optional(value: Any) -> str | None:
+    text = "" if value is None else str(value).strip()
+    return text or None

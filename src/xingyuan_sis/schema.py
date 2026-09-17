@@ -8,6 +8,54 @@ import re
 from typing import Any, Mapping
 
 
+_FULL_BIRTH_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}\Z")
+_BIRTH_YEAR = re.compile(r"[0-9]{4}\Z")
+_BIRTH_MONTH_DAY = re.compile(r"--[0-9]{2}-[0-9]{2}\Z")
+
+
+def is_complete_birth_date(value: object | None) -> bool:
+    text = "" if value is None else str(value).strip()
+    if not _FULL_BIRTH_DATE.fullmatch(text):
+        return False
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        return False
+    return True
+
+
+def age_from_birth_date(value: object | None, today: date | None = None) -> int | None:
+    """Return an exact age only when a complete birth date is available."""
+    if not is_complete_birth_date(value):
+        return None
+    born = date.fromisoformat(str(value).strip())
+    current = today or date.today()
+    if born > current:
+        return None
+    return current.year - born.year - ((current.month, current.day) < (born.month, born.day))
+
+
+def _parse_birth_date(text: str, label: str) -> str:
+    if _FULL_BIRTH_DATE.fullmatch(text):
+        try:
+            date.fromisoformat(text)
+        except ValueError:
+            pass
+        else:
+            return text
+    elif _BIRTH_YEAR.fullmatch(text):
+        if 1 <= int(text) <= 9999:
+            return text
+    elif _BIRTH_MONTH_DAY.fullmatch(text):
+        try:
+            date(2000, int(text[2:4]), int(text[5:7]))
+        except ValueError:
+            pass
+        else:
+            return text
+    raise ValueError(f"{label}请使用 YYYY-MM-DD、YYYY 或 --MM-DD")
+
+
 @dataclass(frozen=True)
 class Field:
     key: str
@@ -44,6 +92,8 @@ class Field:
                 date.fromisoformat(text)
             except ValueError:
                 raise ValueError(f"{self.label}请使用 YYYY-MM-DD") from None
+        if self.kind == "birth_date":
+            return _parse_birth_date(text, self.label)
         return text
 
 
@@ -54,7 +104,8 @@ FIELDS: dict[str, tuple[Field, ...]] = {
         Field("student_no", "学号", True), Field("name", "姓名", True),
         Field("family", "族系", True), Field("branch", "支系", True), YEAR,
         Field("class_code", "班级编号"), Field("status", "学籍状态", True, default="在读"),
-        Field("gender", "性别"), Field("birth_date", "出生日期", kind="date"),
+        Field("gender", "性别"), Field("age", "年龄", kind="int"),
+        Field("birth_date", "出生日期", kind="birth_date"),
         Field("primary_element", "主元素"), Field("primary_affinity", "亲和等级"),
         Field("contact", "联系方式"), Field("dormitory", "宿舍"), Field("notes", "备注"),
     ),

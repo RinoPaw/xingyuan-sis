@@ -7,7 +7,7 @@ from typing import Any
 from .csv_io import ImportResult, export_students_csv, import_students_csv
 from .reports import summary
 from .repository import Repository
-from .schema import validate_values
+from .schema import is_complete_birth_date, validate_values
 
 
 class XingyuanService:
@@ -259,6 +259,7 @@ class XingyuanService:
         class_code: str | None = None,
         gender: str | None = None,
         birth_date: str | None = None,
+        age: int | None = None,
         status: str = "在读",
         primary_element: str | None = None,
         primary_affinity: str | None = None,
@@ -269,9 +270,12 @@ class XingyuanService:
         values = validate_values("students", {
             "student_no": student_no, "name": name, "family": family, "branch": branch,
             "enrollment_year": enrollment_year, "class_code": class_code, "gender": gender,
-            "birth_date": birth_date, "status": status, "primary_element": primary_element,
-            "primary_affinity": primary_affinity, "contact": contact, "dormitory": dormitory, "notes": notes,
+            "birth_date": birth_date, "age": age, "status": status,
+            "primary_element": primary_element, "primary_affinity": primary_affinity,
+            "contact": contact, "dormitory": dormitory, "notes": notes,
         })
+        if is_complete_birth_date(values["birth_date"]):
+            values["age"] = None
         species = self._require(
             self.species_branch_by_name(values["branch"], values["family"]),
             f"找不到种族支系：{family} · {branch}",
@@ -288,6 +292,10 @@ class XingyuanService:
     def update_student_by_no(self, student_no: str, /, **values: Any) -> None:
         values = validate_values("students", values, partial=True)
         row = self._require(self.student_by_no(student_no), f"找不到学生：{student_no}")
+
+        effective_birth_date = values.get("birth_date", row["birth_date"])
+        if is_complete_birth_date(effective_birth_date):
+            values["age"] = None
 
         if "family" in values or "branch" in values:
             family = str(values.pop("family", row["family"]))

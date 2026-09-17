@@ -9,7 +9,7 @@ from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import keys, screen, workspace
 from xingyuan_sis.tui.text_edit import TextBuffer
-from xingyuan_sis.tui.workspace import forms as workspace_forms, view as workspace_view
+from xingyuan_sis.tui.workspace import forms as workspace_forms, student_inspector, view as workspace_view
 from xingyuan_sis.tui.workspace.data import Catalog
 
 
@@ -47,7 +47,7 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         ]
         self.assertEqual([value for value, _ in branches], expected_branches)
 
-        for field in ("student_no", "name", "enrollment_year", "birth_date", "contact", "dormitory", "notes"):
+        for field in ("student_no", "name", "enrollment_year", "age", "birth_date", "contact", "dormitory", "notes"):
             with self.subTest(freeform=field):
                 self.assertIsNone(self.catalog.options("students", field, values))
 
@@ -162,6 +162,18 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         workspace._apply_form(state, self.catalog)
         changed = self.catalog.service.student_by_no(original["student_no"])
         self.assertEqual((changed["family"], changed["branch"]), (new_family, new_branch))
+
+    def test_complete_birth_date_derives_age_instead_of_exposing_manual_age(self):
+        row = self.catalog.records["students"][0]
+        self.catalog.service.update_student_by_no(row["student_no"], birth_date="2000-01-01", age=99)
+        self.catalog.refresh()
+        row = self.catalog.records["students"][0]
+        lines = student_inspector._lines(row, self.catalog)
+        age_line = next(line for line in lines if line and line[0][0].startswith("年龄"))
+
+        self.assertIsNone(row["age"])
+        self.assertFalse(any(action == "edit-field:age" for _, _, action in age_line))
+        self.assertTrue(any(text.endswith("岁") for text, _, _ in age_line))
 
     def test_inline_redraw_never_clears_the_whole_terminal_row(self):
         buffer = TextBuffer.from_value("林岚")

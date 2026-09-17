@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import date
 from typing import Any
 
+from ...schema import age_from_birth_date, is_complete_birth_date
 from .. import screen
 from ..layout import WorkspaceLayout, visible_start
 from ..view_common import Board, panel_heading, safe
@@ -64,16 +64,11 @@ def _positions(state: Workspace | None) -> dict[str, int]:
 
 
 def _age(values: dict[str, Any]) -> str:
-    value = values.get("birth_date")
-    try:
-        born = date.fromisoformat(str(value))
-    except (TypeError, ValueError):
-        return "—"
-    today = date.today()
-    if born > today:
-        return "—"
-    years = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
-    return f"{years}岁"
+    derived = age_from_birth_date(values.get("birth_date"))
+    if derived is not None:
+        return f"{derived}岁"
+    manual = values.get("age")
+    return "—" if manual is None else f"{manual}岁"
 
 
 def _lines(
@@ -104,13 +99,19 @@ def _lines(
         shown = display_value(catalog, "students", values, key) if text is None else text
         return shown, screen._BOLD + screen._TEXT_ACCENT if selected else style, action
 
+    def age_field() -> _Segment:
+        shown = _age(values)
+        if is_complete_birth_date(values.get("birth_date")):
+            return shown, screen._TEXT_PRIMARY, ""
+        return field("age", shown)
+
     year = values.get("enrollment_year")
     lines: list[_Line] = [
         [field("name", style=screen._BOLD + screen._TEXT_PRIMARY)],
         [label("学号  "), field("student_no")],
         [label("物种  "), field("family"), (" · ", screen._TEXT_SECONDARY, ""), field("branch")],
         [label("性别  "), field("gender")],
-        [label("年龄  "), (_age(values), screen._TEXT_PRIMARY, "")],
+        [label("年龄  "), age_field()],
         [label("入学  "), field("enrollment_year", f"{safe(year)}级")],
         [label("学院  "), (safe(row.get("department_name")), screen._TEXT_PRIMARY, "")],
         [label("班级  "), field("class_code")],

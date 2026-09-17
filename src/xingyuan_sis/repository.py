@@ -225,7 +225,7 @@ class Repository:
             """
             SELECT s.id, s.student_no, s.name, s.species_branch_id,
                    f.name AS family, b.name AS branch,
-                   s.gender, s.birth_date, s.enrollment_year, s.status,
+                   s.gender, s.birth_date, s.age, s.enrollment_year, s.status,
                    s.primary_element, s.primary_affinity,
                    s.contact, s.dormitory, s.notes, s.class_id,
                    c.code AS class_code, c.name AS class_name,
@@ -256,7 +256,7 @@ class Repository:
             """
             SELECT s.id, s.student_no, s.name, s.species_branch_id,
                    f.name AS family, b.name AS branch,
-                   s.gender, s.birth_date, s.enrollment_year, s.status,
+                   s.gender, s.birth_date, s.age, s.enrollment_year, s.status,
                    s.primary_element, s.primary_affinity,
                    s.contact, s.dormitory, s.notes, s.class_id,
                    c.code AS class_code, c.name AS class_name,
@@ -285,6 +285,7 @@ class Repository:
         enrollment_year: int,
         gender: str | None = None,
         birth_date: str | None = None,
+        age: int | None = None,
         class_id: int | None = None,
         status: str = "在读",
         primary_element: str | None = None,
@@ -296,15 +297,15 @@ class Repository:
         return self._execute(
             """
             INSERT INTO students(
-                student_no, name, species_branch_id, gender, birth_date,
+                student_no, name, species_branch_id, gender, birth_date, age,
                 enrollment_year, class_id, status,
                 primary_element, primary_affinity,
                 contact, dormitory, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 student_no.strip(), name.strip(), species_branch_id,
-                _blank_to_none(gender), _blank_to_none(birth_date), enrollment_year,
+                _blank_to_none(gender), _blank_to_none(birth_date), age, enrollment_year,
                 class_id, status.strip() or "在读",
                 _blank_to_none(primary_element), _blank_to_none(primary_affinity),
                 _blank_to_none(contact), _blank_to_none(dormitory), _blank_to_none(notes),
@@ -313,7 +314,7 @@ class Repository:
 
     def update_student(self, student_id: int, **values: Any) -> None:
         allowed = {
-            "student_no", "name", "species_branch_id", "gender", "birth_date",
+            "student_no", "name", "species_branch_id", "gender", "birth_date", "age",
             "enrollment_year", "class_id", "status", "primary_element",
             "primary_affinity", "contact", "dormitory", "notes",
         }

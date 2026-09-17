@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
 from pathlib import Path
 
 from .database import connect
@@ -56,10 +55,10 @@ CLASSES = (
     ("MED2301", "医学2301班", "MED", 2023),
 )
 
-# Age is descriptive source data only. It never controls admission eligibility,
-# enrollment year, class assignment, or whether a character may appear in seed.
-DEMO_REFERENCE_DATE = date(2026, 9, 15)
-
+# Age and birthday are descriptive source data only. They never control
+# admission eligibility, enrollment year, class assignment, or seed inclusion.
+# A birthday without a known year is stored as --MM-DD rather than inventing a
+# full date from the character's narrative age.
 # name, family, branch, gender, sourced age, sourced birthday (month, day), work
 _CHARACTER_PROFILES = (
     # BEASTARS
@@ -168,7 +167,7 @@ _CHARACTER_PROFILES = (
     ("Grantly Bell", "猫科", "虎", "男", None, None, "骑士学院"),
     ("Oscar Lawrence", "犬科", "犬", "男", None, None, "骑士学院"),
     ("Theo Prinz von Hirschreich", "猫科", "黑豹", "男", None, None, "骑士学院"),
-    ("Diederich Olsen", "犬科", "狼狐混血", "男", None, None, "骑士学院"),
+    ("Diederich Olsen", "犬科", "狼/狐（未定）", "男", None, (6, 8), "骑士学院"),
     ("Celio Delatorre", "犬科", "犬", "男", None, None, "骑士学院"),
     ("Julius Quingnard", "猫科", "狮", "男", None, None, "骑士学院"),
     ("Paul Pfitzner", "熊科", "北极熊", "男", None, None, "骑士学院"),
@@ -182,6 +181,16 @@ _CHARACTER_PROFILES = (
     ("Hoss Warner", "猫科", "狮", "男", None, None, "Password"),
     ("Sal Warden", "鳄科", "鳄鱼", "男", None, None, "Password"),
     ("Roswell Sinclair", "猪科", "野猪", "男", None, None, "Password"),
+    # 矛之酒馆
+    ("Eyvind", "犬科", "狼", "男", 24, None, "矛之酒馆"),
+    ("Snow", "犬科", "狼", "男", None, None, "矛之酒馆"),
+    ("Witer", "鳄科", "短吻鳄", "男", None, None, "矛之酒馆"),
+    ("Hakan", "龙科", "龙", "男", 85, None, "矛之酒馆"),
+    ("Nauxus", "蜥蜴科", "蜥蜴", "男", None, None, "矛之酒馆"),
+    ("Selye", "蛇科", "娜迦", "男", None, None, "矛之酒馆"),
+    ("Axel", "牛科", "牛", "男", None, None, "矛之酒馆"),
+    ("Thane", "牛科", "牛", "男", None, None, "矛之酒馆"),
+    ("Bread", "猫科", "雪豹", "男", None, None, "矛之酒馆"),
 )
 
 _YEAR_CLASS_CODES = {
@@ -196,16 +205,11 @@ _AFFINITIES = ("A", "B", "B", "C", "A", "B")
 _NOTES = ("元素学社活动成员", "校刊编辑组", "实验室值班助理", "校运动会志愿者", "交换培养申请中")
 
 
-def _birth_date(age: int | None, birthday: tuple[int, int] | None) -> str | None:
-    if age is None:
+def _birth_date(birthday: tuple[int, int] | None) -> str | None:
+    if birthday is None:
         return None
-    month, day = birthday or (1, 1)
-    year = DEMO_REFERENCE_DATE.year - age
-    if (month, day) > (DEMO_REFERENCE_DATE.month, DEMO_REFERENCE_DATE.day):
-        year -= 1
-    if not 1 <= year <= 9999:
-        return None
-    return f"{year:04d}-{month:02d}-{day:02d}"
+    month, day = birthday
+    return f"--{month:02d}-{day:02d}"
 
 
 def _character_students() -> tuple[tuple[object, ...], ...]:
@@ -242,7 +246,7 @@ def _character_students() -> tuple[tuple[object, ...], ...]:
 
         rows.append(
             (
-                student_no, name, family, branch, gender, _birth_date(age, birthday),
+                student_no, name, family, branch, gender, _birth_date(birthday), age,
                 year, class_code, status, primary_element, primary_affinity,
                 contact, dormitory, notes,
             )
@@ -308,8 +312,8 @@ def _enrollments() -> tuple[tuple[object, ...], ...]:
     rows: list[tuple[object, ...]] = []
     for student_index, student in enumerate(STUDENTS):
         student_no = str(student[0])
-        class_code = str(student[7])
-        status = str(student[8])
+        class_code = str(student[8])
+        status = str(student[9])
         pool = _MAJOR_COURSES[class_code[:3]]
         start = student_index % len(pool)
 
@@ -385,7 +389,7 @@ def seed_demo(db_path: Path | str | None = None, *, reset: bool = False) -> Seed
         connection.executemany(
             """
             INSERT INTO students(
-                student_no, name, species_branch_id, gender, birth_date,
+                student_no, name, species_branch_id, gender, birth_date, age,
                 enrollment_year, class_id, status,
                 primary_element, primary_affinity, contact, dormitory, notes
             ) VALUES (
@@ -396,7 +400,7 @@ def seed_demo(db_path: Path | str | None = None, *, reset: bool = False) -> Seed
                     JOIN species_families AS f ON f.id = b.family_id
                     WHERE f.name = ? AND b.name = ?
                 ),
-                ?, ?, ?,
+                ?, ?, ?, ?,
                 (SELECT id FROM classes WHERE code = ?),
                 ?, ?, ?, ?, ?, ?
             )
