@@ -2,7 +2,7 @@
 
 星原 SIS 保持单向、可解释的依赖：界面只负责交互，业务集中在 service / schema，持久化集中在 repository，SQLite 位于最底层。目录只表达当前真实边界，不为历史路径保留兼容层。
 
-结构性修改同时受 [设计原则](design-principles.md) 约束；该文档定义单一事实来源、抽象准入、迁移策略和测试边界。
+结构性修改同时受 [设计原则](design-principles.md) 约束；档案字段的值投影与格式化契约见 [档案展示与字段编辑模型](record-presentation.md)。
 
 ```text
 src/xingyuan_sis/
@@ -57,11 +57,12 @@ src/xingyuan_sis/
         ├── events.py         # 键鼠事件状态机
         ├── forms.py          # 表单打开、输入与保存
         ├── data.py           # 集合定义、数据快照与关联
+        ├── presentation.py   # 记录投影与唯一字段展示值管线
         ├── view.py           # 响应式工作台编排
         ├── roster.py         # 名册面板
         ├── detail.py         # 非学生通用实体档案
         ├── student_inspector.py # 学生档案唯一实现
-        ├── editor.py         # 非学生独立编辑器 / 确认面板
+        ├── editor.py         # 新建 / 确认等完整事务面板
         └── dashboard.py      # 数据概览
 ```
 
@@ -116,6 +117,7 @@ tui/workspace/__init__        controller
    ├─ events
    ├─ forms
    ├─ data ───────────────→ service → repository → SQLite
+   ├─ presentation
    └─ view
        ├─ roster
        ├─ detail
@@ -124,9 +126,11 @@ tui/workspace/__init__        controller
        └─ dashboard
 ```
 
-`workspace/__init__.py` 只管理生命周期：创建 Catalog 与 Workspace、接收事件结果、执行保存 / 刷新以及统一错误处理。`events.py` 只改变交互状态并返回控制事件；`forms.py` 管理草稿和写操作；`data.py` 持有一次读取的数据快照与 UI 所需关系；`view.py` 只编排布局。
+`workspace/__init__.py` 只管理生命周期：创建 Catalog 与 Workspace、接收事件结果、执行保存 / 刷新以及统一错误处理。`events.py` 只改变交互状态并返回控制事件；`forms.py` 管理字段输入、完整表单和写操作；`data.py` 持有一次读取的数据快照与 UI 所需关系；`view.py` 只编排布局。
 
-学生档案因为信息层级与原地编辑模型确实不同，拥有专用 `student_inspector.py`。学生的浏览、编辑、焦点目标与响应式布局都从这一份结构生成；`detail.py` 只处理其他实体。
+`presentation.py` 是档案展示值的公共边界。已有记录无论处于普通浏览还是单字段输入子状态，都先由 `project_record()` 得到同一种 projected record，再由 `display_value()` 执行同一套枚举 / 外键 label 与普通文本格式化。格式化函数不读取 `Workspace`、焦点或 `form.mode`；编辑状态只能决定投影覆盖哪些键以及交互 target 如何变化。
+
+学生档案因为信息层级与二维复合 target 确实不同，拥有专用 `student_inspector.py`；`detail.py` 处理其他实体。两者可以拥有不同布局，但不得拥有不同的字段值格式化语义。
 
 ## 数据库
 
@@ -147,7 +151,8 @@ Repository 是 SQL 数据访问的唯一入口；service 使用业务名称 / �
 ## 数据与状态
 
 - 数据仅在进入页面、手动刷新和保存后重新读取，不在每次重绘时查询数据库。
-- 草稿独立于数据库记录；字段编辑只修改 Form，保存后才进入 service。
+- 已有记录的单字段会话只提供当前字段临时覆盖；格式化器只消费 projected record，不识别“展示态 / 编辑态”。
+- 新建记录等多字段事务的草稿独立于数据库记录，保存后才进入 service。
 - 外键选择显示名称与业务编号，记录身份使用稳定数据库 ID 保持导航上下文。
 - 关联浏览通过 `Location` 保存来源记录、查询、视图、滚动和档案焦点，返回时按稳定 ID 恢复。
 
@@ -188,6 +193,8 @@ Repository 是 SQL 数据访问的唯一入口；service 使用业务名称 / �
 - 名册选择只在越出可见区后推动视口；
 - 宽屏双栏使用 Tab / ← / → 切换焦点，另一栏保留当前记录上下文；
 - 学生档案遵循“摘要 → 选课与成绩 → 个人信息”；
+- 进入单字段修改前后，除当前字段临时值和局部交互控件外，其他可见文本保持一致；
+- 相同字段在浏览与修改时必须经过同一个 `display_value()` 路径；
 - 文本输入中的普通字符不被全局快捷键吞掉，Esc 取消最内层操作；
 - CLI、CSV 与表单共享 schema 校验，非法输入失败时不改变原记录；
 - seed 测试验证关系与查询语义，不绑定某一版角色名单。
@@ -198,7 +205,7 @@ Repository 是 SQL 数据访问的唯一入口；service 使用业务名称 / �
 
 - 新业务能力先进入 service，再接 CLI / Basic UI / TUI；
 - 新 SQL 只进入 repository；
-- 新工作台实体优先复用 `data + roster + detail + forms`；
+- 新工作台实体优先复用 `data + presentation + roster + detail + forms`；
 - 只有交互模型确实不同，才增加专用 inspector / panel；
 - 不把一次性数据要求升级成长期业务门禁；
 - 不为已放弃的旧目录、旧私有 API、旧数据库结构或旧 token 名称保留转发层。
