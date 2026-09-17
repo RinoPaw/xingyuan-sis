@@ -7,6 +7,7 @@ from .. import screen
 from ..layout import WorkspaceLayout, visible_start
 from ..view_common import Board, panel_heading, safe
 from .data import Catalog
+from .presentation import display_value, project_record
 from .state import Workspace
 
 
@@ -56,51 +57,14 @@ def _editing(state: Workspace | None) -> bool:
     return state is not None and state.form is not None and state.form.mode == "edit"
 
 
-def _draft_keys(state: Workspace | None) -> set[str]:
-    if not _editing(state):
-        return set()
-    return {field.key for field in state.form.fields}
-
-
 def _positions(state: Workspace | None) -> dict[str, int]:
     if not _editing(state):
         return {}
     return {field.key: index for index, field in enumerate(state.form.fields)}
 
 
-def _raw_value(state: Workspace | None, row: dict[str, Any], key: str) -> Any:
-    if key in _draft_keys(state):
-        return state.form.values.get(key)
-    return row.get(key)
-
-
-def _display_context(
-    state: Workspace | None,
-    catalog: Catalog,
-    row: dict[str, Any],
-) -> dict[str, Any]:
-    values = catalog.defaults("students", row)
-    if _editing(state):
-        for key in _draft_keys(state):
-            values[key] = state.form.values.get(key)
-    return values
-
-
-def _display_value(
-    state: Workspace | None,
-    catalog: Catalog,
-    row: dict[str, Any],
-    key: str,
-) -> str:
-    value = _raw_value(state, row, key)
-    options = catalog.options("students", key, _display_context(state, catalog, row))
-    if options is not None:
-        return next((label for option, label in options if option == value), safe(value))
-    return safe(value)
-
-
-def _age(state: Workspace | None, row: dict[str, Any]) -> str:
-    value = _raw_value(state, row, "birth_date")
+def _age(values: dict[str, Any]) -> str:
+    value = values.get("birth_date")
     try:
         born = date.fromisoformat(str(value))
     except (TypeError, ValueError):
@@ -112,11 +76,6 @@ def _age(state: Workspace | None, row: dict[str, Any]) -> str:
     return f"{years}岁"
 
 
-def _department(row: dict[str, Any]) -> str:
-    # A field edit is local: unrelated derived values always reflect committed data.
-    return safe(row.get("department_name"))
-
-
 def _lines(
     row: dict[str, Any],
     catalog: Catalog,
@@ -125,6 +84,7 @@ def _lines(
     editing = _editing(state)
     positions = _positions(state)
     editable = {field.key for field in catalog.fields("students", True)}
+    values = project_record(row, state.form if state is not None else None)
 
     def label(text: str) -> _Segment:
         return text, screen._TEXT_SECONDARY, ""
@@ -141,18 +101,18 @@ def _lines(
         else:
             action = f"edit-field:{key}" if key in editable else ""
             selected = False
-        shown = _display_value(state, catalog, row, key) if text is None else text
+        shown = display_value(catalog, "students", values, key) if text is None else text
         return shown, screen._BOLD + screen._TEXT_ACCENT if selected else style, action
 
-    year = _raw_value(state, row, "enrollment_year")
+    year = values.get("enrollment_year")
     lines: list[_Line] = [
         [field("name", style=screen._BOLD + screen._TEXT_PRIMARY)],
         [label("学号  "), field("student_no")],
         [label("物种  "), field("family"), (" · ", screen._TEXT_SECONDARY, ""), field("branch")],
         [label("性别  "), field("gender")],
-        [label("年龄  "), (_age(state, row), screen._TEXT_PRIMARY, "")],
+        [label("年龄  "), (_age(values), screen._TEXT_PRIMARY, "")],
         [label("入学  "), field("enrollment_year", f"{safe(year)}级")],
-        [label("学院  "), (_department(row), screen._TEXT_PRIMARY, "")],
+        [label("学院  "), (safe(row.get("department_name")), screen._TEXT_PRIMARY, "")],
         [label("班级  "), field("class_code")],
         [label("学籍  "), field("status")],
         [label("元素  "), field("primary_element"), (" · ", screen._TEXT_SECONDARY, ""), field("primary_affinity")],
@@ -256,7 +216,7 @@ def render_inspector(
     )
 
     offset = layout.detail_offset
-    raw_lines = _lines(row, catalog, state if editing else None)
+    raw_lines = _lines(row, catalog, state)
     lines = raw_lines[offset:]
     capacity = layout.panel_capacity(state.key)
 
@@ -291,6 +251,7 @@ def render_inspector(
         state.detail_scroll = visible_start(target_line, len(lines), capacity, state.detail_scroll)
 
     visible = lines[state.detail_scroll:state.detail_scroll + capacity]
+    values = project_record(row, state.form)
     for offset_in_view, segments in enumerate(visible):
         y = top + offset_in_view
         cursor = x
@@ -312,7 +273,7 @@ def render_inspector(
                 if editing and action.startswith("field:"):
                     field_index = int(action.split(":")[1])
                     field_key = state.form.fields[field_index].key
-                    freeform = catalog.options("students", field_key, _display_context(state, catalog, row)) is None
+                    freeform = catalog.options("students", field_key, values) is None
                     if selected and state.form.options is None and freeform and segment_index == len(segments) - 1:
                         hit_width = max(hit_width, remaining)
                 board.regions.append(screen.HitRegion(cursor + 1, y + 1, hit_width, action))
