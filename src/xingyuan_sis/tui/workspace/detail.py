@@ -7,6 +7,7 @@ from .. import screen
 from ..layout import WorkspaceLayout, visible_start
 from ..view_common import Board, identity, metric_pair, panel_heading, safe
 from .data import COLLECTIONS, Catalog
+from .presentation import display_value, project_record
 from .state import Workspace
 
 
@@ -14,43 +15,10 @@ def _editing(state: Workspace | None) -> bool:
     return state is not None and state.form is not None and state.form.mode == "edit"
 
 
-def _draft_keys(state: Workspace | None) -> set[str]:
-    if not _editing(state):
-        return set()
-    return {field.key for field in state.form.fields}
-
-
 def _active_field(state: Workspace | None) -> str | None:
     if not _editing(state) or not state.form.fields:
         return None
     return state.form.fields[state.form.position].key
-
-
-def _raw_value(state: Workspace | None, row: dict[str, Any], key: str) -> Any:
-    if key in _draft_keys(state):
-        return state.form.values.get(key)
-    return row.get(key)
-
-
-def _display_context(
-    state: Workspace | None,
-    catalog: Catalog,
-    key: str,
-    row: dict[str, Any],
-) -> dict[str, Any]:
-    values = catalog.defaults(key, row)
-    if _editing(state):
-        for field_key in _draft_keys(state):
-            values[field_key] = state.form.values.get(field_key)
-    return values
-
-
-def _shown_value(state: Workspace | None, catalog: Catalog, key: str, field_key: str, row: dict[str, Any]) -> str:
-    value = _raw_value(state, row, field_key)
-    options = catalog.options(key, field_key, _display_context(state, catalog, key, row))
-    if options is not None:
-        return next((label for option, label in options if option == value), safe(value))
-    return safe(value)
 
 
 def details(
@@ -63,6 +31,7 @@ def details(
     editing = _editing(state)
     active = _active_field(state)
     editable = {field.key for field in catalog.fields(key, True)}
+    values = project_record(row, state.form if state is not None else None)
 
     title, identifier = identity(key, row)
     lines = [
@@ -73,15 +42,15 @@ def details(
     if key == "courses":
         lines.append((
             "  /  ".join((
-                metric_pair("学分", safe(_raw_value(state, row, "credits"))),
-                metric_pair("课时", _raw_value(state, row, "hours")),
+                metric_pair("学分", safe(values.get("credits"))),
+                metric_pair("课时", values.get("hours")),
                 metric_pair("次选课", row["enrolled"]),
             )),
             "",
             "",
         ))
     if key == "grades":
-        score = _raw_value(state, row, "score")
+        score = values.get("score")
         if score is None:
             lines.append(("待录入成绩", screen._BOLD + screen._TEXT_SECONDARY, ""))
         else:
@@ -117,7 +86,7 @@ def details(
             action = f"field:{state.form.position}" if field.key == active else ""
         else:
             action = f"edit-field:{field.key}" if field.key in editable else ""
-        value = _shown_value(state, catalog, key, field.key, row)
+        value = display_value(catalog, key, values, field.key)
         chunks = _wrap_line(value, max(2, width - 12))
         prefix = screen._pad_cells(field.label, 10)
         first_line = (
@@ -200,7 +169,7 @@ def render_inspector(board: Board, state: Workspace, catalog: Catalog, x: int, w
             board.button(x, top + 7, "体验演示校园", "seed")
         return
 
-    rendered = details(state.key, row, catalog, width, state if editing else None)
+    rendered = details(state.key, row, catalog, width, state)
     lines = rendered[layout.detail_offset:]
 
     selected_action = ""
