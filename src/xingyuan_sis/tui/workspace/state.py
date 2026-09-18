@@ -1,9 +1,31 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 from .data import Catalog, Field
+
+
+class FocusArea(str, Enum):
+    """The single keyboard-focus owner inside a workspace."""
+
+    ROSTER = "roster"
+    INSPECTOR = "inspector"
+    TOOLBAR = "toolbar"
+    DASHBOARD = "dashboard"
+
+
+class ContentPanel(str, Enum):
+    """The record panel that remains the current content context.
+
+    Wide layouts show both panels, while single-pane layouts render only this
+    panel. Toolbar focus does not change it, so leaving the toolbar returns to
+    the content panel the user came from.
+    """
+
+    ROSTER = "roster"
+    INSPECTOR = "inspector"
 
 
 @dataclass
@@ -54,10 +76,10 @@ class Location:
     selected: int
     roster_scroll: int
     record_id: int | None
-    details: bool
+    focus: FocusArea
+    content_panel: ContentPanel
     detail_scroll: int
     detail_selected: int
-    action_focus: bool = False
     action_selected: int = 0
 
 
@@ -68,10 +90,10 @@ class Workspace:
     query: str = ""
     selected: int = 0
     roster_scroll: int = 0
-    details: bool = False
+    focus: FocusArea = FocusArea.ROSTER
+    content_panel: ContentPanel = ContentPanel.ROSTER
     detail_scroll: int = 0
     detail_selected: int = 0
-    action_focus: bool = False
     action_selected: int = 0
     notice: str = ""
     form: Form | None = None
@@ -79,6 +101,10 @@ class Workspace:
     report: list[str] = field(default_factory=list)
     credentials: list[tuple[str, str]] = field(default_factory=list)
     history: list[Location] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.key == "data" and self.focus is FocusArea.ROSTER:
+            self.focus = FocusArea.DASHBOARD
 
     def rows(self, catalog: Catalog) -> list[dict[str, Any]]:
         rows = catalog.rows(self.key, self.view, self.query) if self.key != "data" else []
@@ -90,18 +116,39 @@ class Workspace:
         rows = self.rows(catalog)
         return rows[self.selected] if rows else None
 
+    def set_focus(self, area: FocusArea) -> None:
+        """Move keyboard focus while keeping the content-panel invariant."""
+        self.focus = area
+        if area is FocusArea.ROSTER:
+            self.content_panel = ContentPanel.ROSTER
+        elif area is FocusArea.INSPECTOR:
+            self.content_panel = ContentPanel.INSPECTOR
+
+    def focus_content(self) -> None:
+        """Return from toolbar focus to the content panel it belongs to."""
+        if self.key == "data":
+            self.focus = FocusArea.DASHBOARD
+        else:
+            self.focus = (
+                FocusArea.INSPECTOR
+                if self.content_panel is ContentPanel.INSPECTOR
+                else FocusArea.ROSTER
+            )
+
     def switch(self, key: str) -> None:
         self.key, self.view, self.query, self.selected, self.roster_scroll = key, 0, "", 0, 0
-        self.details, self.detail_scroll, self.detail_selected = False, 0, 0
+        self.focus = FocusArea.DASHBOARD if key == "data" else FocusArea.ROSTER
+        self.content_panel = ContentPanel.ROSTER
+        self.detail_scroll, self.detail_selected = 0, 0
         self.form, self.field_session = None, None
-        self.action_focus, self.action_selected = False, 0
+        self.action_selected = 0
 
     def visit(self, key: str, identifier: str, catalog: Catalog) -> None:
         row = self.current(catalog)
         self.history.append(Location(
             self.key, self.view, self.query, self.selected, self.roster_scroll,
-            row["id"] if row else None, self.details, self.detail_scroll, self.detail_selected,
-            self.action_focus, self.action_selected,
+            row["id"] if row else None, self.focus, self.content_panel,
+            self.detail_scroll, self.detail_selected, self.action_selected,
         ))
         self.switch(key)
         self.selected = next((i for i, row in enumerate(self.rows(catalog))
@@ -114,7 +161,7 @@ class Workspace:
         self.selected = next((i for i, row in enumerate(self.rows(catalog))
                               if row["id"] == location.record_id), location.selected)
         self.roster_scroll = location.roster_scroll
-        self.details = location.details
+        self.focus, self.content_panel = location.focus, location.content_panel
         self.detail_scroll, self.detail_selected = location.detail_scroll, location.detail_selected
-        self.action_focus, self.action_selected = location.action_focus, location.action_selected
+        self.action_selected = location.action_selected
         self.rows(catalog)
