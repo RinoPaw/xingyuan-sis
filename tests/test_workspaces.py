@@ -1,3 +1,4 @@
+from xingyuan_sis.tui.workspace import events as workspace_events
 from contextlib import nullcontext, redirect_stdout
 from io import StringIO
 import os
@@ -9,11 +10,9 @@ from unittest.mock import patch
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import ENROLLMENTS, STUDENTS, seed_demo
 from xingyuan_sis.tui import app, keys, screen, workspace
-from xingyuan_sis.tui.workspace import view as workspace_view
+from xingyuan_sis.tui.workspace import forms as workspace_forms, view as workspace_view
 from xingyuan_sis.tui.workspace.data import COLLECTIONS, Catalog
 
-from xingyuan_sis.tui.workspace import events as workspace_events
-from xingyuan_sis.tui.workspace import forms as workspace_forms
 
 class WorkspaceTests(unittest.TestCase):
     def setUp(self):
@@ -107,30 +106,28 @@ class WorkspaceTests(unittest.TestCase):
             [str(expected[0])],
         )
 
-    def test_edit_stages_values_and_cancel_does_not_write(self):
-        state = workspace.Workspace("students")
+    def test_field_edit_saves_on_enter_without_record_edit_mode(self):
+        state = workspace.Workspace("students", details=True)
         original = state.current(self.catalog).copy()
-        workspace_forms.open_form(state, self.catalog, "edit")
-        index = next(i for i, field in enumerate(state.form.fields) if field.key == "contact")
-        with patch("builtins.input", return_value="暂存的联系方式"), patch.object(screen, "_paint"), redirect_stdout(StringIO()):
-            workspace_forms.read_value(state, self.catalog, ("field", index))
-        self.assertEqual(state.form.values["contact"], "暂存的联系方式")
-        self.assertEqual(self.catalog.service.student_by_no(original["student_no"])["contact"], original["contact"])
-        self.interact(state, ["cancel", "back", "back"])
+        workspace_forms.open_field(state, self.catalog, "name")
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
+             patch.object(screen, "_paint"), \
+             patch.object(workspace_forms, "read_inline_input", return_value="即时新名字"):
+            workspace_forms.read_value(state, self.catalog, ("field", 0))
         self.assertIsNone(state.form)
-        self.assertEqual(self.catalog.service.student_by_no(original["student_no"])["contact"], original["contact"])
+        self.assertEqual(self.catalog.service.student_by_no(original["student_no"])["name"], "即时新名字")
 
-    def test_edit_selected_student_keeps_identity_and_relationships(self):
+    def test_edit_selected_student_can_change_identifier_and_keeps_relationships(self):
         state = workspace.Workspace("students", selected=9)
         original = state.current(self.catalog).copy()
-        workspace_forms.open_form(state, self.catalog, "edit")
-        state.form.values["status"] = "休学"
+        workspace_forms.open_field(state, self.catalog, "student_no")
+        state.form.values["student_no"] = "20990001"
         workspace_forms.apply_form(state, self.catalog)
-        changed = self.catalog.service.student_by_no(original["student_no"])
-        self.assertEqual((changed["id"], changed["name"]), (original["id"], original["name"]))
-        self.assertEqual(changed["status"], "休学")
+        self.assertIsNone(self.catalog.service.student_by_no(original["student_no"]))
+        changed = self.catalog.service.student_by_no("20990001")
+        self.assertEqual(changed["id"], original["id"])
         self.assertEqual(state.current(self.catalog)["id"], original["id"])
-        self.assertTrue(any(row["student_no"] == original["student_no"] for row in self.catalog.records["grades"]))
+        self.assertTrue(any(row["student_no"] == "20990001" for row in self.catalog.records["grades"]))
 
     def test_course_edit_renames_code_without_changing_enrollments(self):
         row = self.catalog.records["courses"][0]
@@ -142,8 +139,8 @@ class WorkspaceTests(unittest.TestCase):
     def test_zero_score_and_clearing_score_are_distinct(self):
         state = workspace.Workspace("grades", view=1)
         original = state.current(self.catalog).copy()
-        workspace_forms.open_form(state, self.catalog, "edit")
-        self.assertNotIn("student_no", [field.key for field in state.form.fields])
+        workspace_forms.open_field(state, self.catalog, "score")
+        self.assertEqual([field.key for field in state.form.fields], ["score"])
         state.form.values["score"] = 0
         workspace_forms.apply_form(state, self.catalog)
         row = next(r for r in self.catalog.records["grades"] if r["id"] == original["id"])
@@ -164,15 +161,18 @@ class WorkspaceTests(unittest.TestCase):
                     self.catalog.save("grades", values, row)
                 self.assertEqual(self.catalog.service.enrollment(row["student_no"], row["course_code"], row["semester"])["score"], row["score"])
 
-    def test_foreign_keys_are_picked_by_name_and_staged(self):
-        state = workspace.Workspace("students", selected=9)
-        workspace_forms.open_form(state, self.catalog, "edit")
-        index = next(i for i, field in enumerate(state.form.fields) if field.key == "class_code")
-        workspace_forms.read_value(state, self.catalog, ("field", index))
+    def test_foreign_key_picker_saves_selected_value_on_enter(self):
+        state = workspace.Workspace("students", selected=9, details=True)
+        original = state.current(self.catalog).copy()
+        workspace_forms.open_field(state, self.catalog, "class_code")
+        workspace_forms.read_value(state, self.catalog, ("field", 0))
         self.assertTrue(any("元素学" in label for _, label in state.form.options))
-        self.interact(state, ["option:0", "save"])
-        self.assertIsNone(state.form.values["class_code"])
-        self.assertIsNotNone(state.form.original["class_id"])
+        event = self.interact(state, ["option:0"])
+        self.assertEqual(event, ("save", 0))
+        workspace_forms.apply_form(state, self.catalog)
+        changed = self.catalog.service.student_by_no(original["student_no"])
+        self.assertIsNone(changed["class_id"])
+        self.assertIsNotNone(original["class_id"])
 
     def test_create_and_remove_record_refresh_the_workspace(self):
         state = workspace.Workspace("departments")
@@ -186,16 +186,15 @@ class WorkspaceTests(unittest.TestCase):
         workspace_forms.apply_form(state, self.catalog)
         self.assertIsNone(self.catalog.service.department_by_code("NEW"))
 
-    def test_form_scrolls_selected_field_into_view_after_resize(self):
-        state = workspace.Workspace("students")
-        workspace_forms.open_form(state, self.catalog, "edit")
-        state.form.position = len(state.form.fields) - 1
+    def test_active_field_stays_visible_after_resize_without_save_button(self):
+        state = workspace.Workspace("students", details=True)
+        workspace_forms.open_field(state, self.catalog, "notes")
         for size in ((120, 35), (80, 24), (40, 20), (30, 12)):
             with self.subTest(size=size):
                 frame = self.render(state, size)
                 self.assertIn("备注", "".join(frame.lines))
-                self.assertTrue(any(r.action == f"field:{state.form.position}" for r in frame.regions))
-                self.assertTrue(any(r.action == "save" for r in frame.regions))
+                self.assertTrue(any(r.action == "field:0" for r in frame.regions))
+                self.assertFalse(any(r.action == "save" for r in frame.regions))
 
     def test_short_workspace_keeps_every_record_accessible(self):
         state = workspace.Workspace("students")

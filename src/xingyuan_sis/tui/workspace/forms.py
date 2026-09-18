@@ -12,18 +12,15 @@ from .state import Form, Workspace
 def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
     catalog.require_write()
     row = state.current(catalog)
-    if mode in {"edit", "delete", "reset-password"} and row is None:
+    if mode in {"delete", "reset-password"} and row is None:
         state.notice = "先选择一条记录。"
         return
-    if mode in {"create", "edit"}:
+    if mode == "create":
         state.form = Form(
             mode,
-            catalog.fields(state.key, mode == "edit"),
-            catalog.defaults(state.key, row if mode == "edit" else None),
-            row if mode == "edit" else None,
+            catalog.fields(state.key),
+            catalog.defaults(state.key),
         )
-        if mode == "edit":
-            move_form_position(state, "home", catalog)
     elif mode in {"import", "export"}:
         state.form = Form(mode, (Field("path", "CSV 文件路径", True),), {"path": "data/students.csv"})
     else:
@@ -32,24 +29,35 @@ def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
     state.detail_scroll = 0
 
 
-def move_form_position(state: Workspace, direction: str, catalog: Catalog) -> None:
-    """Navigate the rendered field rows and the save control, in visual order."""
-    form = state.form
-    if form is None or not form.fields:
+def open_field(state: Workspace, catalog: Catalog, field_key: str) -> None:
+    catalog.require_write()
+    row = state.current(catalog)
+    if row is None:
+        state.notice = "先选择一条记录。"
         return
-    if form.mode == "edit":
-        from .view import content_lines
+    fields = {field.key: field for field in catalog.fields(state.key, True)}
+    if field_key not in fields:
+        raise ValueError("这个字段不能直接修改。")
+    if field_key == "age":
+        from ...schema import is_complete_birth_date
 
-        row = state.current(catalog)
-        rows = [tuple(int(action.split(":")[1]) for _, _, action in line
-                      if action.startswith("field:"))
-                for line in content_lines(state.key, row, catalog, state)]
-        rows = [row for row in rows if row]
-    else:
-        rows = [(i,) for i in range(len(form.fields))]
-    order = list(dict.fromkeys(index for row in rows for index in row))
-    if not order:
+        if is_complete_birth_date(row.get("birth_date")):
+            raise ValueError("完整出生日期已自动计算年龄，请修改出生日期。")
+    owned = (fields[field_key],)
+    if state.key == "students" and field_key == "family":
+        owned += (fields["branch"],)
+    state.form = Form("edit", owned, {field.key: row.get(field.key) for field in owned}, row)
+    state.details = True
+    state.action_focus = False
+    state.notice = "Enter 确认并保存 · Esc 取消。"
+
+
+def move_form_position(state: Workspace, direction: str) -> None:
+    """Only new-record and file forms have a field/save focus cycle."""
+    form = state.form
+    if form is None or not form.fields or form.mode == "edit":
         return
+    order = list(range(len(form.fields)))
     if direction in {"focus", "focus_prev"}:
         current = len(order) if form.focus_save else order.index(form.position)
         target = (current + (1 if direction == "focus" else -1)) % (len(order) + 1)
@@ -66,18 +74,38 @@ def move_form_position(state: Workspace, direction: str, catalog: Catalog) -> No
             form.focus_save = False
             form.position = order[-1]
         return
-    row_index, column_index = next((i, row.index(form.position)) for i, row in enumerate(rows)
-                                  if form.position in row)
-    if direction in {"left", "right"}:
-        column = column_index + (-1 if direction == "left" else 1)
-        if 0 <= column < len(rows[row_index]):
-            form.position = rows[row_index][column]
-    elif direction in {"up", "down"}:
-        next_row = row_index + (-1 if direction == "up" else 1)
-        if next_row == len(rows):
+    if direction in {"up", "down"}:
+        position = form.position + (-1 if direction == "up" else 1)
+        if position == len(form.fields):
             form.focus_save = True
-        elif next_row >= 0:
-            form.position = rows[next_row][min(column_index, len(rows[next_row]) - 1)]
+        elif position >= 0:
+            form.position = position
+
+
+def option_values(state: Workspace) -> dict:
+    """Resolve related options using committed values plus the current field group."""
+    from .presentation import project_record
+
+    return project_record(state.form.original, state.form) if state.form.mode == "edit" else state.form.values
+
+
+def accept_option(state: Workspace, catalog: Catalog, index: int) -> tuple[str, int] | None:
+    form = state.form
+    field_key = form.fields[form.position].key
+    form.values[field_key] = form.options[index][0]
+    if state.key == "students" and field_key == "family":
+        branches = catalog.options("students", "branch", option_values(state))
+        if not any(value == form.values.get("branch") for value, _ in branches):
+            form.values["branch"] = None
+    form.options = None
+    if form.mode != "edit":
+        state.notice = "已选择，尚未保存。"
+        return None
+    if form.position + 1 < len(form.fields):
+        form.position += 1
+        read_value(state, catalog, ("field", form.position))
+        return None
+    return "save", 0
 
 
 def apply_form(state: Workspace, catalog: Catalog) -> None:
@@ -86,7 +114,8 @@ def apply_form(state: Workspace, catalog: Catalog) -> None:
     if form is None:
         return
     if form.mode in {"create", "edit"}:
-        record_id = catalog.save(state.key, form.values, form.original)
+        values = {field.key: form.values.get(field.key) for field in form.fields}
+        record_id = catalog.save(state.key, values, form.original)
         if catalog.initial_password is not None:
             state.credentials = [(str(form.values["student_no"]), catalog.initial_password)]
             catalog.initial_password = None
@@ -199,19 +228,20 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
     field_ = state.form.fields[index]
     state.form.position = index
     state.form.focus_save = False
-    options = catalog.options(state.key, field_.key, state.form.values) if state.form.mode in {"create", "edit"} else None
+    options = catalog.options(state.key, field_.key, option_values(state)) if state.form.mode in {"create", "edit"} else None
     if options is not None:
         state.form.options = options
         state.form.option_index = next(
             (i for i, (value, _) in enumerate(options) if value == state.form.values.get(field_.key)),
             0,
         )
-        state.notice = "↑↓ 选择，Enter 暂存。Esc 取消。"
+        suffix = "继续" if state.form.position + 1 < len(state.form.fields) else "保存"
+        state.notice = f"↑↓ 选择，Enter {suffix if state.form.mode == 'edit' else '暂存'}。Esc 取消。"
         return
 
     current = state.form.values.get(field_.key)
     state.notice = (
-        "直接在当前字段修改 · Enter 暂存"
+        "直接在当前字段修改 · Enter " + ("保存" if state.form.mode == "edit" else "暂存")
         + (" · 清空后 Enter 可置空" if not field_.required else "")
         + " · Esc 取消"
     )
@@ -233,4 +263,7 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
 
     value = field_.parse(raw if raw else None)
     state.form.values[field_.key] = value
-    state.notice = "字段已暂存。Esc 取消。"
+    if state.form.mode == "edit":
+        apply_form(state, catalog)
+    else:
+        state.notice = "字段已暂存。Esc 取消。"

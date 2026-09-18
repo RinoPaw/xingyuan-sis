@@ -31,6 +31,8 @@ def run(
                 try:
                     read_value(state, catalog, event)
                 except KeyboardInterrupt:
+                    if state.form and state.form.mode == "edit":
+                        state.form = None
                     state.notice = "已取消输入。"
             elif event[0] == "save":
                 apply_form(state, catalog)

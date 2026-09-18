@@ -14,6 +14,7 @@ class StudentListRecord:
     branch: str
     gender: str | None
     birth_date: str | None
+    age: int | None
     enrollment_year: int
     class_code: str | None
     class_name: str | None
@@ -91,7 +92,7 @@ def query_students(
 
         searchable = (
             row["student_no"], row["name"], row["family"], row["branch"],
-            row["gender"], row["birth_date"], row["enrollment_year"],
+            row["gender"], row["birth_date"], row["age"], row["enrollment_year"],
             class_code, class_name, major_code, major_name,
             college_code, college_name, row["status"],
             row["primary_element"], row["primary_affinity"],
@@ -132,6 +133,7 @@ def query_students(
                 branch=str(row["branch"]),
                 gender=None if row["gender"] is None else str(row["gender"]),
                 birth_date=None if row["birth_date"] is None else str(row["birth_date"]),
+                age=None if row["age"] is None else int(row["age"]),
                 enrollment_year=int(row["enrollment_year"]),
                 class_code=None if class_code is None else str(class_code),
                 class_name=None if class_name is None else str(class_name),

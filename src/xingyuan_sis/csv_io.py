@@ -11,7 +11,7 @@ from typing import Any
 from .schema import FIELDS
 
 STUDENT_FIELDS = [
-    "student_no", "name", "family", "branch", "gender", "birth_date",
+    "student_no", "name", "family", "branch", "gender", "birth_date", "age",
     "enrollment_year", "class_code", "status", "primary_element",
     "primary_affinity", "contact", "dormitory", "notes",
 ]

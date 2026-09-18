@@ -9,6 +9,7 @@ from typing import Any, Sequence
 
 from ..auth import reset_student_password
 from ..csv_io import STUDENT_FIELDS
+from ..schema import age_from_birth_date
 from ..service import XingyuanService
 from ..student_filters import StudentListRecord, query_students
 from .common import UNCHANGED, confirm, edit_prompt, print_fields, print_table, prompt, prompt_int
@@ -21,6 +22,11 @@ def _student(service: XingyuanService, student_no: str):
     return row
 
 
+def _display_age(row) -> int | None:
+    derived = age_from_birth_date(row["birth_date"])
+    return derived if derived is not None else row["age"]
+
+
 def _csv_row(row: StudentListRecord) -> dict[str, object | None]:
     return {
         "student_no": row.student_no,
@@ -29,6 +35,7 @@ def _csv_row(row: StudentListRecord) -> dict[str, object | None]:
         "branch": row.branch,
         "gender": row.gender,
         "birth_date": row.birth_date,
+        "age": row.age,
         "enrollment_year": row.enrollment_year,
         "class_code": row.class_code,
         "status": row.status,
@@ -106,7 +113,8 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
             (
                 ("学号", row["student_no"]), ("姓名", row["name"]),
                 ("族系", f"{row['family']} · {row['branch']}"), ("性别", row["gender"]),
-                ("出生日期", row["birth_date"]), ("入学年份", row["enrollment_year"]),
+                ("年龄", _display_age(row)), ("出生日期", row["birth_date"]),
+                ("入学年份", row["enrollment_year"]),
                 ("学院", row["department_name"]), ("专业", row["major_name"]),
                 ("班级", row["class_name"]), ("状态", row["status"]),
                 ("主元素", row["primary_element"]), ("亲和等级", row["primary_affinity"]),
@@ -133,6 +141,7 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
         optional: dict[str, Any] = {
             "class_code": args.class_code,
             "gender": args.gender,
+            "age": args.age,
             "birth_date": args.birth_date,
             "status": args.status or "在读",
             "primary_element": args.primary_element,
@@ -144,7 +153,8 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
         if interactive:
             optional["class_code"] = prompt("班级编号")
             optional["gender"] = prompt("性别")
-            optional["birth_date"] = prompt("出生日期 YYYY-MM-DD")
+            optional["age"] = prompt_int("年龄")
+            optional["birth_date"] = prompt("出生日期 YYYY-MM-DD / YYYY / --MM-DD")
             optional["status"] = prompt("状态", None) or "在读"
             optional["primary_element"] = prompt("主元素")
             optional["primary_affinity"] = prompt("亲和等级")
@@ -176,6 +186,7 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
             "branch": args.branch,
             "enrollment_year": args.enrollment_year,
             "gender": args.gender,
+            "age": args.age,
             "birth_date": args.birth_date,
             "status": args.status,
             "primary_element": args.primary_element,
@@ -197,6 +208,7 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
                 ("enrollment_year", "入学年份", row["enrollment_year"], False),
                 ("class_code", "班级编号", row["class_code"], True),
                 ("gender", "性别", row["gender"], True),
+                ("age", "年龄", row["age"], True),
                 ("birth_date", "出生日期", row["birth_date"], True),
                 ("status", "状态", row["status"], False),
                 ("primary_element", "主元素", row["primary_element"], True),
@@ -209,7 +221,7 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
                 value = edit_prompt(label, current, clearable=clearable)
                 if value is UNCHANGED:
                     continue
-                if key == "enrollment_year" and value is not None:
+                if key in {"enrollment_year", "age"} and value is not None:
                     value = int(value)
                 values[key] = value
 

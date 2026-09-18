@@ -7,6 +7,7 @@ from .. import screen
 from ..layout import WorkspaceLayout, visible_start
 from ..view_common import Board, identity, panel_heading, safe
 from .data import Catalog
+from .presentation import display_value
 from .state import Workspace
 
 Segment = tuple[str, str, str]
@@ -15,12 +16,6 @@ Line = list[Segment]
 
 def is_editing(state: Workspace | None) -> bool:
     return state is not None and state.form is not None and state.form.mode == "edit"
-
-
-def raw_value(state: Workspace | None, row: dict[str, Any], key: str) -> Any:
-    if is_editing(state) and key in state.form.values:
-        return state.form.values.get(key)
-    return row.get(key)
 
 
 def field_segment(
@@ -36,11 +31,7 @@ def field_segment(
     else:
         action = f"edit-field:{field_key}" if any(f.key == field_key for f in fields) else ""
         selected = False
-    value = raw_value(state, row, field_key)
-    shown = safe(value)
-    options = catalog.options(key, field_key, state.form.values if editing else row)
-    if options is not None:
-        shown = next((label for option, label in options if option == value), shown)
+    shown = display_value(catalog, key, row, field_key)
     return (shown if text is None else text,
             screen._BOLD + screen._TEXT_ACCENT if selected else style, action)
 
@@ -95,6 +86,22 @@ def action_targets(lines: list[Line]) -> list[tuple[int, str]]:
     return result
 
 
+def directional_target(lines: list[Line], current: str, direction: str) -> str | None:
+    """Navigate the content's rows; composite rows use their rightmost vertical target."""
+    rows = [list(dict.fromkeys(action for _, _, action in line if action)) for line in lines]
+    rows = [row for row in rows if row]
+    location = next(((i, row.index(current)) for i, row in enumerate(rows) if current in row), None)
+    if location is None:
+        return None
+    row, column = location
+    if direction == "left":
+        return rows[row][column - 1] if column else None
+    if direction == "right":
+        return rows[row][min(column + 1, len(rows[row]) - 1)]
+    target = min(max(0, row + (-1 if direction == "up" else 1)), len(rows) - 1)
+    return rows[target][-1]
+
+
 def content_offset(lines: list[Line], layout: WorkspaceLayout) -> int:
     # A compact identity heading may replace a read-only title, never an editable field.
     editable_title = bool(lines and any(action.startswith(("field:", "edit-field:"))
@@ -136,12 +143,7 @@ def render_inspector(
     offset = content_offset(raw_lines, layout)
     raw_lines = wrap_lines(raw_lines, width)
     lines = raw_lines[offset:]
-    save_row = board.height - 3 if editing else None
-    capacity = (
-        max(1, save_row - top)
-        if editing
-        else layout.panel_capacity(state.key)
-    )
+    capacity = layout.panel_capacity(state.key)
 
     selected_action = ""
     target_line = 0
@@ -203,9 +205,7 @@ def render_inspector(
             board.put(cursor, y, shown, drawn_style, width=remaining)
             cursor += display
 
-    if editing:
-        board.button(x, save_row, "s 保存", "save", selected=state.form.focus_save)
-    else:
+    if not editing:
         if len(lines) > capacity and not layout.compact:
             board.put(
                 x,

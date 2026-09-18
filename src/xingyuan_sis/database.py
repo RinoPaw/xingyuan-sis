@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS students (
     species_branch_id INTEGER NOT NULL,
     gender TEXT,
     birth_date TEXT,
+    age INTEGER CHECK(age IS NULL OR age >= 0),
     enrollment_year INTEGER NOT NULL CHECK(enrollment_year >= 1900),
     class_id INTEGER,
     status TEXT NOT NULL DEFAULT '在读',

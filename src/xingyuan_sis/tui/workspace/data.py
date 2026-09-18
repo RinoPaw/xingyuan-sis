@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ...auth import Identity
-from ...schema import FIELDS, Field
+from ...schema import FIELDS, Field, validate_values
 from ...service import XingyuanService
 from ...student_filters import query_students
 from ...student_query import parse_student_query
@@ -212,7 +212,8 @@ class Catalog:
     def save(self, key: str, values: dict[str, Any], original: dict[str, Any] | None = None) -> int:
         self.require_write()
         self.initial_password = None
-        values = {field.key: field.parse(values.get(field.key)) for field in COLLECTIONS[key].fields}
+        changes = validate_values(key, values, partial=original is not None)
+        values = self.defaults(key, original) | changes if original is not None else changes
         service = self.service
         if original is None and key == "students":
             record_id, self.initial_password = service.register_student(**values)
@@ -225,7 +226,7 @@ class Catalog:
         else:
             record_id = original["id"]
             if key == "students":
-                service.update_student_by_no(original["student_no"], **values)
+                service.update_student_by_no(original["student_no"], **changes)
             elif key == "courses":
                 service.update_course_by_code(original["course_code"], **values)
             elif key == "grades":

@@ -48,9 +48,16 @@ SQLite
 | 概念 | 权威实现 |
 | --- | --- |
 | 登录后首页与一级/二级导航 | `tui/portal.py` + `tui/app.py::_portal_home` |
+<<<<<<< HEAD
 | 学生档案内容 | `tui/workspace/student_inspector.py` |
 | 档案原地编辑、焦点与绘制 | `tui/workspace/inspector.py` |
 | 其他实体档案 | `tui/workspace/detail.py` |
+=======
+| 学生档案结构与字段编辑 | `tui/workspace/student_inspector.py` |
+| 其他实体档案与字段编辑 | `tui/workspace/detail.py` |
+| 档案浏览焦点 | `Workspace.detail_selected` + `detail_targets()` |
+| 单字段输入 / 选项子状态 | `tui/workspace/forms.py` |
+>>>>>>> refs/recovery/main-before-force-20260918
 | 工作台几何与可见区 | `tui/layout.py` |
 | 文本编辑缓冲区与视口 | `tui/text_edit.py::TextBuffer` |
 | UI 颜色语义 | `tui/tokens.py` |
@@ -117,11 +124,35 @@ app.run → app._portal_home → portal.frame
 
 测试直接验证这条路径。不得为了保留旧布局测试重新增加另一套 `home_frame`、旧 labels 菜单或 `legacy_actions`。
 
-### 7.2 工作台
+### 7.2 工作台与字段编辑
 
+<<<<<<< HEAD
 通用工作台组件只表达所有实体真正共有的行为。学生档案的信息层级由专用内容模块表达；各实体共用字段、原地编辑与档案绘制，不得为某个实体复制一套编辑器或字段导航顺序。
+=======
+通用工作台组件只表达所有实体真正共有的行为。学生档案因为信息层级确实不同，所以拥有专用 inspector；这属于真实差异，不是重复实现。新增专用 inspector 前，应先证明通用模型无法自然表达该实体，而不是因为某个页面想换几行排版就复制一套 renderer。
+>>>>>>> refs/recovery/main-before-force-20260918
 
-新增专用 inspector 前，应先证明通用模型无法自然表达该实体，而不是因为某个页面想换几行排版就复制一套 renderer。
+**已有记录不存在“编辑页面”或“整条记录编辑模式”。** 档案在浏览和修改前后使用同一份 renderer、同一条 target 顺序和同一个浏览焦点 `detail_selected`：
+
+```text
+档案 target
+   │ Enter
+   ▼
+当前字段输入 / 选项子状态
+   │ Enter
+   ▼
+校验 → Service 保存 → 回到同一档案
+```
+
+字段编辑必须遵守：
+
+- Enter 在当前可编辑字段上进入该字段的输入子状态；文本或选项再次 Enter 后立即校验并保存。
+- Esc 取消当前字段的本次修改，不影响其他字段，也不产生整条记录草稿。
+- 字段编辑期间不显示“保存”按钮；保存不是档案中的第二个可导航目标。
+- 选项列表只是当前字段的子状态，不能替换档案的整体方向键导航模型。
+- 修改单个字段时不得把全部字段重新变成一套 `form.position` 导航序列。
+- 有一致性约束的复合字段可以进行多步选择并原子提交。当前学生物种的 `family + branch` 属于这种情况：选族系后继续选支系，最终一次保存。
+- 新建记录仍然天然是多字段操作，可以使用完整表单和显式“保存”；删除、seed 等破坏性 / 批量操作可以使用显式“确认”。这与已有记录的字段编辑不是同一种交互。
 
 ### 7.3 颜色
 
@@ -143,6 +174,7 @@ app.run → app._portal_home → portal.frame
 - 布局测试必须针对当前 renderer，例如 portal 或 student inspector。
 - seed 是演示数据，可以变化；测试不得依赖“某固定学号永远对应某角色”这类偶然事实。
 - 需要样本时，优先由当前 seed 动态取得，或在测试中创建最小 fixture。
+- 字段编辑测试应验证“原档案内 Enter → 修改 → Enter 保存 / Esc 取消”，以及字段编辑期间不存在独立保存按钮；不得重新要求整条记录编辑表单。
 - 可以测试稳定私有算法（例如 terminal cell clipping），但不能据此要求生产路径保留已经废弃的 façade。
 - 回归测试应描述行为，例如“焦点切换后选择仍可见”，而不是描述旧函数名。
 
@@ -168,6 +200,7 @@ app.run → app._portal_home → portal.frame
 5. 新 helper 是否真的拥有语义，还是只包了一次函数调用？
 6. 删除旧代码后，是否有测试失败只是因为测试绑定了实现细节？
 7. 文档描述的是当前真实架构，还是已经不存在的历史？
+8. 已有记录的修改是否仍然在原档案 target 上完成，而不是悄悄引入第二套编辑焦点？
 
 如果答案暴露出第二实现、猜测性 guard 或无语义 wrapper，应先删除这些接缝，再继续增加功能。
 

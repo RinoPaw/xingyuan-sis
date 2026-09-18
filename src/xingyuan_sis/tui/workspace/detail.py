@@ -6,6 +6,7 @@ from .. import screen
 from ..view_common import safe
 from .data import COLLECTIONS, Catalog
 from .inspector import Line, is_editing, expand_options, field_segment
+from .presentation import project_record
 from .state import Workspace
 
 
@@ -13,12 +14,13 @@ def lines(
     key: str, row: dict[str, Any], catalog: Catalog, state: Workspace | None = None,
 ) -> list[Line]:
     """One archive geometry for both browsing and editing each entity."""
+    values = project_record(row, state.form if state else None)
     result: list[Line] = []
     title_key = "title" if key == "announcements" else "student_no" if key == "grades" else "name"
     ordered = sorted(COLLECTIONS[key].fields, key=lambda field: field.key != title_key)
     for field in ordered:
         style = screen._BOLD + screen._TEXT_PRIMARY if field.key == title_key else screen._TEXT_PRIMARY
-        segment = field_segment(state, catalog, key, row, field.key, style=style)
+        segment = field_segment(state, catalog, key, values, field.key, style=style)
         if key == "announcements" and field.key == "body":
             result.extend(([], [("正文", screen._BOLD + screen._TEXT_PRIMARY, "")]))
             for paragraph in str(row["body"]).splitlines():
