@@ -94,7 +94,7 @@ def _page_roster(state: Workspace, catalog: Catalog, direction: str) -> None:
     rows = state.rows(catalog)
     if not rows:
         return
-    capacity = WorkspaceLayout.measure().panel_capacity(state.key)
+    capacity = WorkspaceLayout.measure().roster_capacity(state.key)
     maximum = max(0, len(rows) - capacity)
     delta = capacity if direction == "page_down" else -capacity
     first = min(max(0, state.roster_scroll + delta), maximum)
