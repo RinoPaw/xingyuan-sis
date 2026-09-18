@@ -10,7 +10,8 @@ from .state import FieldSession, FocusArea, Workspace
 
 def start(state: Workspace, catalog: Catalog, field_key: str) -> None:
     """Attach a local field session to an existing stable inspector target."""
-    catalog.require_write()
+    if catalog.read_only:
+        raise ValueError("当前档案为只读。")
     row = state.current(catalog)
     if row is None:
         raise ValueError("先选择一条记录。")

@@ -28,15 +28,32 @@ def lines(
         segment = field_segment(catalog, key, values, field.key, style=style)
         if key == "announcements" and field.key == "body":
             result.extend(([], [("正文", screen._BOLD + screen._TEXT_PRIMARY, "")]))
-            for paragraph in str(values.get("body") or "").splitlines():
-                result.append([(safe(paragraph) if paragraph else "", screen._TEXT_PRIMARY, "")])
+            paragraphs = str(values.get("body") or "").splitlines() or [""]
+            for paragraph in paragraphs:
+                result.append([field_segment(
+                    catalog,
+                    key,
+                    values,
+                    "body",
+                    safe(paragraph) if paragraph else "",
+                )])
         elif field.key == title_key:
             result.append([segment])
         else:
             result.append([(field.label + "  ", screen._TEXT_SECONDARY, ""), segment])
 
     if key == "announcements":
-        result.insert(2, [("发布于  " + safe(row["created_at"]), screen._TEXT_SECONDARY, "")])
+        result.insert(2, [
+            ("发布于  ", screen._TEXT_SECONDARY, ""),
+            field_segment(
+                catalog,
+                key,
+                values,
+                "created_at",
+                safe(values.get("created_at")),
+                screen._TEXT_SECONDARY,
+            ),
+        ])
     else:
         related_key, related = catalog.related(key, row)
         result.extend(([], [(f"关联{COLLECTIONS[related_key].noun}  {len(related):02d}",

@@ -146,15 +146,11 @@ def _activate_detail_action(
     state.set_focus(FocusArea.INSPECTOR)
     reveal_detail_selection(state, catalog)
 
-    if catalog.read_only:
-        state.notice = "当前档案为只读。"
+    try:
+        start_field_session(state, catalog, field_key)
+    except ValueError as exc:
+        state.notice = str(exc)
         return True, None
-    editable = {field.key for field in catalog.fields(state.key, True)}
-    if field_key not in editable:
-        state.notice = "该字段为只读。"
-        return True, None
-
-    start_field_session(state, catalog, field_key)
     return True, ("field-edit", 0)
 
 
@@ -371,7 +367,6 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             elif state.focus is FocusArea.INSPECTOR and state.key != "data":
                 targets = detail_targets(state, catalog)
                 if (not targets
-                        or (catalog.read_only and key in {"home", "end"})
                         or (state.detail_selected < 0 and key not in {"home", "end"})):
                     state.detail_scroll = max(0, state.detail_scroll + amount)
                     if key == "home":
