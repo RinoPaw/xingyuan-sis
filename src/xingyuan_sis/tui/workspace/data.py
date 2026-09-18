@@ -121,22 +121,20 @@ class Catalog:
         major_counts = Counter(row["department_id"] for row in self.records["majors"])
 
         for row in self.records["classes"]:
-            major = majors.get(row["major_id"], {})
-            row["major_code"] = major.get("code")
-            row["class_number"] = _class_number(row.get("code"), row.get("major_code"))
-            row["class_label"] = _class_label(row.get("major_name"), row.get("class_number"))
+            row["major_code"] = majors.get(row["major_id"], {}).get("code")
             row["enrolled"] = class_counts[row["id"]]
+
+        self.class_numbers = {
+            row["id"]: _class_number(row.get("code"), row.get("major_code"))
+            for row in self.records["classes"]
+        }
+        self.class_labels = {
+            row["id"]: _class_label(row.get("major_name"), self.class_numbers[row["id"]])
+            for row in self.records["classes"]
+        }
 
         for row in self.records["students"]:
             row["class_code"] = classes.get(row["class_id"], {}).get("code")
-            row["class_number"] = _class_number(row.get("class_code"), row.get("major_code"))
-            row["class_label"] = _class_label(row.get("major_name"), row.get("class_number"))
-
-        for row in self.records["announcements"]:
-            class_row = classes.get(row["class_id"], {})
-            row["class_number"] = class_row.get("class_number")
-            row["class_label"] = class_row.get("class_label") or row.get("class_name")
-
         for row in self.records["courses"] + self.records["majors"]:
             row["department_code"] = departments.get(row["department_id"], {}).get("code")
         for row in self.records["courses"]:
@@ -144,8 +142,17 @@ class Catalog:
         for row in self.records["departments"]:
             row["children"] = major_counts[row["id"]]
 
+    def _display_row(self, key: str, row: dict[str, Any]) -> dict[str, Any]:
+        if key not in {"students", "classes", "announcements"}:
+            return row
+        class_id = row["id"] if key == "classes" else row.get("class_id")
+        return row | {
+            "class_number": self.class_numbers.get(class_id),
+            "class_label": self.class_labels.get(class_id),
+        }
+
     def rows(self, key: str, view: int = 0, query: str = "") -> list[dict[str, Any]]:
-        rows = self.records[key]
+        rows = [self._display_row(key, row) for row in self.records[key]]
         if view:
             if key == "courses":
                 rows = [row for row in rows if (row["enrolled"] > 0 if view == 1 else row["enrolled"] == 0)]
@@ -234,7 +241,7 @@ class Catalog:
         options = [] if field.required else [(None, "未指定")]
         return options + [(
             r[identifier],
-            r["class_label"] if collection == "classes" else f"{r[label]} · {r[identifier]}",
+            self.class_labels.get(r["id"]) if collection == "classes" else f"{r[label]} · {r[identifier]}",
         ) for r in self.records[collection]]
 
     def save(self, key: str, values: dict[str, Any], original: dict[str, Any] | None = None) -> int:

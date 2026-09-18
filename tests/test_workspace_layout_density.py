@@ -47,7 +47,7 @@ class WorkspaceLayoutDensityTests(unittest.TestCase):
         self.assertLessEqual(width, 42)
 
     def test_class_relationship_uses_major_and_local_number_once(self):
-        row = next(row for row in self.catalog.records["students"] if row.get("class_code"))
+        row = next(row for row in self.catalog.rows("students") if row.get("class_code"))
         self.assertEqual(row["class_label"], f"{row['major_name']} · {row['class_number']}")
         self.assertNotIn(str(row["class_code"]), str(row["class_label"]))
         self.assertNotIn("班", str(row["class_label"]))
@@ -56,7 +56,7 @@ class WorkspaceLayoutDensityTests(unittest.TestCase):
         self.assertEqual(labels[row["class_code"]], row["class_label"])
 
     def test_student_inspector_summary_matches_archive_identity(self):
-        row = self.catalog.records["students"][0]
+        row = self.catalog.rows("students")[0]
         rendered = student_inspector.lines(row, self.catalog)
         plain = "\n".join(
             screen._ANSI_RE.sub("", "".join(text for text, _, _ in line))
