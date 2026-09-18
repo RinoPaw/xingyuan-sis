@@ -155,20 +155,28 @@ class WorkspaceTests(unittest.TestCase):
             with self.subTest(score=score), self.assertRaises(ValueError):
                 self.catalog.save("grades", {"score": score}, row)
 
-    def test_foreign_key_picker_saves_selected_value_on_confirm(self):
+    def test_class_picker_saves_major_and_local_number_as_one_relationship(self):
         state = self.inspector_state("students", selected=9)
         original = state.current(self.catalog).copy()
-        workspace_field.start(state, self.catalog, "class_code")
+        workspace_field.start(state, self.catalog, "major_code")
         workspace_field.edit_current(state, self.catalog)
-        index = next(
+        major_index = next(
             i for i, (value, _) in enumerate(state.field_session.options)
-            if value != original["class_code"]
+            if value not in {None, original["major_code"]}
         )
-        selected = state.field_session.options[index][0]
-        workspace_field.accept_option(state, self.catalog, index)
+        selected_major = state.field_session.options[major_index][0]
+        workspace_field.accept_option(state, self.catalog, major_index)
+        self.assertEqual(state.field_session.active_key, "class_number")
+        selected_number = state.field_session.options[0][0]
+        workspace_field.accept_option(state, self.catalog, 0)
+
         changed = self.catalog.service.student_by_no(original["student_no"])
-        expected = next((r["id"] for r in self.catalog.records["classes"] if r["code"] == selected), None)
-        self.assertEqual(changed["class_id"], expected)
+        expected = next(
+            row for row in self.catalog.records["classes"]
+            if row["major_code"] == selected_major
+            and self.catalog.class_numbers[row["id"]] == selected_number
+        )
+        self.assertEqual(changed["class_id"], expected["id"])
 
     def test_create_and_remove_record_refresh_workspace(self):
         state = workspace.Workspace("departments")
