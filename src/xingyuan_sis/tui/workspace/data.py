@@ -63,7 +63,7 @@ _STUDENT_CLASS_FIELDS = (
     Field("major_code", "专业"),
     Field("class_number", "班号"),
 )
-_EDIT_GROUPS = {
+_FIELD_GROUPS = {
     ("students", "family"): ("family", "branch"),
     ("students", "major_code"): ("major_code", "class_number"),
 }
@@ -222,24 +222,22 @@ class Catalog:
         return values
 
     def fields(self, key: str, editing: bool = False) -> tuple[Field, ...]:
+        fields: list[Field] = []
+        for field in COLLECTIONS[key].fields:
+            if key == "students" and field.key == "class_code":
+                fields.extend(_STUDENT_CLASS_FIELDS)
+            else:
+                fields.append(field)
         if not editing:
-            return COLLECTIONS[key].fields
+            return tuple(fields)
         if self.read_only or key == "announcements":
             return ()
-        result: list[Field] = []
-        for field in COLLECTIONS[key].fields:
-            if not field.editable:
-                continue
-            if key == "students" and field.key == "class_code":
-                result.extend(_STUDENT_CLASS_FIELDS)
-            else:
-                result.append(field)
-        return tuple(result)
+        return tuple(field for field in fields if field.editable)
 
     def edit_group(self, key: str, field_key: str) -> tuple[Field, ...]:
-        """Return the editable semantic group anchored by one inspector target."""
+        """Return one semantic field group shared by forms and field sessions."""
         editable = {field.key: field for field in self.fields(key, True)}
-        keys = _EDIT_GROUPS.get((key, field_key), (field_key,))
+        keys = _FIELD_GROUPS.get((key, field_key), (field_key,))
         if any(name not in editable for name in keys):
             return ()
         return tuple(editable[name] for name in keys)
@@ -312,23 +310,28 @@ class Catalog:
     def _student_class_changes(
         self,
         values: dict[str, Any],
-        original: dict[str, Any],
+        original: dict[str, Any] | None,
     ) -> dict[str, Any]:
         if not ({"major_code", "class_number"} & values.keys()):
             return values
         changes = dict(values)
-        major_code = changes.pop("major_code", original.get("major_code"))
-        class_number = changes.pop("class_number", self.class_numbers.get(original.get("class_id")))
-        if not major_code:
+        major_code = changes.pop("major_code", original.get("major_code") if original else None)
+        class_number = changes.pop(
+            "class_number",
+            self.class_numbers.get(original.get("class_id")) if original else None,
+        )
+        if not major_code and not class_number:
             changes["class_code"] = None
             return changes
+        if not major_code or not class_number:
+            raise ValueError("请选择完整班级：专业 · 班号")
         match = next((
             row for row in self.records["classes"]
             if row.get("major_code") == major_code
             and str(self.class_numbers.get(row["id"])) == str(class_number)
         ), None)
         if match is None:
-            raise ValueError(f"找不到班级：{major_code} · {class_number or '—'}")
+            raise ValueError(f"找不到班级：{major_code} · {class_number}")
         changes["class_code"] = match["code"]
         return changes
 
@@ -336,7 +339,7 @@ class Catalog:
         self.require_write()
         self.initial_password = None
         values = dict(values)
-        if key == "students" and original is not None:
+        if key == "students":
             values = self._student_class_changes(values, original)
         changes = validate_values(key, values, partial=original is not None)
         values = self.defaults(key, original) | changes if original is not None else changes
