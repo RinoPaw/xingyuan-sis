@@ -20,7 +20,11 @@ class StudentEditNavigationTests(unittest.TestCase):
         initialize_database(self.db)
         seed_demo(self.db)
         self.catalog = Catalog(self.db)
-        self.state = workspace.Workspace("students", details=True)
+        self.state = workspace.Workspace(
+            "students",
+            focus=workspace.FocusArea.INSPECTOR,
+            content_panel=workspace.ContentPanel.INSPECTOR,
+        )
 
     def _targets(self):
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
@@ -31,26 +35,26 @@ class StudentEditNavigationTests(unittest.TestCase):
 
     def _move(self, current: str, direction: str):
         actions = self._actions()
-        self.state.details = True
+        self.state.set_focus(workspace.FocusArea.INSPECTOR)
         self.state.detail_selected = actions.index(current)
         with patch.object(keys, "_read_key", side_effect=[direction, "refresh"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             event = workspace_events.interact(self.state, self.catalog)
         self.assertEqual(event, ("refresh", 0))
-        if not self.state.details:
+        if self.state.focus is not workspace.FocusArea.INSPECTOR:
             return None
         return self._actions()[self.state.detail_selected]
 
     def test_enter_from_roster_focuses_name_then_student_number(self):
-        self.state.details = False
+        self.state.set_focus(workspace.FocusArea.ROSTER)
         with patch.object(keys, "_read_key", side_effect=["select", "refresh"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             event = workspace_events.interact(self.state, self.catalog)
 
         self.assertEqual(event, ("refresh", 0))
-        self.assertTrue(self.state.details)
+        self.assertEqual(self.state.focus, workspace.FocusArea.INSPECTOR)
         actions = self._actions()
         self.assertEqual(actions[self.state.detail_selected], "field:name")
         self.assertEqual(self._move("field:name", "down"), "field:student_no")
@@ -74,7 +78,7 @@ class StudentEditNavigationTests(unittest.TestCase):
         actions = self._actions()
         for action in ("field:name", "field:student_no"):
             with self.subTest(action=action):
-                self.state.details = True
+                self.state.set_focus(workspace.FocusArea.INSPECTOR)
                 self.state.field_session = None
                 self.state.detail_selected = actions.index(action)
                 with patch.object(keys, "_read_key", side_effect=["select", "refresh"]), \
