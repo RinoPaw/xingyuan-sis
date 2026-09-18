@@ -12,6 +12,7 @@ from xingyuan_sis.tui.workspace.data import Catalog
 
 from xingyuan_sis.tui.workspace import events as workspace_events
 
+
 class DetailFocusTests(unittest.TestCase):
     def setUp(self):
         self.temp = TemporaryDirectory()
@@ -35,7 +36,7 @@ class DetailFocusTests(unittest.TestCase):
         self.assertIn("  档案", plain)
         self.assertNotIn("即时预览", plain)
 
-        state.details = True
+        state.set_focus(workspace.FocusArea.INSPECTOR)
         detail = self.render(state)
         plain = screen._ANSI_RE.sub("", "\n".join(detail.lines))
         self.assertIn("  名册", plain)
@@ -63,7 +64,11 @@ class DetailFocusTests(unittest.TestCase):
         self.assertNotIn("档案字段", plain)
 
     def test_arrows_move_selection_inside_focused_detail_pane(self):
-        state = workspace.Workspace("students", details=True)
+        state = workspace.Workspace(
+            "students",
+            focus=workspace.FocusArea.INSPECTOR,
+            content_panel=workspace.ContentPanel.INSPECTOR,
+        )
         with patch.object(keys, "_read_key", side_effect=["down", "back", "back", "back"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
@@ -82,12 +87,16 @@ class DetailFocusTests(unittest.TestCase):
         ):
             workspace_events.interact(state, self.catalog)
 
-        self.assertFalse(state.details)
+        self.assertEqual(state.focus, workspace.FocusArea.ROSTER)
         self.assertEqual(state.detail_selected, 1)
         self.assertEqual(state.selected, 0)
 
     def test_generic_inspector_uses_the_same_directional_event_path(self):
-        state = workspace.Workspace("courses", details=True)
+        state = workspace.Workspace(
+            "courses",
+            focus=workspace.FocusArea.INSPECTOR,
+            content_panel=workspace.ContentPanel.INSPECTOR,
+        )
         with patch.object(
             keys,
             "_read_key",
@@ -97,7 +106,7 @@ class DetailFocusTests(unittest.TestCase):
         ):
             workspace_events.interact(state, self.catalog)
 
-        self.assertFalse(state.details)
+        self.assertEqual(state.focus, workspace.FocusArea.ROSTER)
         self.assertEqual(state.detail_selected, 1)
         self.assertEqual(state.selected, 0)
 
