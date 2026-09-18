@@ -13,7 +13,7 @@ from .detail import lines as generic_lines
 from .editor import render_editor
 from .inspector import Line, action_targets, layout_lines, render_inspector
 from .roster import render_roster as _roster
-from .state import Workspace
+from .state import ContentPanel, FocusArea, Workspace
 from .student_inspector import lines as student_lines
 
 
@@ -63,7 +63,7 @@ def _render_actions(board: Board, state: Workspace, catalog: Catalog, x: int, y:
     commands = toolbar_commands(catalog, state.key)
     state.action_selected = min(max(0, state.action_selected), max(0, len(commands) - 1))
     first = 0
-    if state.action_focus:
+    if state.focus is FocusArea.TOOLBAR:
         while first < state.action_selected and sum(
             screen._display_width(command.label) + 6
             for command in commands[first:state.action_selected + 1]
@@ -80,7 +80,7 @@ def _render_actions(board: Board, state: Workspace, catalog: Catalog, x: int, y:
             y,
             shown,
             command.action,
-            selected=state.action_focus and state.action_selected == index,
+            selected=state.focus is FocusArea.TOOLBAR and state.action_selected == index,
         )
         width -= needed
 
@@ -88,14 +88,14 @@ def _render_actions(board: Board, state: Workspace, catalog: Catalog, x: int, y:
 def _footer(state: Workspace, catalog: Catalog, width: int) -> str:
     if state.field_session is not None:
         enter = "选择" if state.field_session.options is not None else "确认"
-        return theme.footer(width, switch_focus=True, enter=enter, escape="取消")
+        return theme.footer(width, enter=enter, escape="取消")
     if state.form is not None:
         form = state.form
         enter = "选择" if form.options is not None else "确认" if form.focus_save or not form.fields else "编辑"
         hints = (FORM_SAVE.hint,) if form.fields and form.options is None else ()
         return theme.footer(
             width,
-            switch_focus=True,
+            switch_focus=bool(form.fields),
             command_hints=hints,
             enter=enter,
             escape="取消",
@@ -106,6 +106,28 @@ def _footer(state: Workspace, catalog: Catalog, width: int) -> str:
         if command.shortcut
     )
     return theme.footer(width, switch_focus=True, command_hints=hints)
+
+
+def _render_record_body(
+    board: Board,
+    state: Workspace,
+    catalog: Catalog,
+    layout: WorkspaceLayout,
+    width: int,
+) -> None:
+    if layout.split:
+        split = layout.split_x
+        _roster(board, state, catalog, split - 1)
+        panel_heading_row = layout.panel_heading_row(state.key)
+        for y in range(panel_heading_row, board.height - 2):
+            board.put(split, y, "│", screen._BORDER_SUBTLE)
+        _inspector(board, state, catalog, layout.panel_x, layout.panel_width)
+        return
+
+    if state.content_panel is ContentPanel.INSPECTOR or state.field_session is not None:
+        _inspector(board, state, catalog, layout.panel_x, layout.panel_width)
+    else:
+        _roster(board, state, catalog, width - (0 if layout.compact else 1))
 
 
 def render(state: Workspace, catalog: Catalog):
@@ -132,7 +154,7 @@ def render(state: Workspace, catalog: Catalog):
         elif state.key == "data":
             render_dashboard(board, state, catalog)
         else:
-            _inspector(board, state, catalog, layout.panel_x, layout.panel_width)
+            _render_record_body(board, state, catalog, layout, width)
 
         board.rows[height - 2] = []
         board.put(
@@ -186,21 +208,10 @@ def render(state: Workspace, catalog: Catalog):
         board.put(0, separator_row, "─" * width, screen._BORDER_SUBTLE)
         if state.key == "data" and not state.form:
             render_dashboard(board, state, catalog)
+        elif state.form:
+            render_editor(board, state, catalog, layout.panel_x, layout.panel_width)
         else:
-            split = layout.split_x if layout.split else width
-            panel_heading_row = layout.panel_heading_row(state.key)
-            if layout.split:
-                if state.key != "data":
-                    _roster(board, state, catalog, split - 1)
-                for y in range(panel_heading_row, height - 2):
-                    board.put(split, y, "│", screen._BORDER_SUBTLE)
-            elif not state.details and not state.form:
-                _roster(board, state, catalog, width - 1)
-            x, panel_width = layout.panel_x, layout.panel_width
-            if state.form:
-                render_editor(board, state, catalog, x, panel_width)
-            elif layout.split or state.details or state.field_session is not None:
-                _inspector(board, state, catalog, x, panel_width)
+            _render_record_body(board, state, catalog, layout, width)
 
         board.put(
             0,
