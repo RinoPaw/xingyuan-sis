@@ -67,6 +67,14 @@ class StudentEditNavigationTests(unittest.TestCase):
         self.assertEqual(self._move("field:family", "right"), "field:branch")
         self.assertIsNone(self._move("field:family", "left"))
 
+    def test_class_composite_row_uses_same_real_event_geometry(self):
+        self.assertEqual(self._move("field:department_name", "down"), "field:class_number")
+        self.assertEqual(self._move("field:status", "up"), "field:class_number")
+        self.assertEqual(self._move("field:class_number", "up"), "field:department_name")
+        self.assertEqual(self._move("field:class_number", "left"), "field:major_code")
+        self.assertEqual(self._move("field:major_code", "right"), "field:class_number")
+        self.assertIsNone(self._move("field:major_code", "left"))
+
     def test_element_composite_row_uses_same_real_event_geometry(self):
         self.assertEqual(self._move("field:status", "down"), "field:primary_affinity")
         self.assertEqual(self._move("field:primary_affinity", "up"), "field:status")
@@ -92,8 +100,8 @@ class StudentEditNavigationTests(unittest.TestCase):
 
     def test_department_stays_in_the_vertical_focus_chain(self):
         self.assertEqual(self._move("field:enrollment_year", "down"), "field:department_name")
-        self.assertEqual(self._move("field:department_name", "down"), "field:class_code")
-        self.assertEqual(self._move("field:class_code", "up"), "field:department_name")
+        self.assertEqual(self._move("field:department_name", "down"), "field:class_number")
+        self.assertEqual(self._move("field:class_number", "up"), "field:department_name")
 
     def test_enter_opens_only_selected_editable_field_session(self):
         actions = self._actions()
@@ -107,6 +115,16 @@ class StudentEditNavigationTests(unittest.TestCase):
         self.assertEqual(event, ("field-edit", 0))
         self.assertEqual([field.key for field in self.state.field_session.fields], ["primary_element"])
         self.assertIsNone(self.state.form)
+
+    def test_class_major_edit_owns_class_number_like_species_family_owns_branch(self):
+        workspace_field.start(self.state, self.catalog, "major_code")
+        self.assertEqual(
+            [field.key for field in self.state.field_session.fields],
+            ["major_code", "class_number"],
+        )
+        workspace_field.cancel(self.state)
+        workspace_field.start(self.state, self.catalog, "class_number")
+        self.assertEqual([field.key for field in self.state.field_session.fields], ["class_number"])
 
     def test_complete_birth_date_keeps_derived_age_focusable_but_not_directly_editable(self):
         row = self.state.current(self.catalog)

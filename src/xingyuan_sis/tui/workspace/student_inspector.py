@@ -24,7 +24,7 @@ def lines(
 ) -> list[Line]:
     """Describe the student archive once; editing never changes its target graph."""
     session = state.field_session if state else None
-    values = project_record(row, session)
+    values = catalog.project("students", project_record(row, session))
 
     def label(text: str) -> Segment:
         return text, screen._TEXT_SECONDARY, ""
@@ -45,7 +45,7 @@ def lines(
         [label("年龄  "), field("age", _age(values))],
         [label("入学  "), field("enrollment_year", f"{safe(year)}级")],
         [label("学院  "), field("department_name")],
-        [label("班级  "), field("class_code")],
+        [label("班级  "), field("major_code"), (" · ", screen._TEXT_SECONDARY, ""), field("class_number")],
         [label("学籍  "), field("status")],
         [label("元素  "), field("primary_element"), (" · ", screen._TEXT_SECONDARY, ""), field("primary_affinity")],
     ]

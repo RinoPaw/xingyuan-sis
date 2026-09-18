@@ -59,6 +59,14 @@ _STUDENT_ENUMS: dict[str, tuple[str, ...]] = {
     "primary_element": ("风", "水", "火", "雷", "岩", "光"),
     "primary_affinity": ("A", "B", "C"),
 }
+_STUDENT_CLASS_FIELDS = (
+    Field("major_code", "专业"),
+    Field("class_number", "班号"),
+)
+_EDIT_GROUPS = {
+    ("students", "family"): ("family", "branch"),
+    ("students", "major_code"): ("major_code", "class_number"),
+}
 
 
 def _class_number(code: object | None, major_code: object | None) -> str | None:
@@ -151,6 +159,24 @@ class Catalog:
             "class_label": self.class_labels.get(class_id),
         }
 
+    def project(self, key: str, values: dict[str, Any]) -> dict[str, Any]:
+        """Refresh relationship-derived display values for an in-place field projection."""
+        if key != "students":
+            return values
+        result = dict(values)
+        major_code = result.get("major_code")
+        major = next((row for row in self.records["majors"] if row.get("code") == major_code), None)
+        if major is None:
+            result["major_name"] = None
+            result["department_code"] = None
+            result["department_name"] = None
+        else:
+            result["major_name"] = major.get("name")
+            result["department_code"] = major.get("department_code")
+            result["department_name"] = major.get("department_name")
+        result["class_label"] = _class_label(result.get("major_name"), result.get("class_number"))
+        return result
+
     def rows(self, key: str, view: int = 0, query: str = "") -> list[dict[str, Any]]:
         rows = [self._display_row(key, row) for row in self.records[key]]
         if view:
@@ -196,9 +222,31 @@ class Catalog:
         return values
 
     def fields(self, key: str, editing: bool = False) -> tuple[Field, ...]:
-        if editing and (self.read_only or key == "announcements"):
+        if not editing:
+            return COLLECTIONS[key].fields
+        if self.read_only or key == "announcements":
             return ()
-        return tuple(f for f in COLLECTIONS[key].fields if not editing or f.editable)
+        result: list[Field] = []
+        for field in COLLECTIONS[key].fields:
+            if not field.editable:
+                continue
+            if key == "students" and field.key == "class_code":
+                result.extend(_STUDENT_CLASS_FIELDS)
+            else:
+                result.append(field)
+        return tuple(result)
+
+    def edit_group(self, key: str, field_key: str) -> tuple[Field, ...]:
+        """Return the editable semantic group anchored by one inspector target."""
+        editable = {field.key: field for field in self.fields(key, True)}
+        keys = _EDIT_GROUPS.get((key, field_key), (field_key,))
+        if any(name not in editable for name in keys):
+            return ()
+        return tuple(editable[name] for name in keys)
+
+    def _field(self, key: str, field_key: str) -> Field | None:
+        fields = COLLECTIONS[key].fields + (_STUDENT_CLASS_FIELDS if key == "students" else ())
+        return next((field for field in fields if field.key == field_key), None)
 
     def options(
         self,
@@ -206,14 +254,16 @@ class Catalog:
         field_key: str,
         values: dict[str, Any] | None = None,
     ) -> list[tuple[Any, str]] | None:
-        field = next(f for f in COLLECTIONS[key].fields if f.key == field_key)
+        field = self._field(key, field_key)
+        if field is None:
+            return None
 
         if key == "students" and field_key in _STUDENT_ENUMS:
             options = [] if field.required else [(None, "未指定")]
-            values = dict.fromkeys((*_STUDENT_ENUMS[field_key], *(
+            enum_values = dict.fromkeys((*_STUDENT_ENUMS[field_key], *(
                 row[field_key] for row in self.records["students"] if row.get(field_key)
             )))
-            return options + [(value, value) for value in values]
+            return options + [(value, value) for value in enum_values]
 
         if key == "students" and field_key == "family":
             return [(row["name"], row["name"]) for row in self.species_families]
@@ -227,6 +277,21 @@ class Catalog:
                 (row["name"], row["name"] if family else f"{row['family_name']} · {row['name']}")
                 for row in rows
             ]
+
+        if key == "students" and field_key == "major_code":
+            used = {row.get("major_code") for row in self.records["classes"]}
+            return [(None, "未指定")] + [
+                (row["code"], row["name"])
+                for row in self.records["majors"]
+                if row.get("code") in used
+            ]
+
+        if key == "students" and field_key == "class_number":
+            major_code = (values or {}).get("major_code")
+            if not major_code:
+                return [(None, "未指定")]
+            rows = [row for row in self.records["classes"] if row.get("major_code") == major_code]
+            return [(self.class_numbers[row["id"]], self.class_numbers[row["id"]]) for row in rows]
 
         target = {("students", "class_code"): ("classes", "code", "name"),
                   ("announcements", "class_code"): ("classes", "code", "name"),
@@ -244,9 +309,35 @@ class Catalog:
             self.class_labels.get(r["id"]) if collection == "classes" else f"{r[label]} · {r[identifier]}",
         ) for r in self.records[collection]]
 
+    def _student_class_changes(
+        self,
+        values: dict[str, Any],
+        original: dict[str, Any],
+    ) -> dict[str, Any]:
+        if not ({"major_code", "class_number"} & values.keys()):
+            return values
+        changes = dict(values)
+        major_code = changes.pop("major_code", original.get("major_code"))
+        class_number = changes.pop("class_number", self.class_numbers.get(original.get("class_id")))
+        if not major_code:
+            changes["class_code"] = None
+            return changes
+        match = next((
+            row for row in self.records["classes"]
+            if row.get("major_code") == major_code
+            and str(self.class_numbers.get(row["id"])) == str(class_number)
+        ), None)
+        if match is None:
+            raise ValueError(f"找不到班级：{major_code} · {class_number or '—'}")
+        changes["class_code"] = match["code"]
+        return changes
+
     def save(self, key: str, values: dict[str, Any], original: dict[str, Any] | None = None) -> int:
         self.require_write()
         self.initial_password = None
+        values = dict(values)
+        if key == "students" and original is not None:
+            values = self._student_class_changes(values, original)
         changes = validate_values(key, values, partial=original is not None)
         values = self.defaults(key, original) | changes if original is not None else changes
         service = self.service

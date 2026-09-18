@@ -16,18 +16,14 @@ def start(state: Workspace, catalog: Catalog, field_key: str) -> None:
     if row is None:
         raise ValueError("先选择一条记录。")
 
-    editable = {field.key: field for field in catalog.fields(state.key, True)}
-    if field_key not in editable:
+    fields = catalog.edit_group(state.key, field_key)
+    if not fields:
         raise ValueError("该字段为只读。")
     if field_key == "age":
         from ...schema import is_complete_birth_date
 
         if is_complete_birth_date(row.get("birth_date")):
             raise ValueError("完整出生日期已自动计算年龄，请修改出生日期。")
-
-    fields = (editable[field_key],)
-    if state.key == "students" and field_key == "family":
-        fields += (editable["branch"],)
 
     state.field_session = FieldSession(
         fields=fields,
@@ -45,18 +41,19 @@ def cancel(state: Workspace, message: str = "已取消本次字段修改。") ->
     state.notice = message
 
 
-def projected_values(state: Workspace) -> dict:
+def projected_values(state: Workspace, catalog: Catalog | None = None) -> dict:
     session = state.field_session
     if session is None:
         return {}
-    return project_record(session.original, session)
+    values = project_record(session.original, session)
+    return catalog.project(state.key, values) if catalog is not None else values
 
 
 def _open_options(state: Workspace, catalog: Catalog) -> bool:
     session = state.field_session
     if session is None:
         return False
-    options = catalog.options(state.key, session.active_key, projected_values(state))
+    options = catalog.options(state.key, session.active_key, projected_values(state, catalog))
     if options is None:
         session.options = None
         return False
@@ -119,12 +116,13 @@ def accept_option(state: Workspace, catalog: Catalog, index: int) -> None:
     session.values[field.key] = session.options[index][0]
     session.options = None
 
-    if state.key == "students" and field.key == "family":
-        branches = catalog.options("students", "branch", projected_values(state)) or []
-        if not any(value == session.values.get("branch") for value, _ in branches):
-            session.values["branch"] = None
-
     if session.active + 1 < len(session.fields):
+        next_field = session.fields[session.active + 1]
+        next_options = catalog.options(state.key, next_field.key, projected_values(state, catalog))
+        if next_options is not None and not any(
+            value == session.values.get(next_field.key) for value, _ in next_options
+        ):
+            session.values[next_field.key] = None
         session.active += 1
         if not _open_options(state, catalog):
             state.notice = "Enter 确认并保存 · Esc 取消。"
