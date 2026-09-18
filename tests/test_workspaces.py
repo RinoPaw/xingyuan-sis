@@ -33,6 +33,15 @@ class WorkspaceTests(unittest.TestCase):
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             return workspace_events.interact(state, self.catalog)
 
+    @staticmethod
+    def inspector_state(collection: str, **kwargs):
+        return workspace.Workspace(
+            collection,
+            focus=workspace.FocusArea.INSPECTOR,
+            content_panel=workspace.ContentPanel.INSPECTOR,
+            **kwargs,
+        )
+
     def test_all_pages_fit_and_click_regions_match_visible_content(self):
         for collection in (*COLLECTIONS, "data"):
             for size in ((160, 46), (120, 35), (80, 24), (40, 20), (30, 12), (18, 8)):
@@ -63,13 +72,13 @@ class WorkspaceTests(unittest.TestCase):
         frame = self.render(state, size)
         detail_region = next(region for region in frame.regions if region.action == "focus-details")
         right_wheel = keys.MouseScroll(detail_region.x, min(detail_region.y, 12), "down")
-        with patch.object(keys, "_read_key", side_effect=[right_wheel, "back", "back"]), \
+        with patch.object(keys, "_read_key", side_effect=[right_wheel, "back"]), \
              patch.object(screen, "_paint"), patch.object(
                  screen, "_terminal_size", return_value=os.terminal_size(size)
              ):
             workspace_events.interact(state, self.catalog)
         self.assertEqual(state.selected, 0)
-        self.interact(state, [keys.MouseScroll(2, 12, "down"), "back", "back"])
+        self.interact(state, [keys.MouseScroll(2, 12, "down"), "back"])
         self.assertEqual(state.selected, 1)
 
     def test_selection_updates_profile_without_query_or_enter(self):
@@ -101,7 +110,7 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual([row["student_no"] for row in state.rows(self.catalog)], [str(expected[0])])
 
     def test_field_session_saves_freeform_value_without_record_form(self):
-        state = workspace.Workspace("students", details=True)
+        state = self.inspector_state("students")
         original = state.current(self.catalog).copy()
         workspace_field.start(state, self.catalog, "contact")
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
@@ -113,7 +122,7 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(self.catalog.service.student_by_no(original["student_no"])["contact"], "即时新联系方式")
 
     def test_student_identity_fields_are_focusable_but_read_only(self):
-        state = workspace.Workspace("students", details=True)
+        state = self.inspector_state("students")
         actions = {region.action for region in self.render(state).regions}
         self.assertIn("field:name", actions)
         self.assertIn("field:student_no", actions)
@@ -129,7 +138,7 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(len(self.catalog.service.enrollments_for_course("NEW101")), before)
 
     def test_zero_score_and_clearing_score_are_distinct(self):
-        state = workspace.Workspace("grades", view=1, details=True)
+        state = self.inspector_state("grades", view=1)
         original = state.current(self.catalog).copy()
         workspace_field.start(state, self.catalog, "score")
         state.field_session.values["score"] = 0
@@ -147,7 +156,7 @@ class WorkspaceTests(unittest.TestCase):
                 self.catalog.save("grades", {"score": score}, row)
 
     def test_foreign_key_picker_saves_selected_value_on_confirm(self):
-        state = workspace.Workspace("students", selected=9, details=True)
+        state = self.inspector_state("students", selected=9)
         original = state.current(self.catalog).copy()
         workspace_field.start(state, self.catalog, "class_code")
         workspace_field.edit_current(state, self.catalog)
@@ -172,7 +181,7 @@ class WorkspaceTests(unittest.TestCase):
         self.assertIsNone(self.catalog.service.department_by_code("NEW"))
 
     def test_active_field_target_stays_visible_after_resize_without_save_button(self):
-        state = workspace.Workspace("students", details=True)
+        state = self.inspector_state("students")
         workspace_field.start(state, self.catalog, "notes")
         for size in ((120, 35), (80, 24), (40, 20), (30, 12)):
             with self.subTest(size=size):
