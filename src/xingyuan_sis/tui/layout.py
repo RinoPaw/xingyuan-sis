@@ -17,6 +17,10 @@ _CONTROL_ROWS = {
     "data": 2,
 }
 
+_MAX_ROSTER_WIDTH = 72
+_MIN_INSPECTOR_WIDTH = 28
+_MAX_INSPECTOR_WIDTH = 42
+
 
 def visible_start(selected: int, total: int, capacity: int, first: int = 0) -> int:
     """Keep a selection visible without moving an already suitable viewport."""
@@ -50,16 +54,18 @@ class WorkspaceLayout:
         return not self.compact and self.width >= 76
 
     @property
+    def desired_inspector_width(self) -> int:
+        desired = _MAX_INSPECTOR_WIDTH if self.inspector_width is None else self.inspector_width
+        return min(_MAX_INSPECTOR_WIDTH, max(_MIN_INSPECTOR_WIDTH, desired))
+
+    @property
     def split_x(self) -> int:
-        """Give the roster every column the current inspector does not need."""
+        """Keep a dense roster beside a content-sized inspector on wide terminals."""
         if not self.split:
             return self.width
-        desired = 42 if self.inspector_width is None else self.inspector_width
-        desired = min(42, max(28, desired))
-        # panel_width = width - split_x - 4. Keep at least half the screen for
-        # the roster on medium terminals; on wide terminals the inspector is
-        # sized from its current content instead of a fixed percentage/cap.
-        return max(self.width // 2, self.width - desired - 4)
+        desired = self.desired_inspector_width
+        balanced = max(self.width // 2, self.width - desired - 4)
+        return min(_MAX_ROSTER_WIDTH, balanced)
 
     @property
     def panel_x(self) -> int:
@@ -67,7 +73,8 @@ class WorkspaceLayout:
 
     @property
     def panel_width(self) -> int:
-        return max(1, self.width - self.panel_x - (0 if self.compact else 1))
+        available = max(1, self.width - self.panel_x - (0 if self.compact else 1))
+        return min(available, self.desired_inspector_width) if self.split else available
 
     @property
     def action_row(self) -> int:

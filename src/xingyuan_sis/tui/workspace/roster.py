@@ -12,6 +12,9 @@ if TYPE_CHECKING:
     from .state import Workspace
 
 
+_COLUMN_GROWTH = 6
+
+
 def roster_window(state: Workspace, row_count: int, capacity: int) -> int:
     state.roster_scroll = visible_start(state.selected, row_count, capacity, state.roster_scroll)
     return state.roster_scroll
@@ -22,13 +25,14 @@ def _fit_columns(
     rows: list[dict[str, Any]],
     available: int,
 ) -> list[list[Any]]:
-    """Fit columns to their actual content before truncating any cell."""
+    """Fit readable columns without letting a wide terminal stretch the table apart."""
     measured: list[list[Any]] = []
     for key, label, preferred_size in definitions:
         label_width = screen._display_width(label)
-        natural_width = max(
+        content_width = max(
             [label_width, *(screen._display_width(safe(row.get(key))) for row in rows)]
         )
+        natural_width = min(content_width, max(label_width, preferred_size + _COLUMN_GROWTH))
         preferred_width = min(natural_width, max(label_width, preferred_size))
         measured.append([key, label, preferred_width, natural_width])
 

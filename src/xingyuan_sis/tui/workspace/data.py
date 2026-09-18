@@ -25,7 +25,7 @@ class Collection:
 
 COLLECTIONS = {
     "students": Collection("学生", "学生档案", (
-        ("name", "姓名", 10), ("student_no", "学号", 12), ("class_name", "班级", 20),
+        ("name", "姓名", 10), ("student_no", "学号", 12), ("class_label", "班级", 20),
         ("primary_element", "元素", 6), ("status", "学籍", 8),
     ), FIELDS["students"], ()),
     "courses": Collection("课程", "课程目录", (
@@ -43,11 +43,11 @@ COLLECTIONS = {
         ("name", "专业", 22), ("code", "编号", 10), ("department_name", "学院", 24),
     ), FIELDS["majors"]),
     "classes": Collection("班级", "班级", (
-        ("name", "班级", 22), ("code", "编号", 8), ("enrolled", "学生数", 8),
-        ("major_name", "专业", 20),
+        ("class_label", "班级", 22), ("code", "编号", 8), ("enrolled", "学生数", 8),
+        ("department_name", "学院", 20),
     ), FIELDS["classes"]),
     "announcements": Collection("公告", "班级公告", (
-        ("title", "标题", 24), ("class_name", "班级", 20), ("created_at", "发布时间", 20),
+        ("title", "标题", 24), ("class_label", "班级", 20), ("created_at", "发布时间", 20),
     ), FIELDS["announcements"], ()),
 }
 ACADEMICS = ("departments", "majors", "classes")
@@ -59,6 +59,28 @@ _STUDENT_ENUMS: dict[str, tuple[str, ...]] = {
     "primary_element": ("风", "水", "火", "雷", "岩", "光"),
     "primary_affinity": ("A", "B", "C"),
 }
+
+
+def _class_number(code: object | None, major_code: object | None) -> str | None:
+    """Return the local class number from the canonical major-prefixed class code."""
+    if code is None or code == "":
+        return None
+    text = str(code)
+    prefix = "" if major_code is None else str(major_code)
+    if prefix and text.startswith(prefix) and len(text) > len(prefix):
+        return text[len(prefix):]
+    return text
+
+
+def _class_label(major_name: object | None, class_number: object | None) -> str | None:
+    """Build the one user-facing class identity used throughout the TUI."""
+    if major_name in {None, ""} and class_number in {None, ""}:
+        return None
+    if major_name in {None, ""}:
+        return str(class_number)
+    if class_number in {None, ""}:
+        return str(major_name)
+    return f"{major_name} · {class_number}"
 
 
 class Catalog:
@@ -97,13 +119,26 @@ class Catalog:
         class_counts = Counter(row["class_id"] for row in self.records["students"])
         course_counts = Counter(row["course_id"] for row in self.records["grades"])
         major_counts = Counter(row["department_id"] for row in self.records["majors"])
+
+        for row in self.records["classes"]:
+            major = majors.get(row["major_id"], {})
+            row["major_code"] = major.get("code")
+            row["class_number"] = _class_number(row.get("code"), row.get("major_code"))
+            row["class_label"] = _class_label(row.get("major_name"), row.get("class_number"))
+            row["enrolled"] = class_counts[row["id"]]
+
         for row in self.records["students"]:
             row["class_code"] = classes.get(row["class_id"], {}).get("code")
+            row["class_number"] = _class_number(row.get("class_code"), row.get("major_code"))
+            row["class_label"] = _class_label(row.get("major_name"), row.get("class_number"))
+
+        for row in self.records["announcements"]:
+            class_row = classes.get(row["class_id"], {})
+            row["class_number"] = class_row.get("class_number")
+            row["class_label"] = class_row.get("class_label") or row.get("class_name")
+
         for row in self.records["courses"] + self.records["majors"]:
             row["department_code"] = departments.get(row["department_id"], {}).get("code")
-        for row in self.records["classes"]:
-            row["major_code"] = majors.get(row["major_id"], {}).get("code")
-            row["enrolled"] = class_counts[row["id"]]
         for row in self.records["courses"]:
             row["enrolled"] = course_counts[row["id"]]
         for row in self.records["departments"]:
@@ -197,7 +232,10 @@ class Catalog:
             return None
         collection, identifier, label = target
         options = [] if field.required else [(None, "未指定")]
-        return options + [(r[identifier], f"{r[label]} · {r[identifier]}") for r in self.records[collection]]
+        return options + [(
+            r[identifier],
+            r["class_label"] if collection == "classes" else f"{r[label]} · {r[identifier]}",
+        ) for r in self.records[collection]]
 
     def save(self, key: str, values: dict[str, Any], original: dict[str, Any] | None = None) -> int:
         self.require_write()
