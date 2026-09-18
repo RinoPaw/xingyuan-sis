@@ -80,7 +80,7 @@ class PortalLayoutTests(unittest.TestCase):
         self.assertNotIn("›", screen._ANSI_RE.sub("", strong))
         self.assertNotEqual(weak, strong)
 
-    def test_portal_footer_is_identical_at_every_navigation_level(self) -> None:
+    def test_portal_footer_has_one_core_contract_and_contextual_commands(self) -> None:
         identity = Identity("Administrator", "admin")
         states = (
             (0, "primary", {}),
@@ -94,15 +94,33 @@ class PortalLayoutTests(unittest.TestCase):
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((100, 24))):
             for selected, focus, secondary in states:
                 frame = portal.frame(identity, selected, focus, secondary, {}, 0, animate=False)
-                footers.append(screen._ANSI_RE.sub("", frame.lines[-1]))
+                footer = screen._ANSI_RE.sub("", frame.lines[-1])
+                footers.append(footer)
+                self.assertIn("方向键 移动", footer)
+                self.assertIn("Enter 打开", footer)
+                self.assertIn("Esc 返回", footer)
                 self.assertFalse(any(region.y == 24 for region in frame.regions))
 
-        self.assertEqual(len(set(footers)), 1)
-        footer = footers[0]
-        self.assertIn("方向键 移动", footer)
-        self.assertIn("Enter 打开", footer)
-        self.assertIn("Esc 返回", footer)
-        self.assertNotIn("确认", footer)
+        self.assertIn("P 动画", footers[0])
+        self.assertTrue(all("P 动画" not in footer for footer in footers[1:]))
+
+    def test_home_animation_shortcut_is_resolved_in_portal_context(self) -> None:
+        identity = Identity("Administrator", "admin")
+        preferences: dict[str, object] = {
+            "identity": identity,
+            "portal_selected": 0,
+            "portal_focus": "primary",
+            "animate": True,
+        }
+        with patch("xingyuan_sis.service.XingyuanService") as service_type, \
+             patch.object(app.screen, "_clear"), patch.object(app.screen, "_paint"), \
+             patch.object(app.screen, "_terminal_size", return_value=os.terminal_size((100, 24))), \
+             patch.object(app.keys, "_mouse_tracking", return_value=nullcontext()), \
+             patch.object(app.keys, "_read_key", side_effect=["p", "back"]):
+            service_type.return_value.stats.return_value = {}
+            service_type.return_value.list_announcements.return_value = []
+            self.assertIsNone(app._portal_home(None, selected=0, preferences=preferences))
+        self.assertFalse(preferences["animate"])
 
     def test_logout_is_an_explicit_action_not_a_right_arrow_destination(self) -> None:
         identity = Identity("Administrator", "admin")
@@ -125,6 +143,7 @@ class PortalLayoutTests(unittest.TestCase):
              patch.object(app.keys, "_mouse_tracking", return_value=nullcontext()), \
              patch.object(app.keys, "_read_key", side_effect=["right", "back"]) as read_key:
             service_type.return_value.stats.return_value = {}
+            service_type.return_value.list_announcements.return_value = []
             self.assertIsNone(app._portal_home(None, selected=3, preferences=preferences))
         self.assertEqual(read_key.call_count, 2)
 

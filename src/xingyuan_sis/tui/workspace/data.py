@@ -79,16 +79,6 @@ class Catalog:
     def can_browse(self, key: str) -> bool:
         return not self.read_only or key in {"students", "grades", "announcements"}
 
-    def actions(self, key: str) -> tuple[tuple[str, str], ...]:
-        if self.read_only:
-            return (("搜索", "search"),)
-        if key == "data":
-            return (("导入", "import"), ("导出", "export"), ("演示", "seed"))
-        if key == "announcements":
-            return (("搜索", "search"), ("增加", "create"), ("删除", "delete"))
-        actions = (("搜索", "search"), ("增加", "create"), ("编辑", "edit"), ("删除", "delete"))
-        return actions + ((("重置密码", "reset-password"),) if key == "students" else ())
-
     def refresh(self) -> None:
         service = self.service
         self.records = {key: [dict(row) for row in loader()] for key, loader in (

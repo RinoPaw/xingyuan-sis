@@ -9,22 +9,31 @@ from unittest.mock import Mock, patch
 from xingyuan_sis import basic_ui, terminal_ui
 from xingyuan_sis.auth import Identity
 from xingyuan_sis.tui import keys, screen
+from xingyuan_sis.tui.commands import Command, resolve_shortcut
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.entry import main
 from xingyuan_sis.seed_data import STUDENTS, seed_demo
 
 
 class KeyboardAndTerminalTests(unittest.TestCase):
-    def test_plain_keys_and_interrupts(self) -> None:
-        for char, expected in (("\r", "select"), (" ", "select"), ("j", "down"),
-                               ("K", "up"), ("0", "back"), ("\x7f", "back"),
-                               ("Q", "back"), ("3", "3"), ("p", "pause")):
+    def test_plain_keys_decode_physical_input_without_business_meaning(self) -> None:
+        for char, expected in (
+            ("\r", "select"), (" ", " "), ("j", "down"), ("K", "up"),
+            ("0", "0"), ("\x7f", "backspace"), ("Q", "Q"), ("3", "3"),
+            ("p", "p"), ("a", "a"), ("/", "/"), ("\t", "focus"),
+        ):
             with self.subTest(char=char):
                 self.assertEqual(keys._plain_key(char), expected)
         with self.assertRaises(KeyboardInterrupt):
             keys._plain_key("\x03")
         with self.assertRaises(EOFError):
             keys._plain_key("")
+
+    def test_printable_shortcuts_are_resolved_by_active_commands(self) -> None:
+        create = Command("create", "增加", "a")
+        self.assertEqual(resolve_shortcut("a", (create,)), "create")
+        self.assertEqual(resolve_shortcut("A", (create,)), "create")
+        self.assertEqual(resolve_shortcut("d", (create,)), "d")
 
     def test_highlight_uses_semantic_selection_tokens_and_clipping_preserves_them(self) -> None:
         with patch("sys.stdout.isatty", return_value=True), patch.dict(os.environ):

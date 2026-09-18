@@ -26,6 +26,7 @@ src/xingyuan_sis/
     ├── portal.py
     ├── auth_view.py
     ├── keys.py
+    ├── commands.py
     ├── screen.py
     ├── text_edit.py
     ├── tokens.py
@@ -38,6 +39,7 @@ src/xingyuan_sis/
         ├── __init__.py
         ├── state.py
         ├── events.py
+        ├── commands.py
         ├── field_session.py
         ├── forms.py
         ├── data.py
@@ -92,7 +94,29 @@ app.run → portal
 
 管理员和学生共享门户结构，只根据身份与权限显示不同入口。学生查询、个人档案和班级公告继续复用同一套工作台。
 
-## 4. 工作台职责
+## 4. 输入与 Command
+
+`tui/keys.py` 是纯终端输入解码层。它只识别物理输入：方向键、Enter、Esc、Tab、Home / End、PageUp / PageDown，以及原始可打印字符；它不知道“增加”“删除”“导入”等业务动作。
+
+业务快捷键由 `tui/commands.py::Command` 描述：
+
+```text
+physical key
+    ↓
+keys.py
+    ↓
+key event / printable character
+    ↓
+当前上下文 Command 集合
+    ↓
+action
+```
+
+Command 是按钮、鼠标点击、快捷键和底栏提示的共同来源，不维护平行键位表。`workspace/commands.py` 定义工作台可用命令；门户和 viewer 的局部命令留在自己的上下文中。
+
+通用交互语义只有：方向键 / Tab 导航、Enter 激活、Esc 撤销。Space、`q`、`0`、Backspace 不作为第二套确认或返回键。`J / K` 只作为 `↓ / ↑` 的便利物理别名。
+
+## 5. 工作台职责
 
 ```text
 tui/app
@@ -100,6 +124,7 @@ tui/app
 workspace/__init__.py       controller / 生命周期
    ├─ state.py              Workspace / FieldSession / Form / Location
    ├─ events.py             键鼠事件与通用交互意图
+   ├─ commands.py           当前工作台 Command 集合
    ├─ field_session.py      已有记录的局部字段会话
    ├─ forms.py              新建 / 删除 / 导入等完整事务表单
    ├─ data.py               Catalog、数据快照、权限与关系
@@ -115,9 +140,9 @@ workspace/__init__.py       controller / 生命周期
 
 `Workspace` 保存名册、档案、工具栏等页面状态。`FieldSession` 与 `Form` 是两个不同概念：前者附着在现有档案的一个字段或原子字段组上；后者拥有一整个独立事务页面。已有记录编辑不会创建 `Form(mode="edit")`。
 
-`Catalog` 保存一次读取快照和当前身份可执行的操作；正常重绘不查询数据库。所有写操作最终通过 Service → Repository。
+`Catalog` 只保存数据、权限和关系，不拥有界面命令表。正常重绘不查询数据库，所有写操作最终通过 Service → Repository。
 
-## 5. 一个档案，一套字段身份
+## 6. 一个档案，一套字段身份
 
 `student_inspector.py` 和 `detail.py` 都只生成内容结构，字段在整个生命周期中拥有同一个稳定身份：
 
@@ -144,9 +169,9 @@ option:1
 ...
 ```
 
-确认或取消后，字段身份从未发生变化。
+确认或取消后，字段身份从未发生变化。已有记录也不存在“编辑”Command；用户直接在档案字段上按 Enter 修改。
 
-## 6. 唯一展示管线
+## 7. 唯一展示管线
 
 `presentation.py` 提供唯一字段展示管线：
 
@@ -166,7 +191,7 @@ display_value(...)
 
 学生 `family + branch` 是明确的原子复合字段组，可以共同进入 projection；其他字段不能被顺带复制进会话。
 
-## 7. 最终几何是唯一几何
+## 8. 最终几何是唯一几何
 
 档案内容生成后只做一次布局：
 
@@ -186,7 +211,9 @@ final Line[]
 
 `events.py` 不知道“学生物种”“元素亲和”等页面细节。学生二维复合行和普通实体单列的差异由 `Line` 几何自然表达。
 
-## 8. 已有记录字段修改
+PageUp / PageDown 只改变当前 viewport；翻页后若原焦点离开可见范围，再把焦点收回可见 target。它们不承担“跳过 N 条记录”的第二种选择语义。
+
+## 9. 已有记录字段修改
 
 已有记录没有编辑页面：
 
@@ -216,9 +243,7 @@ field:<key>
 - 当前字段位置、档案结构与 target 身份不因编辑发生变化；
 - `family + branch` 按一个原子 FieldSession 提交。
 
-顶部“编辑”只把档案焦点移动到第一个可编辑的 `field:<key>`，不会打开表单。
-
-## 9. 完整事务 Form
+## 10. 完整事务 Form
 
 `Form` 只用于真正需要独立事务页面的操作：
 
@@ -230,7 +255,7 @@ field:<key>
 
 这些操作由 `forms.py + editor.py` 负责，可以拥有自己的字段顺序和显式保存 / 确认。它们不是档案的第二种状态。
 
-## 10. 数据库与数据
+## 11. 数据库与数据
 
 `database.py::SCHEMA` 是当前 SQLite 结构的唯一声明。`initialize_database()` 只创建当前结构，不隐式修补历史 schema。
 
@@ -238,7 +263,7 @@ field:<key>
 
 当前项目没有已发布数据库版本兼容承诺。未来若需要迁移，应建立显式版本迁移，而不是把历史条件塞回初始化路径。
 
-## 11. 回归原则
+## 12. 回归原则
 
 结构性回归至少保护：
 
@@ -247,7 +272,11 @@ field:<key>
 - Enter 从当前 field 创建局部 FieldSession，而非 Form；
 - FieldSession 只拥有当前字段或声明的复合组；
 - Enter 即时保存、Esc 取消；
-- 已有记录没有保存按钮；
+- 已有记录没有保存按钮或“编辑”Command；
+- `keys.py` 不包含业务快捷键；
+- Command 同时驱动工具栏、快捷键和快捷键提示；
+- Space / `q` / `0` / Backspace 不是全局返回或激活别名；
+- PageUp / PageDown 保持 viewport 语义；
 - 展示、命中区和方向导航消费同一份最终几何；
 - 滚轮与方向键聚焦档案时进入同一导航路径；
 - 新建 / 删除等完整事务仍通过 Form；

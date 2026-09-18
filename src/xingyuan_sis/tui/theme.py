@@ -12,7 +12,6 @@ _BAR_SURFACE = screen._SURFACE_FOOTER + screen._TEXT_PRIMARY
 _TOPBAR = screen._SURFACE_TOPBAR + screen._TEXT_ACCENT + screen._BOLD
 _SECONDARY = screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
 _SECONDARY_FOCUS = screen._SURFACE_SELECTED + screen._TEXT_ACCENT + screen._BOLD
-_FOOTER_LABELS = ("[ 方向键 移动 ]", "[ Enter 打开 ]", "[ Esc 返回 ]")
 
 
 def bar_space(count: int) -> str:
@@ -104,22 +103,46 @@ def notice(message: str, *, error: bool = False) -> str:
     return screen._ansi(("! " if error else "· ") + message, style) if message else ""
 
 
-def footer(width: int, *, switch_focus: bool = False) -> str:
-    """Render the one global, non-interactive navigation hint."""
-    labels = ("[ Tab 切换区域 ]", *_FOOTER_LABELS) if switch_focus else _FOOTER_LABELS
-    total = sum(screen._display_width(label) for label in labels)
-    if total >= width:
-        compact = "Tab 切换 · Enter 打开 · Esc 返回" if switch_focus else "方向键 移动 · Enter 打开 · Esc 返回"
-        if screen._display_width(compact) > width:
-            compact = "Tab Enter Esc" if switch_focus else "↑↓ Enter Esc"
-        return screen._ansi(screen._clip_cells(compact, width), _BAR_SURFACE)
+def footer(
+    width: int,
+    *,
+    switch_focus: bool = False,
+    command_hints: Sequence[str] = (),
+    enter: str = "打开",
+    escape: str = "返回",
+) -> str:
+    """Render navigation plus shortcuts derived from commands active here."""
+    required = [
+        *( ["[ Tab 切换区域 ]"] if switch_focus else []),
+        "[ 方向键 移动 ]",
+        f"[ Enter {enter} ]",
+        f"[ Esc {escape} ]",
+    ]
+    optional = [f"[ {hint} ]" for hint in command_hints]
+    labels = required + optional
+    while optional and sum(screen._display_width(label) for label in labels) + len(labels) + 1 > width:
+        optional.pop()
+        labels = required + optional
 
-    free = width - total
-    slots = len(labels) + 1
-    base_gap, extra = divmod(free, slots)
-    gaps = [base_gap + (1 if index < extra else 0) for index in range(slots)]
-    parts: list[str] = [bar_space(gaps[0])]
-    for index, label in enumerate(labels):
-        parts.append(screen._ansi(label, _BUTTON))
-        parts.append(bar_space(gaps[index + 1]))
-    return "".join(parts)
+    total = sum(screen._display_width(label) for label in labels)
+    if total < width:
+        free = width - total
+        slots = len(labels) + 1
+        base_gap, extra = divmod(free, slots)
+        gaps = [base_gap + (1 if index < extra else 0) for index in range(slots)]
+        parts: list[str] = [bar_space(gaps[0])]
+        for index, label in enumerate(labels):
+            parts.append(screen._ansi(label, _BUTTON))
+            parts.append(bar_space(gaps[index + 1]))
+        return "".join(parts)
+
+    compact = (
+        ("Tab · " if switch_focus else "")
+        + f"↑↓←→ · Enter {enter} · Esc {escape}"
+    )
+    for hint in command_hints:
+        candidate = compact + f" · {hint}"
+        if screen._display_width(candidate) > width:
+            break
+        compact = candidate
+    return screen._ansi(screen._clip_cells(compact, width), _BAR_SURFACE)

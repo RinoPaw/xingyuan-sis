@@ -36,7 +36,7 @@ class WorkspaceFlowTests(unittest.TestCase):
         state = Workspace("students", selected=17)
         original = state.current(self.catalog).copy()
         self.assertEqual(
-            self.interact(state, ["focus_prev", "right", "right", "right", "select", "select"], (120, 35)),
+            self.interact(state, ["focus_prev", "right", "right", "select", "select"], (120, 35)),
             ("save", 0),
         )
         self.assertEqual(state.form.mode, "delete")
@@ -128,7 +128,7 @@ class WorkspaceFlowTests(unittest.TestCase):
         self.assertFalse(forbidden & {r.action for r in frame.regions})
         self.assertTrue(any(r.action == "field:name" for r in frame.regions))
         related = catalog.related("students", row)[1][0]
-        self.interact(state, [f"related:grades:{related['id']}", "edit", "refresh"], catalog=catalog)
+        self.interact(state, [f"related:grades:{related['id']}", "e", "refresh"], catalog=catalog)
         self.assertEqual(state.key, "grades")
         self.assertIsNone(state.form)
         self.assertIsNone(state.field_session)

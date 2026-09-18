@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from .. import screen
 from ..layout import WorkspaceLayout
 from ..view_common import Board, identity, safe
+from .commands import FORM_SAVE
 from .data import COLLECTIONS, Catalog
 
 if TYPE_CHECKING:
@@ -116,7 +117,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
                 screen._TEXT_SECONDARY, width=width,
             )
 
-    save_label = "s 保存" if form.fields else "Enter 确认"
+    save_label = FORM_SAVE.hint if form.fields else "Enter 确认"
     next_x = board.button(x, board.height - 3, save_label, "save", selected=form.focus_save or not form.fields)
     if next_x < x + width:
         board.put(next_x, board.height - 3, "Esc 取消", screen._TEXT_SECONDARY, width=max(1, x + width - next_x))

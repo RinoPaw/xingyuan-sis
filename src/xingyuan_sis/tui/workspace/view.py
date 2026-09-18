@@ -6,6 +6,7 @@ from ...database import DB_PATH
 from .. import screen, theme
 from ..layout import WorkspaceLayout
 from ..view_common import Board, metric_summary, safe
+from .commands import FORM_SAVE, toolbar as toolbar_commands
 from .dashboard import render_dashboard
 from .data import ACADEMICS, COLLECTIONS, Catalog
 from .detail import lines as generic_lines
@@ -59,22 +60,52 @@ def _breadcrumb(state: Workspace) -> list[tuple[str, str]]:
 
 
 def _render_actions(board: Board, state: Workspace, catalog: Catalog, x: int, y: int, width: int) -> None:
-    actions = catalog.actions(state.key)
-    state.action_selected = min(max(0, state.action_selected), len(actions) - 1)
+    commands = toolbar_commands(catalog, state.key)
+    state.action_selected = min(max(0, state.action_selected), max(0, len(commands) - 1))
     first = 0
     if state.action_focus:
         while first < state.action_selected and sum(
-            screen._display_width(label) + 6 for label, _ in actions[first:state.action_selected + 1]
+            screen._display_width(command.label) + 6
+            for command in commands[first:state.action_selected + 1]
         ) > width:
             first += 1
-    for index in range(first, len(actions)):
-        label, action = actions[index]
-        shown = f" {label} "
+    for index in range(first, len(commands)):
+        command = commands[index]
+        shown = f" {command.label} "
         needed = screen._display_width(shown) + 4
         if needed > width:
             break
-        x = board.button(x, y, shown, action, selected=state.action_focus and state.action_selected == index)
+        x = board.button(
+            x,
+            y,
+            shown,
+            command.action,
+            selected=state.action_focus and state.action_selected == index,
+        )
         width -= needed
+
+
+def _footer(state: Workspace, catalog: Catalog, width: int) -> str:
+    if state.field_session is not None:
+        enter = "选择" if state.field_session.options is not None else "确认"
+        return theme.footer(width, switch_focus=True, enter=enter, escape="取消")
+    if state.form is not None:
+        form = state.form
+        enter = "选择" if form.options is not None else "确认" if form.focus_save or not form.fields else "编辑"
+        hints = (FORM_SAVE.hint,) if form.fields and form.options is None else ()
+        return theme.footer(
+            width,
+            switch_focus=True,
+            command_hints=hints,
+            enter=enter,
+            escape="取消",
+        )
+    hints = tuple(
+        command.hint
+        for command in toolbar_commands(catalog, state.key)
+        if command.shortcut
+    )
+    return theme.footer(width, switch_focus=True, command_hints=hints)
 
 
 def render(state: Workspace, catalog: Catalog):
@@ -178,7 +209,7 @@ def render(state: Workspace, catalog: Catalog):
             width=width,
         )
 
-    board.rows[-1] = [(0, theme.footer(width, switch_focus=True))]
+    board.rows[-1] = [(0, _footer(state, catalog, width))]
     board.regions = [
         region for region in board.regions
         if region.y < height and region.x + region.width - 1 <= width

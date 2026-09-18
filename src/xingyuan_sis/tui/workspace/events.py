@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 from .. import keys, screen
+from ..commands import resolve_shortcut
 from ..layout import WorkspaceLayout
+from .commands import FORM_SAVE, available as available_commands, toolbar as toolbar_commands
 from .data import ACADEMICS, COLLECTIONS, Catalog
 from .field_session import accept_option as accept_field_option, cancel as cancel_field_session, start as start_field_session
 from .forms import accept_option as accept_form_option, move_form_position, open_form
 from .state import Workspace
-
-
-_RECORD_ACTIONS = ("search", "create", "edit", "delete", "reset-password")
-_DATA_ACTIONS = ("import", "export", "seed")
 
 
 def _detail_geometry(state: Workspace, catalog: Catalog) -> tuple[int, int]:
@@ -92,6 +90,30 @@ def move_detail_selection(state: Workspace, catalog: Catalog, direction: str) ->
     reveal_detail_selection(state, catalog)
 
 
+def _page_roster(state: Workspace, catalog: Catalog, direction: str) -> None:
+    rows = state.rows(catalog)
+    if not rows:
+        return
+    capacity = WorkspaceLayout.measure().panel_capacity(state.key)
+    maximum = max(0, len(rows) - capacity)
+    delta = capacity if direction == "page_down" else -capacity
+    first = min(max(0, state.roster_scroll + delta), maximum)
+    state.roster_scroll = first
+    last = min(len(rows) - 1, first + capacity - 1)
+    state.selected = min(max(state.selected, first), last)
+    state.detail_scroll = 0
+    state.detail_selected = 0
+
+
+def _page_detail(state: Workspace, catalog: Catalog, direction: str) -> None:
+    _, capacity = _detail_geometry(state, catalog)
+    state.detail_scroll = max(
+        0,
+        state.detail_scroll + (capacity if direction == "page_down" else -capacity),
+    )
+    select_visible_detail_target(state, catalog)
+
+
 def _activate_detail_action(
     state: Workspace,
     catalog: Catalog,
@@ -153,6 +175,12 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
         if not key:
             continue
 
+        commands = available_commands(catalog, state.key)
+        if state.form is None and state.field_session is None:
+            key = resolve_shortcut(key, commands)
+        elif state.form is not None and state.form.fields:
+            key = resolve_shortcut(key, (FORM_SAVE,))
+
         if key in {"focus", "focus_prev"} and state.form is None and state.field_session is None:
             areas = (
                 ("roster", "details", "actions")
@@ -168,29 +196,30 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 reveal_detail_selection(state, catalog)
             continue
 
-        actions = tuple(action for _, action in catalog.actions(state.key))
+        toolbar = toolbar_commands(catalog, state.key)
+        toolbar_actions = tuple(command.action for command in toolbar)
         if state.action_focus and state.form is None and state.field_session is None:
             if key == "left":
                 state.action_selected = max(0, state.action_selected - 1)
                 continue
             if key == "right":
-                state.action_selected = min(len(actions) - 1, state.action_selected + 1)
+                state.action_selected = min(len(toolbar_actions) - 1, state.action_selected + 1)
                 continue
             if key == "home":
                 state.action_selected = 0
                 continue
             if key == "end":
-                state.action_selected = len(actions) - 1
+                state.action_selected = max(0, len(toolbar_actions) - 1)
                 continue
             if key == "up":
                 continue
             if key == "down":
                 state.action_focus = False
                 continue
-            if key == "select":
-                key = actions[state.action_selected]
+            if key == "select" and toolbar_actions:
+                key = toolbar_actions[state.action_selected]
 
-        if key in {"back", "cancel"}:
+        if key == "back":
             if state.field_session is not None:
                 cancel_field_session(state)
             elif state.form and state.form.options is not None:
@@ -219,7 +248,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                     elif key == "end":
                         index = len(session.options) - 1
                     session.option_index = min(max(0, index), max(0, len(session.options) - 1))
-                elif key == "select" or key.startswith("option:"):
+                elif key == "select" or (isinstance(key, str) and key.startswith("option:")):
                     if session.options:
                         index = int(key.split(":")[1]) if key.startswith("option:") else session.option_index
                         accept_field_option(state, catalog, index)
@@ -236,7 +265,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                     elif key == "end":
                         index = len(form.options) - 1
                     form.option_index = min(max(0, index), max(0, len(form.options) - 1))
-                elif key == "select" or key.startswith("option:"):
+                elif key == "select" or (isinstance(key, str) and key.startswith("option:")):
                     if form.options:
                         index = int(key.split(":")[1]) if key.startswith("option:") else form.option_index
                         accept_form_option(state, index)
@@ -245,7 +274,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 return "save", 0
             if key == "select" and form.fields:
                 return "field", form.position
-            if key.startswith("field:"):
+            if isinstance(key, str) and key.startswith("field:"):
                 form.position = int(key.split(":")[1])
                 form.focus_save = False
                 return "field", form.position
@@ -253,12 +282,8 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 move_form_position(state, key)
             continue
 
-        if catalog.read_only and key in ({*_RECORD_ACTIONS, *_DATA_ACTIONS} - {"search"}):
-            state.notice = "学生账户仅可查询；修改密码请进入个人中心。"
-            continue
-        if key in _RECORD_ACTIONS and key not in actions:
-            continue
-        if key.startswith(("collection:", "related:")) and not catalog.can_browse(key.split(":")[1]):
+        if isinstance(key, str) and key.startswith(("collection:", "related:")) \
+                and not catalog.can_browse(key.split(":")[1]):
             continue
 
         handled, event = _activate_detail_action(state, catalog, key)
@@ -267,12 +292,12 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 return event
             continue
 
-        if key.startswith("navigate:"):
+        if isinstance(key, str) and key.startswith("navigate:"):
             raise screen.NavigateTo(key.removeprefix("navigate:"))
-        if key.startswith("collection:"):
+        if isinstance(key, str) and key.startswith("collection:"):
             state.history.clear()
             state.switch(key.split(":")[1])
-        elif key.startswith("row:"):
+        elif isinstance(key, str) and key.startswith("row:"):
             state.action_focus = False
             state.selected = int(key.split(":")[1])
             state.detail_scroll = 0
@@ -311,14 +336,24 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 state.detail_selected = 0
                 reveal_detail_selection(state, catalog)
             continue
-        elif key in {"up", "down", "page_up", "page_down", "home", "end"}:
+        elif key in {"page_up", "page_down"}:
+            if state.details and state.key != "data":
+                _page_detail(state, catalog, key)
+            elif state.key == "data":
+                capacity = WorkspaceLayout.measure().panel_capacity(state.key)
+                state.detail_scroll = max(
+                    0,
+                    state.detail_scroll + (capacity if key == "page_down" else -capacity),
+                )
+            else:
+                _page_roster(state, catalog, key)
+        elif key in {"up", "down", "home", "end"}:
             if not state.details and key == "up" and not wheel:
                 if ((state.key == "data" and state.detail_scroll == 0)
                         or (state.key != "data" and state.selected == 0)):
                     state.action_focus = True
                     continue
-            amount = max(1, screen._terminal_size().lines - 11) if key.startswith("page_") else 1
-            amount *= -1 if key in {"up", "page_up"} else 1
+            amount = -1 if key == "up" else 1
             if wheel and state.key != "data":
                 if wheel_over_details:
                     if state.details and state.detail_selected >= 0:
@@ -333,7 +368,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                     state.detail_selected = 0
             elif state.details and state.key != "data":
                 targets = detail_targets(state, catalog)
-                if (key in {"page_up", "page_down"} or not targets
+                if (not targets
                         or (catalog.read_only and key in {"home", "end"})
                         or (state.detail_selected < 0 and key not in {"home", "end"})):
                     state.detail_scroll = max(0, state.detail_scroll + amount)
@@ -365,7 +400,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                     state.selected = len(state.rows(catalog)) - 1
                 state.detail_scroll = 0
                 state.detail_selected = 0
-        elif key.startswith("view:") or key in {"1", "2", "3", "4"}:
+        elif (isinstance(key, str) and key.startswith("view:")) or key in {"1", "2", "3", "4"}:
             state.action_focus = False
             index = int(key.split(":")[1]) if key.startswith("view:") else int(key) - 1
             if state.key == "data":
@@ -375,7 +410,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             elif state.key != "data" and index < len(COLLECTIONS[state.key].views):
                 state.view, state.selected, state.roster_scroll = index, 0, 0
                 state.detail_scroll, state.detail_selected = 0, 0
-        elif key == "search" and state.key != "data":
+        elif key == "search" and "search" in {command.action for command in commands}:
             state.action_focus = False
             return "search", 0
         elif key == "reset-search":
@@ -383,23 +418,8 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             state.detail_scroll, state.detail_selected = 0, 0
         elif key == "refresh":
             return "refresh", 0
-        elif key == "edit" and state.key != "data":
-            targets = detail_targets(state, catalog)
-            editable_keys = {field.key for field in catalog.fields(state.key, True)}
-            editable = [
-                i for i, (_, action) in enumerate(targets)
-                if action.startswith("field:") and action.removeprefix("field:") in editable_keys
-            ]
-            if editable:
-                state.action_focus, state.details = False, True
-                state.detail_selected = editable[0]
-                reveal_detail_selection(state, catalog)
-                state.notice = "选择字段并按 Enter 修改；再次 Enter 确认保存。"
-            else:
-                state.notice = "当前记录没有可直接修改的字段。"
-        elif key in _RECORD_ACTIONS and state.key != "data":
-            state.action_focus = False
-            open_form(state, catalog, key)
-        elif key in _DATA_ACTIONS:
+        elif key in {"create", "delete", "reset-password", "import", "export", "seed"}:
+            if key not in {command.action for command in commands}:
+                continue
             state.action_focus = False
             open_form(state, catalog, key)

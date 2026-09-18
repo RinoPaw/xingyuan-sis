@@ -49,8 +49,6 @@ def _mouse_tracking():
 
         fd = sys.stdin.fileno()
         previous = termios.tcgetattr(fd)
-        # Mouse reports can arrive while painting, between individual reads.
-        # Keep echo disabled until tracking ends, including during animations.
         tty.setcbreak(fd, termios.TCSANOW)
     try:
         if enabled:
@@ -103,27 +101,24 @@ def _read_key_windows(timeout: float | None = None) -> str | None:
 
 
 def _plain_key(char: str) -> str:
+    """Decode physical keys only; pages resolve printable shortcuts themselves."""
     if char == "\x03":
         raise KeyboardInterrupt
     if not char or char == "\x04":
         raise EOFError
-    if char in {" ", "\r", "\n"}:
+    if char in {"\r", "\n"}:
         return "select"
-    if char in {"\x1b", "\x08", "\x7f", "0"} or char.lower() == "q":
+    if char == "\x1b":
         return "back"
+    if char in {"\x08", "\x7f"}:
+        return "backspace"
+    if char == "\t":
+        return "focus"
     if char.lower() == "k":
         return "up"
     if char.lower() == "j":
         return "down"
-    if char.lower() == "p":
-        return "pause"
-    if char.lower() == "n":
-        return "next"
-    shortcuts = {"a": "create", "e": "edit", "d": "delete", "s": "save", "/": "search",
-                 "r": "refresh", "\t": "focus", "i": "import", "o": "export", "g": "seed"}
-    if char.lower() in shortcuts:
-        return shortcuts[char.lower()]
-    return char if char in "123456789" else "other"
+    return char if char.isprintable() else "other"
 
 
 def _read_escape_sequence(fd: int) -> bytes:
@@ -150,7 +145,6 @@ def _read_key_posix(timeout: float | None = None) -> str | MouseClick | MouseScr
     fd = sys.stdin.fileno()
     previous = termios.tcgetattr(fd)
     try:
-        # TCSAFLUSH (the default) discards keys typed while a frame is drawn.
         tty.setcbreak(fd, termios.TCSANOW)
         if timeout is not None:
             ready, _, _ = select.select([fd], [], [], timeout)

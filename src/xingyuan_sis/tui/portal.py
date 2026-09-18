@@ -7,6 +7,7 @@ from typing import Mapping, Sequence
 from ..auth import Identity
 from . import animation, screen, theme
 from .board import Board
+from .commands import Command
 from .layout import visible_start
 
 
@@ -15,6 +16,7 @@ NARROW_WIDTH = 38
 _SECONDARY_SLOT_WIDTH = 14
 _SECONDARY_CARD_WIDTH = 10
 _SECONDARY_MAX_COLUMNS = 4
+TOGGLE_ANIMATION = Command("toggle-animation", "动画", "p", toolbar=False)
 
 
 @dataclass(frozen=True)
@@ -80,7 +82,8 @@ def frame(
 
     board = Board(width, height)
     board.put(0, 0, _topbar(width, identity, name, database))
-    board.put(0, height - 1, theme.footer(width))
+    hints = (TOGGLE_ANIMATION.hint,) if selected == 0 and focus == "primary" else ()
+    board.put(0, height - 1, theme.footer(width, command_hints=hints))
 
     if width < NARROW_WIDTH or height < 9:
         _compact_body(

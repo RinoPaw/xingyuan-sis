@@ -1,7 +1,13 @@
 """Resize-aware, mouse-enabled viewer for menu query results."""
 from bisect import bisect_right
-from . import screen, keys, theme
+
 from ..terminal_ui import _wrap_line
+from . import keys, screen, theme
+from .commands import Command, resolve_shortcut
+
+
+_NEXT_PAGE = Command("page_down", "下一页", "n", toolbar=False)
+_PREVIOUS_PAGE = Command("page_up", "上一页", "p", toolbar=False)
 
 
 def show(text: str, title: str) -> None:
@@ -28,6 +34,14 @@ def show(text: str, title: str) -> None:
             page_size = max(1, height - 4)
             last = min(len(records), first + page_size)
             breadcrumb, navigation = screen._breadcrumb(title, width)
+            hints = tuple(
+                command.hint
+                for command, useful in (
+                    (_PREVIOUS_PAGE, first > 0),
+                    (_NEXT_PAGE, last < len(records)),
+                )
+                if useful
+            )
             lines = [
                 theme.topbar(width),
                 breadcrumb,
@@ -36,7 +50,7 @@ def show(text: str, title: str) -> None:
             ]
             while len(lines) < height - 1:
                 lines.append("")
-            lines.append(theme.footer(width))
+            lines.append(theme.footer(width, command_hints=hints, enter="下一页"))
             lines = [screen._clip_cells(line, width) for line in lines]
             if lines != previous:
                 screen._paint(lines, previous)
@@ -48,12 +62,13 @@ def show(text: str, title: str) -> None:
                 key = screen._hit_action(key, navigation)
                 if key and key.startswith("navigate:"):
                     raise screen.NavigateTo(key.removeprefix("navigate:"))
+            key = resolve_shortcut(key, (_PREVIOUS_PAGE, _NEXT_PAGE))
             if key == "back":
                 return
-            if key in {"select", "next", "page_down"}:
+            if key in {"select", "page_down"}:
                 if last < len(records):
                     first = last
-            elif key in {"pause", "prev", "page_up"}:
+            elif key == "page_up":
                 first = max(0, first - page_size)
             elif key == "down":
                 first = min(len(records) - 1, first + 1)

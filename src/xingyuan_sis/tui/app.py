@@ -8,6 +8,7 @@ import time
 
 from ..auth import Identity, clear_session, read_session
 from . import auth_view, keys, portal, screen
+from .commands import resolve_shortcut
 
 
 def _portal_home(
@@ -110,6 +111,8 @@ def _portal_home(
                     key = action
 
             if focus == "primary":
+                if selected == 0:
+                    key = resolve_shortcut(key, (portal.TOGGLE_ANIMATION,))
                 if key == "up":
                     selected = (selected - 1) % len(portal.PRIMARY_LABELS)
                 elif key == "down":
@@ -120,7 +123,7 @@ def _portal_home(
                     selected = len(portal.PRIMARY_LABELS) - 1
                 elif key in tuple("1234"):
                     selected = int(key) - 1
-                elif key == "pause" and selected == 0:
+                elif key == portal.TOGGLE_ANIMATION.action:
                     preferences["animate"] = not animate
                 elif key == "select":
                     if selected == 3:
