@@ -167,7 +167,10 @@ def render_inspector(
         width=width,
     )
 
-    offset = content_offset(raw_lines, layout)
+    # Existing-record editing keeps the archive itself in place. In compact mode
+    # the first archive field must not suddenly be consumed by the identity heading
+    # just because only the active field owns an editing action.
+    offset = 0 if editing else content_offset(raw_lines, layout)
     raw_lines = wrap_lines(raw_lines, width)
     lines = raw_lines[offset:]
     capacity = layout.panel_capacity(state.key)

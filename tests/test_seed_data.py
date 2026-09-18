@@ -88,7 +88,7 @@ class SeedDataTests(unittest.TestCase):
 
         self.assertEqual(
             self.service.student_by_no(str(expected[0]))["status"],
-            expected[8],
+            expected[9],
         )
         self.assertEqual(len(self.service.list_students()), len(STUDENTS))
 

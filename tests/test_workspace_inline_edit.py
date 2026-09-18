@@ -42,7 +42,7 @@ class WorkspaceInlineEditTests(unittest.TestCase):
 
         branches = self.catalog.options("students", "branch", values)
         expected_branches = [
-            row["contact"]
+            row["name"]
             for row in self.catalog.service.list_species_branches()
             if row["family_name"] == values["family"]
         ]

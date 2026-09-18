@@ -36,15 +36,26 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertIn("Esc 返回", footer)
         self.assertFalse(any(region.y == 35 for region in frame.regions))
 
-    def test_shift_tab_can_choose_edit_and_enter_opens_it(self):
+    def test_shift_tab_can_choose_edit_and_enter_focuses_first_editable_field(self):
         state = workspace.Workspace("students")
-        with patch.object(keys, "_read_key", side_effect=["focus_prev", "right", "right", "select", "back", "back"]), \
-             patch.object(screen, "_paint"), \
-             patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
-             patch.object(workspace_events, "open_form") as open_form:
-            workspace_events.interact(state, self.catalog)
+        with patch.object(
+            keys,
+            "_read_key",
+            side_effect=["focus_prev", "right", "right", "select", "refresh"],
+        ), patch.object(screen, "_paint"), patch.object(
+            screen, "_terminal_size", return_value=os.terminal_size((120, 35))
+        ):
+            event = workspace_events.interact(state, self.catalog)
 
-        open_form.assert_called_once_with(state, self.catalog, "edit")
+        self.assertEqual(event, ("refresh", 0))
+        self.assertTrue(state.details)
+        self.assertFalse(state.action_focus)
+        self.assertIsNone(state.form)
+        targets = workspace_events.detail_targets(state, self.catalog)
+        current = targets[state.detail_selected][1]
+        editable = {field.key for field in self.catalog.fields("students", True)}
+        self.assertTrue(current.startswith("field-target:"))
+        self.assertIn(current.removeprefix("field-target:"), editable)
 
     def test_shift_tab_to_actions_preserves_selected_record_for_delete(self):
         state = workspace.Workspace("students", selected=15)
@@ -83,8 +94,8 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertIn(screen._TEXT_PRIMARY, selected_line)
         self.assertNotIn(screen._SURFACE_SELECTED, selected_line)
 
-    def test_action_shortcuts_remain_direct(self):
-        for key, action in (("create", "create"), ("edit", "edit"), ("delete", "delete")):
+    def test_create_and_delete_shortcuts_open_their_transaction_forms(self):
+        for key, action in (("create", "create"), ("delete", "delete")):
             state = workspace.Workspace("students")
             with self.subTest(key=key), \
                  patch.object(keys, "_read_key", side_effect=[key, "back", "back"]), \
@@ -93,6 +104,19 @@ class WorkspaceActionTests(unittest.TestCase):
                  patch.object(workspace_events, "open_form") as open_form:
                 workspace_events.interact(state, self.catalog)
             open_form.assert_called_once_with(state, self.catalog, action)
+
+    def test_edit_shortcut_never_opens_a_record_edit_form(self):
+        state = workspace.Workspace("students")
+        with patch.object(keys, "_read_key", side_effect=["edit", "refresh"]), \
+             patch.object(screen, "_paint"), \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
+             patch.object(workspace_events, "open_form") as open_form:
+            event = workspace_events.interact(state, self.catalog)
+
+        self.assertEqual(event, ("refresh", 0))
+        open_form.assert_not_called()
+        self.assertTrue(state.details)
+        self.assertIsNone(state.form)
 
 
 if __name__ == "__main__":
