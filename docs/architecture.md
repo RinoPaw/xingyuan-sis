@@ -116,13 +116,41 @@ Command 是按钮、鼠标点击、快捷键和底栏提示的共同来源，不
 
 通用交互语义只有：方向键 / Tab 导航、Enter 激活、Esc 撤销。Space、`q`、`0`、Backspace 不作为第二套确认或返回键。`J / K` 只作为 `↓ / ↑` 的便利物理别名。
 
-## 5. 工作台职责
+`Shift+Tab` 不再进入工作台语义层；Tab 是唯一的区域焦点循环键。
+
+## 5. Workspace 状态与焦点
+
+`Workspace` 不再用 `details + action_focus` 两个布尔量拼接焦点。键盘焦点只有一个枚举：
+
+```text
+FocusArea.ROSTER
+FocusArea.INSPECTOR
+FocusArea.TOOLBAR
+FocusArea.DASHBOARD
+```
+
+记录型页面的 Tab 循环固定为：
+
+```text
+ROSTER → INSPECTOR → TOOLBAR → ROSTER
+```
+
+窄屏当前展示哪一块内容由独立的 `ContentPanel.ROSTER / INSPECTOR` 表示。它和键盘焦点回答不同问题：
+
+```text
+focus         → 键盘现在操作哪里
+content_panel → 单面板布局现在显示哪一面
+```
+
+因此工具栏获得焦点时，窄屏仍保持进入工具栏前的名册或档案内容；宽屏则始终同时绘制名册和档案。`Location` 保存并恢复这两个明确状态，不再保存布尔组合。
+
+## 6. 工作台职责
 
 ```text
 tui/app
    ↓
 workspace/__init__.py       controller / 生命周期
-   ├─ state.py              Workspace / FieldSession / Form / Location
+   ├─ state.py              Workspace / FocusArea / ContentPanel / FieldSession / Form / Location
    ├─ events.py             键鼠事件与通用交互意图
    ├─ commands.py           当前工作台 Command 集合
    ├─ field_session.py      已有记录的局部字段会话
@@ -138,11 +166,11 @@ workspace/__init__.py       controller / 生命周期
        └─ dashboard.py
 ```
 
-`Workspace` 保存名册、档案、工具栏等页面状态。`FieldSession` 与 `Form` 是两个不同概念：前者附着在现有档案的一个字段或原子字段组上；后者拥有一整个独立事务页面。已有记录编辑不会创建 `Form(mode="edit")`。
+`FieldSession` 与 `Form` 是两个不同概念：前者附着在现有档案的一个字段或原子字段组上；后者拥有一整个独立事务页面。已有记录编辑不会创建 `Form(mode="edit")`。
 
 `Catalog` 只保存数据、权限和关系，不拥有界面命令表。正常重绘不查询数据库，所有写操作最终通过 Service → Repository。
 
-## 6. 一个档案，一套字段身份
+## 7. 一个档案，一套字段身份
 
 `student_inspector.py` 和 `detail.py` 都只生成内容结构，字段在整个生命周期中拥有同一个稳定身份：
 
@@ -171,7 +199,7 @@ option:1
 
 确认或取消后，字段身份从未发生变化。已有记录也不存在“编辑”Command；用户直接在档案字段上按 Enter 修改。
 
-## 7. 唯一展示管线
+## 8. 唯一展示管线
 
 `presentation.py` 提供唯一字段展示管线：
 
@@ -191,7 +219,7 @@ display_value(...)
 
 学生 `family + branch` 是明确的原子复合字段组，可以共同进入 projection；其他字段不能被顺带复制进会话。
 
-## 8. 最终几何是唯一几何
+## 9. 最终几何是唯一几何
 
 档案内容生成后只做一次布局：
 
@@ -211,9 +239,11 @@ final Line[]
 
 `events.py` 不知道“学生物种”“元素亲和”等页面细节。学生二维复合行和普通实体单列的差异由 `Line` 几何自然表达。
 
+名册也由 `WorkspaceLayout.roster_capacity()` 给出实际可见记录数；列标题占用的行在这里统一扣除。渲染与 PageUp / PageDown 共用该容量，不能再各算一份。
+
 PageUp / PageDown 只改变当前 viewport；翻页后若原焦点离开可见范围，再把焦点收回可见 target。它们不承担“跳过 N 条记录”的第二种选择语义。
 
-## 9. 已有记录字段修改
+## 10. 已有记录字段修改
 
 已有记录没有编辑页面：
 
@@ -243,7 +273,7 @@ field:<key>
 - 当前字段位置、档案结构与 target 身份不因编辑发生变化；
 - `family + branch` 按一个原子 FieldSession 提交。
 
-## 10. 完整事务 Form
+## 11. 完整事务 Form
 
 `Form` 只用于真正需要独立事务页面的操作：
 
@@ -255,7 +285,7 @@ field:<key>
 
 这些操作由 `forms.py + editor.py` 负责，可以拥有自己的字段顺序和显式保存 / 确认。它们不是档案的第二种状态。
 
-## 11. 数据库与数据
+## 12. 数据库与数据
 
 `database.py::SCHEMA` 是当前 SQLite 结构的唯一声明。`initialize_database()` 只创建当前结构，不隐式修补历史 schema。
 
@@ -263,10 +293,14 @@ field:<key>
 
 当前项目没有已发布数据库版本兼容承诺。未来若需要迁移，应建立显式版本迁移，而不是把历史条件塞回初始化路径。
 
-## 12. 回归原则
+## 13. 回归原则
 
 结构性回归至少保护：
 
+- 工作台同一时刻只有一个 `FocusArea`；
+- `ContentPanel` 只表示窄屏内容，不兼职键盘焦点；
+- Tab 单向循环记录页的名册、档案和操作栏；
+- Shift+Tab 不存在第二条区域导航路径；
 - 所有档案字段使用稳定 `field:<key>`；
 - 只读字段可聚焦但不可写；
 - Enter 从当前 field 创建局部 FieldSession，而非 Form；
@@ -276,7 +310,7 @@ field:<key>
 - `keys.py` 不包含业务快捷键；
 - Command 同时驱动工具栏、快捷键和快捷键提示；
 - Space / `q` / `0` / Backspace 不是全局返回或激活别名；
-- PageUp / PageDown 保持 viewport 语义；
+- PageUp / PageDown 使用与渲染一致的 viewport 容量；
 - 展示、命中区和方向导航消费同一份最终几何；
 - 滚轮与方向键聚焦档案时进入同一导航路径；
 - 新建 / 删除等完整事务仍通过 Form；
