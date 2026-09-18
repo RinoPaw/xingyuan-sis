@@ -24,6 +24,8 @@
 
 `projected record` 等于已提交记录加上当前 FieldSession 明确拥有的临时值。格式化函数不知道值来自数据库还是临时输入，因此不能出现 browse/edit 两套格式化分支。
 
+关系型展示也遵循同一投影。学生班级在 TUI 中的语义是“专业 + 班号”，数据库内部仍可使用稳定的 `class_code / class_id`；内部关联方式不能泄漏成第二种用户交互。
+
 ## 2. 稳定字段身份
 
 每个档案字段从浏览到修改始终使用：
@@ -38,7 +40,8 @@ field:<field_key>
 field:name
 field:student_no
 field:family · field:branch
-field:gender
+field:major_code · field:class_number
+field:primary_element · field:primary_affinity
 ...
 ```
 
@@ -46,7 +49,7 @@ field:gender
 
 进入已有记录修改后，当前字段仍然叫同一个 `field:<key>`；不会变成 `field:<index>`，也不存在 `field-target:<key>` 这一套平行身份。
 
-## 3. FieldSession
+## 3. FieldSession 与复合字段
 
 已有记录的局部修改由 `FieldSession` 独立建模。它只拥有：
 
@@ -56,7 +59,16 @@ field:gender
 - 当前子字段（复合组时）；
 - 必要的选项列表与选中位置。
 
-普通字段会话只有一个 key。学生 `family + branch` 因为存在一致性约束，作为一个原子字段组：先选族系，再选支系，最后一次提交。
+普通字段会话只有一个 key。学生有两类存在父子约束的原子字段组：
+
+```text
+family → branch
+major_code → class_number
+```
+
+选择族系后再选择支系，选择专业后再选择班号，最后各自只提交一次。直接选择 `branch` 或 `class_number` 时，则只修改当前父项下的这个子字段。
+
+元素行同样使用两个独立 target：`primary_element · primary_affinity`。它们没有父子数据约束，因此分别保存；这种业务差异不改变它们与另外两行相同的复合几何和导航语义。
 
 FieldSession 不拥有整条记录，不拥有页面级保存按钮，也不承担新建表单的字段循环。
 
@@ -71,6 +83,8 @@ FieldSession 不拥有整条记录，不拥有页面级保存按钮，也不承�
 - seed。
 
 已有记录修改不通过 `Form(mode="edit")` 表示，也不通过 `mode` 在同一个大状态类型里分叉。两个概念拥有不同生命周期，因此使用不同模型。
+
+学生新建 Form 使用与档案相同的语义字段：`family + branch`、`major_code + class_number`、`primary_element + primary_affinity`。其中班级二元组只在提交边界转换为内部 `class_code`，Form 本身不重新暴露一套“完整班级编号”控件。
 
 ## 5. 焦点不是页面状态
 
@@ -111,16 +125,25 @@ Enter 确认后立即保存；Esc 丢弃 FieldSession，数据库保持原值。
 
 ## 7. 选项是字段的临时子结构
 
-枚举和外键展开后临时增加：
+枚举和关系字段展开后临时增加：
 
 ```text
-field:class_code
+field:major_code
   option:0
   option:1
   option:2
 ```
 
-`option:*` 只在选项展开期间存在。它不是第二套档案导航，也不会替换 `field:class_code` 的身份。
+选择专业后，同一 FieldSession 可继续到：
+
+```text
+field:class_number
+  option:0
+  option:1
+  ...
+```
+
+`option:*` 只在选项展开期间存在。它不是第二套档案导航，也不会替换当前 `field:<key>` 的身份。
 
 ## 8. 最终几何只有一份
 
@@ -144,17 +167,23 @@ final Line[]
 
 因此窄屏发生换行后，方向键按照用户实际看到的位置移动，而不是按照换行前的隐藏逻辑行移动。
 
+学生的三个复合行都只是普通 `Line` 几何：
+
+```text
+物种  family · branch
+班级  major  · class_number
+元素  element · affinity
+```
+
+它们不在 `events.py` 中拥有各自的导航特判。
+
 名册同样从 `WorkspaceLayout.roster_capacity()` 得到真实可见记录数；列标题占用的行只在这里扣除，渲染和 PageUp / PageDown 不维护第二份容量算法。
 
 ## 9. 派生信息
 
-未被 FieldSession 拥有的信息继续使用已提交记录。例如修改学生“入学年份”期间：
+未被 FieldSession 拥有的信息继续使用已提交记录。例如修改学生“入学年份”期间，班级仍保持 `专业 · 班号` 的同一二元结构，学院、学籍、元素、选课和个人信息不会因为存在 FieldSession 而改变展示语义。
 
-- 入学年份可显示当前临时值；
-- 班级仍使用同一 `display_value()` 展示“班级名称 · 编号”；
-- 学院、学籍、元素、选课和个人信息不改变展示语义。
-
-只有保存成功并刷新 Catalog 后，真正依赖被修改数据的派生信息才随数据库事实更新。
+修改班级专业时，`Catalog.project()` 只重算这次关系投影真正影响的专业、学院和可选班号；不会把整条记录复制进会话。保存时再把 `major_code + class_number` 解析到真实班级并转换成内部 `class_code`。
 
 ## 10. 回归要求
 
@@ -162,13 +191,16 @@ final Line[]
 
 1. 字段进入 / 退出 FieldSession 前后 action 身份不变；
 2. 未编辑字段文本不因 FieldSession 存在而变化；
-3. 同一枚举 / 外键值始终使用同一 label；
+3. 同一枚举 / 关系值始终使用同一 label；
 4. 只读字段仍在焦点图，但 Enter 不产生 FieldSession；
 5. FieldSession 不创建 `Form`；
 6. Enter 即时保存，Esc 不写数据库；
 7. 已有记录没有保存按钮；
 8. 复合字段只投影明确拥有的键；
-9. 绘制、点击和方向导航消费同一份最终几何；
-10. 工作台只存在一个 `FocusArea`，不存在 `details + action_focus` 组合焦点；
-11. Tab 单向循环名册、档案和操作栏，Shift+Tab 不建立第二条导航路径；
-12. 名册渲染与分页使用同一个可见记录容量。
+9. 物种、班级、元素三行都由两个独立 `field:<key>` target 组成；
+10. `family → branch` 与 `major_code → class_number` 使用同一原子组机制；
+11. 学生新建 Form 不重新暴露 `class_code`，而使用与档案一致的专业 + 班号字段；
+12. 绘制、点击和方向导航消费同一份最终几何；
+13. 工作台只存在一个 `FocusArea`，不存在 `details + action_focus` 组合焦点；
+14. Tab 单向循环名册、档案和操作栏，Shift+Tab 不建立第二条导航路径；
+15. 名册渲染与分页使用同一个可见记录容量。

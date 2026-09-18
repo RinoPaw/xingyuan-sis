@@ -155,7 +155,7 @@ workspace/__init__.py       controller / 生命周期
    ├─ commands.py           当前工作台 Command 集合
    ├─ field_session.py      已有记录的局部字段会话
    ├─ forms.py              新建 / 删除 / 导入等完整事务表单
-   ├─ data.py               Catalog、数据快照、权限与关系
+   ├─ data.py               Catalog、数据快照、权限、关系与 TUI 语义字段
    ├─ presentation.py       record projection + display_value
    └─ view.py               工作台布局与 inspector 编排
        ├─ roster.py
@@ -168,7 +168,7 @@ workspace/__init__.py       controller / 生命周期
 
 `FieldSession` 与 `Form` 是两个不同概念：前者附着在现有档案的一个字段或原子字段组上；后者拥有一整个独立事务页面。已有记录编辑不会创建 `Form(mode="edit")`。
 
-`Catalog` 只保存数据、权限和关系，不拥有界面命令表。正常重绘不查询数据库，所有写操作最终通过 Service → Repository。
+`Catalog` 保存工作台需要的数据快照、权限、关系和语义字段映射，不拥有界面命令表。正常重绘不查询数据库，所有写操作最终通过 Service → Repository。
 
 ## 7. 一个档案，一套字段身份
 
@@ -178,18 +178,19 @@ workspace/__init__.py       controller / 生命周期
 field:<field_key>
 ```
 
-例如：
+学生档案的复合行是：
 
 ```text
-field:name
-field:student_no
-field:family · field:branch
-...
+物种  field:family          · field:branch
+班级  field:major_code      · field:class_number
+元素  field:primary_element · field:primary_affinity
 ```
 
-“可以聚焦”和“可以编辑”彼此独立。姓名、学号等只读字段仍属于空间几何；Enter 激活后由权限和字段定义决定是否允许创建 `FieldSession`。
+三行都由两个真实 target 构成，而不是把其中一行预先拼成字符串。左右键在行内移动，纵向导航由同一份最终几何自然得出。
 
-进入字段修改不会把 `field:class_code` 换成 `field:0`，也不会生成另一套编辑 target 图。选项只临时增加：
+“可以聚焦”和“可以编辑”彼此独立。姓名、学号、学院等只读字段仍属于空间几何；Enter 激活后由权限和字段定义决定是否允许创建 `FieldSession`。
+
+进入字段修改不会生成 `field:<index>` 或其他编辑专用 target 图。选项只临时增加：
 
 ```text
 option:0
@@ -199,7 +200,7 @@ option:1
 
 确认或取消后，字段身份从未发生变化。已有记录也不存在“编辑”Command；用户直接在档案字段上按 Enter 修改。
 
-## 8. 唯一展示管线
+## 8. 唯一展示与关系投影
 
 `presentation.py` 提供唯一字段展示管线：
 
@@ -215,9 +216,18 @@ display_value(...)
 档案内容
 ```
 
-格式化器不知道“浏览态 / 编辑态”。同一个值只有一种 label 和格式。修改入学年份不会改变班级、学院等无关字段的展示方式。
+格式化器不知道“浏览态 / 编辑态”。同一个值只有一种 label 和格式。
 
-学生 `family + branch` 是明确的原子复合字段组，可以共同进入 projection；其他字段不能被顺带复制进会话。
+学生有两组父子一致性约束：
+
+```text
+family → branch
+major_code → class_number
+```
+
+它们由同一个语义字段组机制处理：选择父项后再选择合法子项，已有记录最后原子提交一次。`primary_element` 与 `primary_affinity` 没有父子约束，所以独立提交，但仍使用相同的双 target 行结构。
+
+班级的持久化事实仍是 `class_id / class_code`。TUI 不把内部编码当作第三个可见字段；`Catalog` 负责在交互边界把 `major_code + class_number` 解析成真实班级。这样 Repository / Service 保持规范化数据模型，同时用户只面对一套班级语义。
 
 ## 9. 最终几何是唯一几何
 
@@ -237,7 +247,7 @@ final Line[]
 
 绘制、鼠标命中和方向键不得分别维护不同的“逻辑行”。窄窗口换行以后，导航看到的就是用户真正看到的行。
 
-`events.py` 不知道“学生物种”“元素亲和”等页面细节。学生二维复合行和普通实体单列的差异由 `Line` 几何自然表达。
+`events.py` 不知道“物种”“班级”“元素”等页面细节。学生二维复合行和普通实体单列的差异由 `Line` 几何自然表达。
 
 名册也由 `WorkspaceLayout.roster_capacity()` 给出实际可见记录数；列标题占用的行在这里统一扣除。渲染与 PageUp / PageDown 共用该容量，不能再各算一份。
 
@@ -266,12 +276,13 @@ field:<key>
 约束：
 
 - 自由文本 / 数字 / 日期确认后立即保存；
-- 枚举 / 外键确认选项后立即保存；
+- 枚举 / 关系字段确认选项后立即保存；
 - Esc 丢弃 FieldSession，不写数据库；
 - 不存在已有记录级“保存”按钮；
 - 不存在已有记录的 `form.position` 导航；
 - 当前字段位置、档案结构与 target 身份不因编辑发生变化；
-- `family + branch` 按一个原子 FieldSession 提交。
+- `family + branch` 和 `major_code + class_number` 分别按一个原子 FieldSession 提交；
+- 子字段 `branch`、`class_number` 也可以在当前父项约束下单独修改。
 
 ## 11. 完整事务 Form
 
@@ -285,11 +296,23 @@ field:<key>
 
 这些操作由 `forms.py + editor.py` 负责，可以拥有自己的字段顺序和显式保存 / 确认。它们不是档案的第二种状态。
 
+学生新建 Form 继续复用同一套学生语义字段，因此同样显示：
+
+```text
+族系 / 支系
+专业 / 班号
+主元素 / 亲和等级
+```
+
+而不是另造一个 `class_code` 选择器。提交时由 `Catalog` 将专业 + 班号转换为规范化的内部班级关联。
+
 ## 12. 数据库与数据
 
 `database.py::SCHEMA` 是当前 SQLite 结构的唯一声明。`initialize_database()` 只创建当前结构，不隐式修补历史 schema。
 
 学生出生资料支持 `YYYY-MM-DD`、`YYYY`、`--MM-DD` 和空值。完整生日存在时年龄实时派生；资料不足时可保存独立年龄。
+
+班级数据库仍保存稳定 `code` 和关系 ID；TUI 的“专业 + 班号”是交互语义，不要求反规范化数据库。
 
 当前项目没有已发布数据库版本兼容承诺。未来若需要迁移，应建立显式版本迁移，而不是把历史条件塞回初始化路径。
 
@@ -302,6 +325,9 @@ field:<key>
 - Tab 单向循环记录页的名册、档案和操作栏；
 - Shift+Tab 不存在第二条区域导航路径；
 - 所有档案字段使用稳定 `field:<key>`；
+- 物种、班级、元素三类复合行都使用两个独立 target；
+- `family → branch` 与 `major_code → class_number` 共用字段组机制；
+- 学生新建 Form 与档案使用同一套班级语义，不重新暴露 `class_code`；
 - 只读字段可聚焦但不可写；
 - Enter 从当前 field 创建局部 FieldSession，而非 Form；
 - FieldSession 只拥有当前字段或声明的复合组；
