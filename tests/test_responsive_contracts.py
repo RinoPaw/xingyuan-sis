@@ -12,6 +12,7 @@ from xingyuan_sis.tui import app, keys, portal, screen, workspace
 from xingyuan_sis.tui.workspace import view as workspace_view
 from xingyuan_sis.tui.workspace.data import Catalog
 
+from xingyuan_sis.tui.workspace import events as workspace_events
 
 class ResponsiveContractTests(unittest.TestCase):
     def setUp(self):
@@ -51,7 +52,7 @@ class ResponsiveContractTests(unittest.TestCase):
         state = workspace.Workspace('students')
         with patch.object(screen, '_terminal_size', return_value=os.terminal_size((76, 24))), \
              patch.object(screen, '_paint'), patch.object(keys, '_read_key', side_effect=['row:1', 'refresh']):
-            workspace._interact(state, self.catalog)
+            workspace_events.interact(state, self.catalog)
             self.assertTrue(state.details)
             frame = workspace_view.render(state, self.catalog)
             self.assertIn('档案', '\n'.join(frame.lines))
@@ -64,7 +65,7 @@ class ResponsiveContractTests(unittest.TestCase):
              patch.object(screen, '_paint') as paint, \
              patch.object(keys, '_read_key', side_effect=['right', 'end', 'select']):
             environment.pop('NO_COLOR', None)
-            event = workspace._interact(state, self.catalog)
+            event = workspace_events.interact(state, self.catalog)
         self.assertEqual(event[0], 'field')
         self.assertEqual(state.form.fields[event[1]].key, 'notes')
         focused = next(line for line in paint.call_args_list[-1].args[0] if '备注' in screen._ANSI_RE.sub('', line))
@@ -84,6 +85,7 @@ class ResponsiveContractTests(unittest.TestCase):
             frame = workspace_view.render(workspace.Workspace('students', selected=1), self.catalog)
         selected = next(r for r in frame.regions if r.action == 'row:1')
         self.assertIn(self.catalog.records['students'][1]['name'], frame.lines[selected.y - 1])
+        self.assertIn('▌', frame.lines[selected.y - 1])
         self.assertNotIn('\x1b', ''.join(frame.lines))
 
     def test_related_return_restores_identity_and_inspector_context_after_reordering(self):
@@ -91,7 +93,7 @@ class ResponsiveContractTests(unittest.TestCase):
         original = state.current(self.catalog).copy()
         key, related = self.catalog.related(state.key, original)
         state.visit(key, str(related[0]['id']), self.catalog)
-        self.catalog.service.update_student_by_no(original['student_no'], student_no='99999999')
+        self.catalog.service.delete_student_by_no(self.catalog.records['students'][0]['student_no'])
         self.catalog.refresh()
         state.restore(self.catalog)
         self.assertEqual(state.current(self.catalog)['id'], original['id'])

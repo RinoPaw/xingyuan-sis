@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from xingyuan_sis import basic_ui, terminal_ui
+from xingyuan_sis.auth import Identity
 from xingyuan_sis.tui import keys, screen
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.entry import main
@@ -79,6 +80,7 @@ class KeyboardAndTerminalTests(unittest.TestCase):
         for sequence, expected in ((b"[A", "up"), (b"OB", "down"),
                                    (b"[D", "left"), (b"OC", "right"),
                                    (b"[H", "home"), (b"[4~", "end"),
+                                   (b"[Z", "focus_prev"), (b"[5~", "page_up"), (b"[6~", "page_down"),
                                    (b"[3~", "other"), (b"", "back")):
             with self.subTest(sequence=sequence), patch("sys.stdin.fileno", return_value=10), \
                  patch("termios.tcgetattr", return_value=[1, 2, 3]), patch("tty.setcbreak") as cbreak, \
@@ -129,14 +131,14 @@ class InteractionTests(unittest.TestCase):
 
     def test_basic_menu_reports_invalid_choice_and_accepts_q(self) -> None:
         action = Mock()
-        with patch.object(basic_ui, "_clear"), patch("builtins.input", side_effect=["9", "1", "q"]), \
+        with patch.object(basic_ui, "read_session", return_value=Identity("Administrator", "admin")), patch.object(basic_ui, "_clear"), patch("builtins.input", side_effect=["9", "1", "q"]), \
              redirect_stdout(StringIO()) as output:
             basic_ui._menu("学生", [("1", "列表", action)])
         self.assertIn("没有这个选项", output.getvalue())
         action.assert_called_once()
 
     def test_basic_menu_input_end_exits_cleanly(self) -> None:
-        with patch.object(basic_ui, "_clear"), patch("builtins.input", side_effect=EOFError), \
+        with patch.object(basic_ui, "read_session", return_value=Identity("Administrator", "admin")), patch.object(basic_ui, "_clear"), patch("builtins.input", side_effect=EOFError), \
              redirect_stdout(StringIO()) as output:
             basic_ui.run()
         self.assertIn("已退出", output.getvalue())
@@ -148,7 +150,7 @@ class InteractionTests(unittest.TestCase):
             db = Path(directory) / "test.db"
             initialize_database(db)
             seed_demo(db)
-            with patch.object(basic_ui, "_clear"), \
+            with patch("xingyuan_sis.auth_cli.require_identity", return_value=Identity("Administrator", "admin")), patch.object(basic_ui, "_clear"), \
                  patch("builtins.input", side_effect=[target_name, ""]), \
                  redirect_stdout(StringIO()) as output:
                 terminal_ui.search_students(lambda args: basic_ui._command(db, args))

@@ -10,6 +10,7 @@ from xingyuan_sis.tui import keys, screen, workspace
 from xingyuan_sis.tui.workspace import student_inspector, view as workspace_view
 from xingyuan_sis.tui.workspace.data import Catalog
 
+from xingyuan_sis.tui.workspace import events as workspace_events
 
 class DetailFocusTests(unittest.TestCase):
     def setUp(self):
@@ -45,7 +46,7 @@ class DetailFocusTests(unittest.TestCase):
     def test_student_inspector_uses_current_archive_hierarchy(self):
         state = workspace.Workspace("students")
         row = state.current(self.catalog)
-        lines = student_inspector._lines(row, self.catalog)
+        lines = student_inspector.lines(row, self.catalog)
         plain = "\n".join(
             screen._ANSI_RE.sub("", "".join(text for text, _, _ in line))
             for line in lines
@@ -66,7 +67,7 @@ class DetailFocusTests(unittest.TestCase):
         with patch.object(keys, "_read_key", side_effect=["down", "back", "back", "back"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
-            workspace._interact(state, self.catalog)
+            workspace_events.interact(state, self.catalog)
         self.assertEqual(state.detail_selected, 1)
         self.assertEqual(state.selected, 0)
 
@@ -79,7 +80,7 @@ class DetailFocusTests(unittest.TestCase):
         ), patch.object(screen, "_paint"), patch.object(
             screen, "_terminal_size", return_value=os.terminal_size((120, 35))
         ):
-            workspace._interact(state, self.catalog)
+            workspace_events.interact(state, self.catalog)
 
         self.assertFalse(state.details)
         self.assertEqual(state.detail_selected, 1)

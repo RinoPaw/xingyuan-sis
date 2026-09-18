@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shlex
 import sys
 import time
 
@@ -39,6 +40,10 @@ def _portal_home(
 
     service = XingyuanService(db_path)
     stats = dict(service.stats())
+    announcements = [
+        f"{row['class_name']} · {row['title']}"
+        for row in service.list_announcements(identity.student_no or "" if identity.is_student else None)
+    ]
     display_name = identity.username
     if identity.is_student and identity.student_no:
         row = service.student_by_no(identity.student_no)
@@ -77,6 +82,7 @@ def _portal_home(
                 animate=animate,
                 database=Path(db_path).name if db_path else "xingyuan.db",
                 display_name=display_name,
+                announcements=announcements,
             )
             if frame.lines != previous_lines:
                 screen._paint(frame.lines, previous_lines)
@@ -159,44 +165,18 @@ def _workspace(db_path: Path | str | None, key: str) -> None:
     run_workspace(db_path, key)
 
 
-def _show_student_directory(db_path: Path | str | None) -> None:
-    from ..service import XingyuanService
-    from .viewer import show
-
-    rows = XingyuanService(db_path).list_students()
-    text = "\n".join(
-        f"{row['student_no']}  {row['name']}  {row['class_name'] or '未分班'}"
-        for row in rows
-    )
-    show(text, "教务 / 学生查询")
-
-
 def _show_profile(db_path: Path | str | None, identity: Identity) -> None:
-    from ..service import XingyuanService
     from .viewer import show
 
     if identity.is_admin:
-        text = "账号        Administrator\n身份        系统管理员"
+        show("账号        Administrator\n身份        系统管理员", "个人中心 / 个人数据")
     else:
-        row = XingyuanService(db_path).student_by_no(identity.student_no or "")
-        if row is None:
-            raise ValueError("当前学生档案不存在")
-        fields = (
-            ("学号", row["student_no"]),
-            ("姓名", row["name"]),
-            ("学院", row["department_name"]),
-            ("专业", row["major_name"]),
-            ("班级", row["class_name"]),
-            ("族系", row["family"]),
-            ("支系", row["branch"]),
-            ("状态", row["status"]),
-            ("联系方式", row["contact"]),
-            ("宿舍", row["dormitory"]),
+        from .workspace import run as run_workspace
+
+        run_workspace(
+            db_path, "students", identity=identity,
+            query="--no " + shlex.quote(identity.student_no or ""),
         )
-        text = "\n".join(
-            f"{label:<6}  {value if value is not None else '—'}" for label, value in fields
-        )
-    show(text, "个人中心 / 个人数据")
 
 
 def _change_password_screen(
@@ -216,7 +196,13 @@ def _execute_portal_action(
             raise ValueError("学生账户无权执行管理操作")
         _workspace(db_path, action.removeprefix("workspace:"))
     elif action == "student-directory":
-        _show_student_directory(db_path)
+        from .workspace import run as run_workspace
+
+        run_workspace(db_path, "students", identity=identity)
+    elif action == "announcements":
+        from .workspace import run as run_workspace
+
+        run_workspace(db_path, "announcements", identity=identity)
     elif action == "profile-data":
         _show_profile(db_path, identity)
     elif action == "profile-password":

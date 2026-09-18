@@ -40,6 +40,10 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
     if args.action == "import":
         result = service.import_students(args.path)
         print(f"✓ 已导入 {result.imported} 条")
+        if result.credentials:
+            print("首次登录必须修改密码；请交给对应学生：")
+            for student_no, password in result.credentials:
+                print(f"  {student_no}  初始密码：{password}")
         if result.errors:
             print(f"失败 {len(result.errors)} 条：", file=sys.stderr)
             for message in result.errors[:10]:

@@ -23,7 +23,7 @@ src/xingyuan_sis/
 ├── seed_data.py              # 演示数据
 │
 ├── cli/
-│   ├── __init__.py           # CLI 入口与统一错误处理
+│   ├── __init__.py           # 解析后命令的调度；认证与错误处理归 entry
 │   ├── parser.py             # argparse 命令树
 │   ├── dispatcher.py         # group → 领域 runner
 │   ├── common.py             # CLI 共享输入输出
@@ -31,6 +31,7 @@ src/xingyuan_sis/
 │   ├── academic.py
 │   ├── course.py
 │   ├── grade.py
+│   ├── notice.py             # 班级公告
 │   └── data.py
 │
 ├── basic_ui.py               # 终端能力不足时的数字菜单
@@ -59,9 +60,10 @@ src/xingyuan_sis/
         ├── data.py           # 集合定义、数据快照与关联
         ├── view.py           # 响应式工作台编排
         ├── roster.py         # 名册面板
-        ├── detail.py         # 非学生通用实体档案
-        ├── student_inspector.py # 学生档案唯一实现
-        ├── editor.py         # 非学生独立编辑器 / 确认面板
+        ├── inspector.py      # 共享字段、选项、换行、焦点与档案绘制
+        ├── detail.py         # 非学生实体的档案内容
+        ├── student_inspector.py # 学生档案信息层级
+        ├── editor.py         # 新建 / 文件路径 / 确认面板
         └── dashboard.py      # 数据概览
 ```
 
@@ -94,6 +96,8 @@ CLI 的唯一调用链为：
 entry → cli/parser + cli/<domain> → service → repository → SQLite
 ```
 
+基础菜单通过 `entry.main` 执行命令，不能绕过登录和权限检查；CLI 不再提供第二个 `main`。
+
 学院、专业、班级都是一级实体：`xy college`、`xy major`、`xy class`。新增 CLI 领域时，在 `cli/` 中增加对应 runner 并在 `dispatcher.py` 注册；不得复制业务实现。
 
 ## TUI 门户
@@ -118,6 +122,7 @@ tui/workspace/__init__        controller
    ├─ data ───────────────→ service → repository → SQLite
    └─ view
        ├─ roster
+       ├─ inspector
        ├─ detail
        ├─ student_inspector
        ├─ editor
@@ -126,7 +131,11 @@ tui/workspace/__init__        controller
 
 `workspace/__init__.py` 只管理生命周期：创建 Catalog 与 Workspace、接收事件结果、执行保存 / 刷新以及统一错误处理。`events.py` 只改变交互状态并返回控制事件；`forms.py` 管理草稿和写操作；`data.py` 持有一次读取的数据快照与 UI 所需关系；`view.py` 只编排布局。
 
-学生档案因为信息层级与原地编辑模型确实不同，拥有专用 `student_inspector.py`。学生的浏览、编辑、焦点目标与响应式布局都从这一份结构生成；`detail.py` 只处理其他实体。
+`student_inspector.py` 定义学生特有的“摘要 → 选课与成绩 → 个人信息”；`detail.py` 定义其他实体内容。二者生成相同的分段文本结构，由 `inspector.py` 统一处理字段值、选项展开、中文换行、点击区域、焦点和滚动。浏览与编辑消费同一份内容，表单方向键顺序直接从内容中的字段位置推导，不维护第二份字段布局。
+
+`Catalog` 持有身份、可用操作和数据快照。学生查询、个人档案和本班公告复用工作台，只读状态同时约束可见控件、事件处理与写操作。`Workspace` 保存当前记录和面板焦点，`Form` 保存草稿、字段 / 保存按钮焦点，`Location` 保存关联导航的返回位置。界面重绘不写数据库。
+
+`XingyuanService.register_student` 负责生成初始密码，并将档案和密码散列写入同一条 INSERT。CLI、TUI 和 CSV 导入均调用它。`csv_io.py` 只负责 CSV 解析、序列化和逐行结果汇总，通过传入的注册操作复用业务校验；不再保留第二套关系查询和 INSERT。初始密码仅通过操作结果交给管理员，不进入学生导出数据。
 
 ## 数据库
 
@@ -186,7 +195,7 @@ Repository 是 SQL 数据访问的唯一入口；service 使用业务名称 / �
 - portal 在宽 / 窄终端都保持可操作；
 - 首页动画、点击区域和底栏不破坏正文；
 - 名册选择只在越出可见区后推动视口；
-- 宽屏双栏使用 Tab / ← / → 切换焦点，另一栏保留当前记录上下文；
+- Tab / Shift+Tab 遍历名册、档案与工具栏，切换区域不改变当前记录；
 - 学生档案遵循“摘要 → 选课与成绩 → 个人信息”；
 - 文本输入中的普通字符不被全局快捷键吞掉，Esc 取消最内层操作；
 - CLI、CSV 与表单共享 schema 校验，非法输入失败时不改变原记录；

@@ -15,6 +15,7 @@ class Form:
     position: int = 0
     options: list[tuple[Any, str]] | None = None
     option_index: int = 0
+    focus_save: bool = False
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,7 @@ class Workspace:
     notice: str = ""
     form: Form | None = None
     report: list[str] = field(default_factory=list)
+    credentials: list[tuple[str, str]] = field(default_factory=list)
     history: list[Location] = field(default_factory=list)
 
     def rows(self, catalog: Catalog) -> list[dict[str, Any]]:

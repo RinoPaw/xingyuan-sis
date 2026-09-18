@@ -292,6 +292,7 @@ class Repository:
         contact: str | None = None,
         dormitory: str | None = None,
         notes: str | None = None,
+        password_hash: str | None = None,
     ) -> int:
         return self._execute(
             """
@@ -299,8 +300,8 @@ class Repository:
                 student_no, name, species_branch_id, gender, birth_date,
                 enrollment_year, class_id, status,
                 primary_element, primary_affinity,
-                contact, dormitory, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                contact, dormitory, notes, password_hash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 student_no.strip(), name.strip(), species_branch_id,
@@ -308,6 +309,7 @@ class Repository:
                 class_id, status.strip() or "在读",
                 _blank_to_none(primary_element), _blank_to_none(primary_affinity),
                 _blank_to_none(contact), _blank_to_none(dormitory), _blank_to_none(notes),
+                password_hash,
             ),
         )
 
@@ -332,6 +334,30 @@ class Repository:
 
     def delete_student(self, student_id: int) -> None:
         self._execute("DELETE FROM students WHERE id = ?", (student_id,))
+
+    def list_announcements(self, student_no: str | None = None) -> list[sqlite3.Row]:
+        return self._fetch_all(
+            """
+            SELECT a.id, a.title, a.body, a.class_id, a.created_at,
+                   c.code AS class_code, c.name AS class_name
+            FROM announcements AS a
+            JOIN classes AS c ON c.id = a.class_id
+            WHERE ? IS NULL OR a.class_id = (
+                SELECT class_id FROM students WHERE student_no = ?
+            )
+            ORDER BY a.created_at DESC, a.id DESC
+            """,
+            (student_no, student_no),
+        )
+
+    def add_announcement(self, title: str, body: str, class_id: int) -> int:
+        return self._execute(
+            "INSERT INTO announcements(title, body, class_id) VALUES (?, ?, ?)",
+            (title, body, class_id),
+        )
+
+    def delete_announcement(self, announcement_id: int) -> None:
+        self._execute("DELETE FROM announcements WHERE id = ?", (announcement_id,))
 
     # 课程
     def list_courses(self) -> list[sqlite3.Row]:

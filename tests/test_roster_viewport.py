@@ -10,6 +10,7 @@ from xingyuan_sis.tui import keys, screen, workspace
 from xingyuan_sis.tui.workspace import view as workspace_view
 from xingyuan_sis.tui.workspace.data import Catalog
 
+from xingyuan_sis.tui.workspace import events as workspace_events
 
 class RosterViewportTests(unittest.TestCase):
     def setUp(self):
@@ -31,7 +32,7 @@ class RosterViewportTests(unittest.TestCase):
         with patch.object(keys, "_read_key", side_effect=["up", "back", "back"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
-            workspace._interact(state, self.catalog)
+            workspace_events.interact(state, self.catalog)
 
         self.assertEqual(state.selected, 32)
         self.assertEqual(state.roster_scroll, 1)

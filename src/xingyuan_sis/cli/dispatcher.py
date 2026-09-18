@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 
 from ..service import XingyuanService
-from . import academic, course, data, grade, student
+from . import academic, course, data, grade, notice, student
 
 
 def run_group(service: XingyuanService, args: argparse.Namespace) -> int:
@@ -17,4 +17,6 @@ def run_group(service: XingyuanService, args: argparse.Namespace) -> int:
         return grade.run(service, args)
     if args.group == "data":
         return data.run(service, args)
+    if args.group == "notice":
+        return notice.run(service, args)
     return 2

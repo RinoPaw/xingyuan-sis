@@ -150,7 +150,7 @@ class PortalLayoutTests(unittest.TestCase):
         self.assertGreater(len(portal.secondary_items(admin, 1)), 1)
         self.assertEqual(
             [item.label for item in portal.secondary_items(student, 1)],
-            ["学生查询"],
+            ["学生查询", "班级公告"],
         )
         self.assertEqual(
             [item.label for item in portal.secondary_items(student, 2)],

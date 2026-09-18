@@ -48,7 +48,8 @@ SQLite
 | 概念 | 权威实现 |
 | --- | --- |
 | 登录后首页与一级/二级导航 | `tui/portal.py` + `tui/app.py::_portal_home` |
-| 学生档案结构与原地编辑 | `tui/workspace/student_inspector.py` |
+| 学生档案内容 | `tui/workspace/student_inspector.py` |
+| 档案原地编辑、焦点与绘制 | `tui/workspace/inspector.py` |
 | 其他实体档案 | `tui/workspace/detail.py` |
 | 工作台几何与可见区 | `tui/layout.py` |
 | 文本编辑缓冲区与视口 | `tui/text_edit.py::TextBuffer` |
@@ -118,7 +119,7 @@ app.run → app._portal_home → portal.frame
 
 ### 7.2 工作台
 
-通用工作台组件只表达所有实体真正共有的行为。学生档案因为信息层级和原地编辑模型确实不同，所以拥有专用 inspector；这属于真实差异，不是重复实现。
+通用工作台组件只表达所有实体真正共有的行为。学生档案的信息层级由专用内容模块表达；各实体共用字段、原地编辑与档案绘制，不得为某个实体复制一套编辑器或字段导航顺序。
 
 新增专用 inspector 前，应先证明通用模型无法自然表达该实体，而不是因为某个页面想换几行排版就复制一套 renderer。
 

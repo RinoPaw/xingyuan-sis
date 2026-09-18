@@ -80,7 +80,8 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
             screen._pad_cells(screen._clip_cells(safe(row.get(key)), size), size)
             for key, _, size in columns
         )
-        text = screen._pad_cells(screen._clip_cells("  " + text, width - 1), width - 1)
+        marker = ("▌ " if focused else "▏ ") if index == state.selected else "  "
+        text = screen._pad_cells(screen._clip_cells(marker + text, width - 1), width - 1)
         if index == state.selected:
             selected_style = (
                 screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
@@ -100,6 +101,8 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
         )
         if state.query or state.view:
             board.put(1, message_row + 2, "清除搜索或切换上方视图。", screen._TEXT_SECONDARY, width=width - 1)
+        elif catalog.read_only:
+            board.put(1, message_row + 2, "暂无可查询记录。", screen._TEXT_SECONDARY, width=width - 1)
         else:
             board.put(1, message_row + 2, "可使用上方“增加”建立第一条记录。", screen._TEXT_SECONDARY, width=width - 1)
             if state.key == "students":

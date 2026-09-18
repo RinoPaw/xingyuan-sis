@@ -5,6 +5,8 @@ from pathlib import Path
 import sys
 from typing import Callable
 
+from .auth import Identity, clear_session, read_session
+from .auth_cli import login
 from .terminal_ui import read_number, run_action, run_command, search_grades, search_students
 
 
@@ -53,7 +55,7 @@ def _menu(
             notice = "没有这个选项，请输入菜单中的编号。"
 
 
-def _students(db_path: Path | str | None) -> None:
+def _students(db_path: Path | str | None, *, manage: bool = True) -> None:
     def show() -> None:
         no = _read("学号")
         if no:
@@ -69,17 +71,24 @@ def _students(db_path: Path | str | None) -> None:
         if no:
             _command(db_path, ["stu", "rm", no])
 
-    _menu(
-        "学生",
-        [
-            ("1", "学生列表", lambda: _command(db_path, ["stu", "ls"])),
-            ("2", "查看学生", show),
+    items = [
+        ("1", "学生列表", lambda: _command(db_path, ["stu", "ls"])),
+        ("2", "查看学生", show),
+        ("6", "搜索学生", lambda: search_students(lambda argv: _command(db_path, argv))),
+    ]
+    if manage:
+        def reset_password() -> None:
+            no = _read("学号")
+            if no:
+                _command(db_path, ["stu", "reset-password", no])
+
+        items[2:2] = [
             ("3", "新建学生", lambda: _command(db_path, ["stu", "add"])),
             ("4", "编辑学生", edit),
             ("5", "删除学生", remove),
-            ("6", "搜索学生", lambda: search_students(lambda argv: _command(db_path, argv))),
-        ],
-    )
+        ]
+        items.append(("7", "重置登录密码", reset_password))
+    _menu("学生", items)
 
 
 def _academic_entity(db_path: Path | str | None, entity: str, title: str) -> None:
@@ -236,14 +245,69 @@ def _data(db_path: Path | str | None) -> None:
     )
 
 
+def _announcements(db_path: Path | str | None, *, manage: bool) -> None:
+    def show() -> None:
+        identifier = _read("公告编号")
+        if identifier:
+            _command(db_path, ["notice", "show", identifier])
+
+    def remove() -> None:
+        identifier = _read("公告编号")
+        if identifier:
+            _command(db_path, ["notice", "rm", identifier])
+
+    items = [("1", "公告列表", lambda: _command(db_path, ["notice", "ls"])),
+             ("2", "阅读公告", show)]
+    if manage:
+        items.extend((("3", "发布公告", lambda: _command(db_path, ["notice", "add"])),
+                      ("4", "删除公告", remove)))
+    _menu("班级公告", items)
+
+
+class _SignedOut(Exception):
+    """Return from nested basic menus to the login prompt."""
+
+
+def _sign_out() -> None:
+    clear_session()
+    raise _SignedOut
+
+
+def _profile(db_path: Path | str | None, identity: Identity) -> None:
+    items = [("1", "账户身份", lambda: _command(db_path, ["auth", "status"])),
+             ("2", "修改密码", lambda: _command(db_path, ["auth", "passwd"]))]
+    if identity.is_student:
+        items.insert(0, ("3", "个人数据", lambda: _command(db_path, ["stu", "show", identity.student_no])))
+    _menu("个人中心", items)
+
+
 def run(db_path: Path | str | None = None) -> None:
     try:
-        _menu("首页", [
-            ("1", "学生", lambda: _students(db_path)),
-            ("2", "教务", lambda: _academics(db_path)),
-            ("3", "课程", lambda: _courses(db_path)),
-            ("4", "成绩", lambda: _grades(db_path)),
-            ("5", "数据", lambda: _data(db_path)),
-        ], back_label="退出")
-    except EOFError:
+        while True:
+            identity = read_session(db_path)
+            if identity is None:
+                try:
+                    identity = login(db_path)
+                except ValueError as error:
+                    print(f"登录失败：{error}")
+                    continue
+            items = [("1", "学生", lambda identity=identity: _students(db_path, manage=identity.is_admin))]
+            if identity.is_admin:
+                items.extend((
+                    ("2", "教务", lambda: _academics(db_path)),
+                    ("3", "课程", lambda: _courses(db_path)),
+                    ("4", "成绩", lambda: _grades(db_path)),
+                    ("5", "数据", lambda: _data(db_path)),
+                ))
+            items.extend((
+                ("6", "班级公告", lambda identity=identity: _announcements(db_path, manage=identity.is_admin)),
+                ("7", "个人中心", lambda identity=identity: _profile(db_path, identity)),
+                ("9", "退出登录", _sign_out),
+            ))
+            try:
+                _menu("首页", items, back_label="退出")
+                return
+            except _SignedOut:
+                continue
+    except (EOFError, KeyboardInterrupt):
         print("\n已退出星原 SIS。")

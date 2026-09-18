@@ -3,8 +3,10 @@ from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
-from xingyuan_sis.cli import main as cli_main
+from xingyuan_sis.entry import main as cli_main
+from xingyuan_sis.auth import Identity
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import (
     CLASSES,
@@ -22,6 +24,9 @@ from xingyuan_sis.service import XingyuanService
 
 class SeedDataTests(unittest.TestCase):
     def setUp(self) -> None:
+        auth_patch = patch("xingyuan_sis.auth_cli.require_identity", return_value=Identity("Administrator", "admin"))
+        auth_patch.start()
+        self.addCleanup(auth_patch.stop)
         self.temp_dir = TemporaryDirectory()
         self.db_path = Path(self.temp_dir.name) / "seed.db"
         initialize_database(self.db_path)
@@ -75,13 +80,13 @@ class SeedDataTests(unittest.TestCase):
     def test_reset_rebuilds_demo_data(self) -> None:
         expected = STUDENTS[0]
         seed_demo(self.db_path)
-        self.service.update_student_by_no(str(expected[0]), name="临时名字")
+        self.service.update_student_by_no(str(expected[0]), status="休学")
 
         seed_demo(self.db_path, reset=True)
 
         self.assertEqual(
-            self.service.student_by_no(str(expected[0]))["name"],
-            expected[1],
+            self.service.student_by_no(str(expected[0]))["status"],
+            expected[8],
         )
         self.assertEqual(len(self.service.list_students()), len(STUDENTS))
 

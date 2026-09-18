@@ -15,6 +15,8 @@ from xingyuan_sis.tui.workspace.data import ACADEMICS, Catalog
 WORKSPACES = ("students", "departments", "majors", "classes", "courses", "grades", "data")
 RECORD_WORKSPACES = tuple(key for key in WORKSPACES if key != "data")
 
+from xingyuan_sis.tui.workspace import events as workspace_events
+from xingyuan_sis.tui.workspace import forms as workspace_forms
 
 class TuiRegressionAuditTests(unittest.TestCase):
     def setUp(self):
@@ -48,18 +50,18 @@ class TuiRegressionAuditTests(unittest.TestCase):
         for key in RECORD_WORKSPACES:
             with self.subTest(key=key, mode="edit"):
                 state = workspace.Workspace(key)
-                workspace._open_form(state, self.catalog, "edit")
+                workspace_forms.open_form(state, self.catalog, "edit")
                 self.assert_escape_footer(state)
 
             with self.subTest(key=key, mode="delete"):
                 state = workspace.Workspace(key)
-                workspace._open_form(state, self.catalog, "delete")
+                workspace_forms.open_form(state, self.catalog, "delete")
                 self.assert_escape_footer(state)
 
         for mode in ("import", "export", "seed"):
             with self.subTest(key="data", mode=mode):
                 state = workspace.Workspace("data")
-                workspace._open_form(state, self.catalog, mode)
+                workspace_forms.open_form(state, self.catalog, mode)
                 self.assert_escape_footer(state)
 
     def test_every_record_workspace_distinguishes_focused_and_context_selection(self):
@@ -123,13 +125,13 @@ class TuiRegressionAuditTests(unittest.TestCase):
             with self.subTest(key=key):
                 state = workspace.Workspace(key)
                 before = deepcopy(state.current(self.catalog))
-                workspace._open_form(state, self.catalog, "edit")
+                workspace_forms.open_form(state, self.catalog, "edit")
                 self.assertIsNotNone(state.form)
 
                 with patch.object(keys, "_read_key", side_effect=["back", "back", "back"]), \
                      patch.object(screen, "_paint"), \
                      patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
-                    self.assertIsNone(workspace._interact(state, self.catalog))
+                    self.assertIsNone(workspace_events.interact(state, self.catalog))
 
                 self.assertIsNone(state.form)
                 self.assertEqual(state.current(self.catalog), before)
@@ -138,12 +140,12 @@ class TuiRegressionAuditTests(unittest.TestCase):
         state = workspace.Workspace("students")
         before = deepcopy(state.current(self.catalog))
         count = len(self.catalog.records["students"])
-        workspace._open_form(state, self.catalog, "delete")
+        workspace_forms.open_form(state, self.catalog, "delete")
 
         with patch.object(keys, "_read_key", side_effect=["back", "back", "back"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
-            self.assertIsNone(workspace._interact(state, self.catalog))
+            self.assertIsNone(workspace_events.interact(state, self.catalog))
 
         self.assertEqual(len(self.catalog.records["students"]), count)
         self.assertEqual(state.current(self.catalog), before)
@@ -153,13 +155,13 @@ class TuiRegressionAuditTests(unittest.TestCase):
         with patch.object(keys, "_read_key", side_effect=["back", "back", "back"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
-            self.assertIsNone(workspace._interact(state, self.catalog))
+            self.assertIsNone(workspace_events.interact(state, self.catalog))
         self.assertFalse(state.details)
 
     def test_student_inspector_keeps_one_current_information_hierarchy(self):
         state = workspace.Workspace("students")
         row = state.current(self.catalog)
-        rendered = student_inspector._lines(row, self.catalog)
+        rendered = student_inspector.lines(row, self.catalog)
         plain = "\n".join(
             screen._ANSI_RE.sub("", "".join(text for text, _, _ in line))
             for line in rendered

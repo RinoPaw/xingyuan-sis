@@ -4,10 +4,11 @@ from pathlib import Path
 import sqlite3
 from typing import Any
 
+from .auth import generate_initial_password, hash_password
 from .csv_io import ImportResult, export_students_csv, import_students_csv
 from .reports import summary
 from .repository import Repository
-from .schema import validate_values
+from .schema import FIELDS, validate_values
 
 
 class XingyuanService:
@@ -248,6 +249,11 @@ class XingyuanService:
         self.repository.delete_species_branch(int(row["id"]))
 
     # ----- students -------------------------------------------------------
+    def register_student(self, **values: Any) -> tuple[int, str]:
+        """Create a student and login credentials in the same database insert."""
+        password = generate_initial_password()
+        return self.create_student(**values, initial_password=password), password
+
     def create_student(
         self,
         *,
@@ -265,6 +271,7 @@ class XingyuanService:
         contact: str | None = None,
         dormitory: str | None = None,
         notes: str | None = None,
+        initial_password: str | None = None,
     ) -> int:
         values = validate_values("students", {
             "student_no": student_no, "name": name, "family": family, "branch": branch,
@@ -283,11 +290,21 @@ class XingyuanService:
             class_id = int(row["id"])
         for field in ("family", "branch", "class_code"):
             values.pop(field)
-        return self.repository.add_student(species_branch_id=int(species["id"]), class_id=class_id, **values)
+        return self.repository.add_student(
+            species_branch_id=int(species["id"]), class_id=class_id,
+            password_hash=hash_password(initial_password) if initial_password is not None else None,
+            **values,
+        )
 
     def update_student_by_no(self, student_no: str, /, **values: Any) -> None:
         values = validate_values("students", values, partial=True)
         row = self._require(self.student_by_no(student_no), f"找不到学生：{student_no}")
+
+        for field in FIELDS["students"]:
+            if not field.editable and field.key in values:
+                if values[field.key] != row[field.key]:
+                    raise ValueError(f"{field.label}不能修改")
+                values.pop(field.key)
 
         if "family" in values or "branch" in values:
             family = str(values.pop("family", row["family"]))
@@ -314,6 +331,20 @@ class XingyuanService:
     def delete_student_by_no(self, student_no: str) -> None:
         row = self._require(self.student_by_no(student_no), f"找不到学生：{student_no}")
         self.repository.delete_student(int(row["id"]))
+
+    # ----- class announcements -------------------------------------------
+    def list_announcements(self, student_no: str | None = None) -> list[sqlite3.Row]:
+        return self.repository.list_announcements(student_no)
+
+    def create_announcement(self, *, title: str, body: str, class_code: str) -> int:
+        values = validate_values("announcements", {"title": title, "body": body, "class_code": class_code})
+        class_row = self._require(self.class_by_code(values["class_code"]), f"找不到班级：{class_code}")
+        return self.repository.add_announcement(values["title"], values["body"], int(class_row["id"]))
+
+    def delete_announcement(self, announcement_id: int) -> None:
+        if not any(row["id"] == announcement_id for row in self.list_announcements()):
+            raise ValueError(f"找不到公告：{announcement_id}")
+        self.repository.delete_announcement(announcement_id)
 
     # ----- courses --------------------------------------------------------
     def create_course(
@@ -418,7 +449,7 @@ class XingyuanService:
         return summary(self.db_path)
 
     def export_students(self, path: Path | str) -> int:
-        return export_students_csv(path, self.db_path)
+        return export_students_csv(path, self.list_students())
 
     def import_students(self, path: Path | str) -> ImportResult:
-        return import_students_csv(path, self.db_path)
+        return import_students_csv(path, self.register_student)

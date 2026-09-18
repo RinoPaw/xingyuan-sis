@@ -56,6 +56,8 @@ def panel_heading(text: str, focused: bool) -> str:
 
 
 def identity(key: str, row: dict[str, Any]) -> tuple[str, str]:
+    if key == "announcements":
+        return safe(row["title"]), f"{safe(row['class_name'])} · #{row['id']}"
     if key == "grades":
         return safe(row["student_name"]), f"{safe(row['course_name'])} · {safe(row['semester'])}"
     identifier = row.get("student_no", row.get("course_code", row.get("code")))

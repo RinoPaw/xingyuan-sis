@@ -31,9 +31,11 @@ _ADMIN_ACADEMIC = (
     MenuItem("课程", "workspace:courses"),
     MenuItem("成绩", "workspace:grades"),
     MenuItem("数据", "workspace:data"),
+    MenuItem("公告", "workspace:announcements"),
 )
 _STUDENT_ACADEMIC = (
     MenuItem("学生查询", "student-directory"),
+    MenuItem("班级公告", "announcements"),
 )
 _PROFILE = (
     MenuItem("个人数据", "profile-data"),

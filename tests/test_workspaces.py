@@ -12,6 +12,8 @@ from xingyuan_sis.tui import app, keys, screen, workspace
 from xingyuan_sis.tui.workspace import view as workspace_view
 from xingyuan_sis.tui.workspace.data import COLLECTIONS, Catalog
 
+from xingyuan_sis.tui.workspace import events as workspace_events
+from xingyuan_sis.tui.workspace import forms as workspace_forms
 
 class WorkspaceTests(unittest.TestCase):
     def setUp(self):
@@ -29,7 +31,7 @@ class WorkspaceTests(unittest.TestCase):
     def interact(self, state, events):
         with patch.object(keys, "_read_key", side_effect=events), patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
-            return workspace._interact(state, self.catalog)
+            return workspace_events.interact(state, self.catalog)
 
     def test_all_pages_fit_and_click_regions_match_visible_content(self):
         for collection in (*COLLECTIONS, "data"):
@@ -61,7 +63,7 @@ class WorkspaceTests(unittest.TestCase):
         right_wheel = keys.MouseScroll(detail_region.x, min(detail_region.y, 12), "down")
         with patch.object(keys, "_read_key", side_effect=[right_wheel, "back", "back"]), \
              patch.object(screen, "_paint") as paint, patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
-            workspace._interact(state, self.catalog)
+            workspace_events.interact(state, self.catalog)
         self.assertEqual(state.selected, 0)
         self.assertIn("2–", "".join(paint.call_args_list[1].args[0]))
         self.interact(state, [keys.MouseScroll(2, 12, "down"), "back", "back"])
@@ -74,7 +76,7 @@ class WorkspaceTests(unittest.TestCase):
         second_row = next(r for r in first.regions if r.action == "row:1")
         with patch.object(keys, "_read_key", side_effect=[keys.MouseClick(second_row.x, second_row.y), "back", "back"]), \
              patch.object(screen, "_paint") as paint, patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
-            workspace._interact(state, self.catalog)
+            workspace_events.interact(state, self.catalog)
         self.assertEqual(state.current(self.catalog)["name"], expected["name"])
         last_frame = paint.call_args_list[-1].args[0]
         profile_line = next(line for line in last_frame if expected["name"] in line)
@@ -99,7 +101,7 @@ class WorkspaceTests(unittest.TestCase):
         state.switch("students")
         expected = STUDENTS[0]
         with patch("builtins.input", return_value=str(expected[1])), patch.object(screen, "_paint"), redirect_stdout(StringIO()):
-            workspace._read_value(state, self.catalog, ("search", 0))
+            workspace_forms.read_value(state, self.catalog, ("search", 0))
         self.assertEqual(
             [row["student_no"] for row in state.rows(self.catalog)],
             [str(expected[0])],
@@ -108,26 +110,27 @@ class WorkspaceTests(unittest.TestCase):
     def test_edit_stages_values_and_cancel_does_not_write(self):
         state = workspace.Workspace("students")
         original = state.current(self.catalog).copy()
-        workspace._open_form(state, self.catalog, "edit")
-        with patch("builtins.input", return_value="暂存的名字"), patch.object(screen, "_paint"), redirect_stdout(StringIO()):
-            workspace._read_value(state, self.catalog, ("field", 1))
-        self.assertEqual(state.form.values["name"], "暂存的名字")
-        self.assertEqual(self.catalog.service.student_by_no(original["student_no"])["name"], original["name"])
+        workspace_forms.open_form(state, self.catalog, "edit")
+        index = next(i for i, field in enumerate(state.form.fields) if field.key == "contact")
+        with patch("builtins.input", return_value="暂存的联系方式"), patch.object(screen, "_paint"), redirect_stdout(StringIO()):
+            workspace_forms.read_value(state, self.catalog, ("field", index))
+        self.assertEqual(state.form.values["contact"], "暂存的联系方式")
+        self.assertEqual(self.catalog.service.student_by_no(original["student_no"])["contact"], original["contact"])
         self.interact(state, ["cancel", "back", "back"])
         self.assertIsNone(state.form)
-        self.assertEqual(self.catalog.service.student_by_no(original["student_no"])["name"], original["name"])
+        self.assertEqual(self.catalog.service.student_by_no(original["student_no"])["contact"], original["contact"])
 
-    def test_edit_selected_student_can_change_identifier_and_keeps_relationships(self):
+    def test_edit_selected_student_keeps_identity_and_relationships(self):
         state = workspace.Workspace("students", selected=9)
         original = state.current(self.catalog).copy()
-        workspace._open_form(state, self.catalog, "edit")
-        state.form.values.update(student_no="20990001", name="临时新档案")
-        workspace._apply_form(state, self.catalog)
-        self.assertIsNone(self.catalog.service.student_by_no(original["student_no"]))
-        changed = self.catalog.service.student_by_no("20990001")
-        self.assertEqual((changed["id"], changed["name"]), (original["id"], "临时新档案"))
+        workspace_forms.open_form(state, self.catalog, "edit")
+        state.form.values["status"] = "休学"
+        workspace_forms.apply_form(state, self.catalog)
+        changed = self.catalog.service.student_by_no(original["student_no"])
+        self.assertEqual((changed["id"], changed["name"]), (original["id"], original["name"]))
+        self.assertEqual(changed["status"], "休学")
         self.assertEqual(state.current(self.catalog)["id"], original["id"])
-        self.assertTrue(any(row["student_no"] == "20990001" for row in self.catalog.records["grades"]))
+        self.assertTrue(any(row["student_no"] == original["student_no"] for row in self.catalog.records["grades"]))
 
     def test_course_edit_renames_code_without_changing_enrollments(self):
         row = self.catalog.records["courses"][0]
@@ -139,10 +142,10 @@ class WorkspaceTests(unittest.TestCase):
     def test_zero_score_and_clearing_score_are_distinct(self):
         state = workspace.Workspace("grades", view=1)
         original = state.current(self.catalog).copy()
-        workspace._open_form(state, self.catalog, "edit")
+        workspace_forms.open_form(state, self.catalog, "edit")
         self.assertNotIn("student_no", [field.key for field in state.form.fields])
         state.form.values["score"] = 0
-        workspace._apply_form(state, self.catalog)
+        workspace_forms.apply_form(state, self.catalog)
         row = next(r for r in self.catalog.records["grades"] if r["id"] == original["id"])
         self.assertEqual(row["score"], 0)
         self.assertIn("不符合当前筛选", state.notice)
@@ -163,9 +166,9 @@ class WorkspaceTests(unittest.TestCase):
 
     def test_foreign_keys_are_picked_by_name_and_staged(self):
         state = workspace.Workspace("students", selected=9)
-        workspace._open_form(state, self.catalog, "edit")
-        state.form.position = 5
-        workspace._read_value(state, self.catalog, ("field", 5))
+        workspace_forms.open_form(state, self.catalog, "edit")
+        index = next(i for i, field in enumerate(state.form.fields) if field.key == "class_code")
+        workspace_forms.read_value(state, self.catalog, ("field", index))
         self.assertTrue(any("元素学" in label for _, label in state.form.options))
         self.interact(state, ["option:0", "save"])
         self.assertIsNone(state.form.values["class_code"])
@@ -173,25 +176,25 @@ class WorkspaceTests(unittest.TestCase):
 
     def test_create_and_remove_record_refresh_the_workspace(self):
         state = workspace.Workspace("departments")
-        workspace._open_form(state, self.catalog, "create")
+        workspace_forms.open_form(state, self.catalog, "create")
         state.form.values.update(code="NEW", name="新学院")
-        workspace._apply_form(state, self.catalog)
+        workspace_forms.apply_form(state, self.catalog)
         self.assertEqual(state.current(self.catalog)["code"], "NEW")
-        workspace._open_form(state, self.catalog, "delete")
+        workspace_forms.open_form(state, self.catalog, "delete")
         self.assertIsNotNone(self.catalog.service.department_by_code("NEW"))
         self.assertIn("确认删除 新学院", "".join(self.render(state).lines))
-        workspace._apply_form(state, self.catalog)
+        workspace_forms.apply_form(state, self.catalog)
         self.assertIsNone(self.catalog.service.department_by_code("NEW"))
 
     def test_form_scrolls_selected_field_into_view_after_resize(self):
         state = workspace.Workspace("students")
-        workspace._open_form(state, self.catalog, "edit")
-        state.form.position = 13
+        workspace_forms.open_form(state, self.catalog, "edit")
+        state.form.position = len(state.form.fields) - 1
         for size in ((120, 35), (80, 24), (40, 20), (30, 12)):
             with self.subTest(size=size):
                 frame = self.render(state, size)
                 self.assertIn("备注", "".join(frame.lines))
-                self.assertTrue(any(r.action == "field:13" for r in frame.regions))
+                self.assertTrue(any(r.action == f"field:{state.form.position}" for r in frame.regions))
                 self.assertTrue(any(r.action == "save" for r in frame.regions))
 
     def test_short_workspace_keeps_every_record_accessible(self):
@@ -199,7 +202,7 @@ class WorkspaceTests(unittest.TestCase):
         expected_name = self.catalog.records["students"][-1]["name"]
         with patch.object(keys, "_read_key", side_effect=["end", "back", "back"]), patch.object(screen, "_paint") as paint, \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((30, 12))):
-            workspace._interact(state, self.catalog)
+            workspace_events.interact(state, self.catalog)
         self.assertEqual(state.selected, len(self.catalog.records["students"]) - 1)
         self.assertIn(expected_name, "".join(paint.call_args_list[-1].args[0]))
 
@@ -239,7 +242,7 @@ class WorkspaceTests(unittest.TestCase):
         state = workspace.Workspace("students")
         with patch.object(keys, "_read_key", side_effect=["focus", "end", "back", "back", "back"]), \
              patch.object(screen, "_paint") as paint, patch.object(screen, "_terminal_size", return_value=os.terminal_size((30, 12))):
-            workspace._interact(state, self.catalog)
+            workspace_events.interact(state, self.catalog)
         self.assertTrue(any("备注" in "".join(call.args[0]) for call in paint.call_args_list))
         self.assertEqual(state.selected, 0)
 
@@ -258,18 +261,18 @@ class WorkspaceTests(unittest.TestCase):
             encoding="utf-8",
         )
         state = workspace.Workspace("data")
-        workspace._open_form(state, self.catalog, "import")
+        workspace_forms.open_form(state, self.catalog, "import")
         state.form.values["path"] = str(path)
-        workspace._apply_form(state, self.catalog)
+        workspace_forms.apply_form(state, self.catalog)
         self.assertIn("已导入 1", state.notice)
         self.assertTrue(state.report)
         self.assertEqual(len(self.catalog.records["students"]), len(STUDENTS) + 1)
 
     def test_seed_confirmation_never_resets_existing_data(self):
         state = workspace.Workspace("data")
-        workspace._open_form(state, self.catalog, "seed")
+        workspace_forms.open_form(state, self.catalog, "seed")
         with self.assertRaisesRegex(ValueError, "已有校园记录"):
-            workspace._apply_form(state, self.catalog)
+            workspace_forms.apply_form(state, self.catalog)
         self.assertEqual(self.catalog.service.stats()["students"], len(STUDENTS))
 
 

@@ -5,7 +5,8 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from xingyuan_sis.cli import main as cli_main
+from xingyuan_sis.entry import main as cli_main
+from xingyuan_sis.auth import Identity
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import CLASSES, COURSES, DEPARTMENTS, STUDENTS, seed_demo
 from xingyuan_sis.service import XingyuanService
@@ -13,6 +14,9 @@ from xingyuan_sis.service import XingyuanService
 
 class ServiceAndCliTests(unittest.TestCase):
     def setUp(self) -> None:
+        auth_patch = patch("xingyuan_sis.auth_cli.require_identity", return_value=Identity("Administrator", "admin"))
+        auth_patch.start()
+        self.addCleanup(auth_patch.stop)
         self.temp_dir = TemporaryDirectory()
         self.db_path = Path(self.temp_dir.name) / "test.db"
         initialize_database(self.db_path)

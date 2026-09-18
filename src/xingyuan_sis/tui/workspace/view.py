@@ -1,75 +1,79 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+from ...database import DB_PATH
 from .. import screen, theme
 from ..layout import WorkspaceLayout
-from ..view_common import Board, metric_pair, metric_summary, safe
+from ..view_common import Board, metric_summary, safe
 from .dashboard import render_dashboard
 from .data import ACADEMICS, COLLECTIONS, Catalog
-from .detail import (
-    detail_targets as _generic_detail_targets,
-    preferred_width as _generic_preferred_inspector_width,
-    render_inspector as _generic_inspector,
-)
+from .detail import lines as generic_lines
 from .editor import render_editor
+from .inspector import Line, action_targets, content_offset, render_inspector, wrap_lines
 from .roster import render_roster as _roster
 from .state import Workspace
-from .student_inspector import (
-    detail_targets as _student_detail_targets,
-    preferred_width as _student_preferred_inspector_width,
-    render_inspector as _student_inspector,
-)
+from .student_inspector import lines as student_lines
+
+
+def content_lines(key: str, row, catalog: Catalog, state: Workspace | None = None) -> list[Line]:
+    return student_lines(row, catalog, state) if key == "students" else generic_lines(key, row, catalog, state)
 
 
 def detail_targets(key: str, row, catalog: Catalog, width: int):
-    if key == "students":
-        targets = _student_detail_targets(row, catalog, width)
-        offset = WorkspaceLayout.measure().detail_offset
-        return [(line, action) for line, action in targets if line >= offset]
-    return _generic_detail_targets(key, row, catalog, width)
+    lines = content_lines(key, row, catalog)
+    offset = content_offset(lines, WorkspaceLayout.measure())
+    return [(line - offset, action) for line, action in action_targets(wrap_lines(lines, width))
+            if line >= offset]
 
 
-def _preferred_inspector_width(key: str, row, catalog: Catalog) -> int:
-    if key == "students":
-        return _student_preferred_inspector_width(row, catalog)
-    return _generic_preferred_inspector_width(key, row, catalog)
+def workspace_layout(state: Workspace, catalog: Catalog) -> WorkspaceLayout:
+    terminal = screen._terminal_size()
+    row = state.current(catalog) if state.key != "data" else None
+    preferred = None
+    if row is not None:
+        longest = max(screen._display_width("".join(text for text, _, _ in line))
+                      for line in content_lines(state.key, row, catalog))
+        preferred = min(42, max(28, longest + 2))
+    return WorkspaceLayout(max(1, terminal.columns - 1), max(4, terminal.lines), preferred)
 
 
 def _inspector(board: Board, state: Workspace, catalog: Catalog, x: int, width: int) -> None:
-    if state.key == "students":
-        _student_inspector(board, state, catalog, x, width)
-    else:
-        _generic_inspector(board, state, catalog, x, width)
+    row = state.current(catalog)
+    lines = content_lines(state.key, row, catalog, state) if row else []
+    render_inspector(board, state, catalog, x, width, lines)
 
 
 def _breadcrumb(state: Workspace) -> list[tuple[str, str]]:
     return [("首页", "navigate:"), (COLLECTIONS[state.key].title if state.key != "data" else "数据", "")]
 
 
-def _render_actions(board: Board, state: Workspace, x: int, y: int, width: int) -> None:
-    if state.key == "data":
-        actions = (("导入", "import"), ("导出", "export"), ("演示", "seed"))
-    else:
-        actions = (("搜索", "search"), ("增加", "create"), ("编辑", "edit"), ("删除", "delete"))
-    for index, (label, action) in enumerate(actions):
+def _render_actions(board: Board, state: Workspace, catalog: Catalog, x: int, y: int, width: int) -> None:
+    actions = catalog.actions(state.key)
+    state.action_selected = min(max(0, state.action_selected), len(actions) - 1)
+    first = 0
+    if state.action_focus:
+        while first < state.action_selected and sum(
+            screen._display_width(label) + 6 for label, _ in actions[first:state.action_selected + 1]
+        ) > width:
+            first += 1
+    for index in range(first, len(actions)):
+        label, action = actions[index]
         shown = f" {label} "
         needed = screen._display_width(shown) + 4
         if needed > width:
             break
-        x = board.button(x, y, shown, action, current=state.action_focus and state.action_selected == index)
+        x = board.button(x, y, shown, action, selected=state.action_focus and state.action_selected == index)
         width -= needed
 
 
 def render(state: Workspace, catalog: Catalog):
-    terminal = screen._terminal_size()
-    width, height = max(1, terminal.columns - 1), max(4, terminal.lines)
+    layout = workspace_layout(state, catalog)
+    width, height = layout.width, layout.height
     current = state.current(catalog) if state.key != "data" else None
     inline_edit = current is not None and state.form is not None and state.form.mode == "edit"
-    inspector_width = None
-    if current is not None and (state.form is None or inline_edit):
-        inspector_width = _preferred_inspector_width(state.key, current, catalog)
-    layout = WorkspaceLayout(width, height, inspector_width)
     board = Board(width, height)
-    board.put(0, 0, theme.topbar(width, database=catalog.service.db_path))
+    board.put(0, 0, theme.topbar(width, database=Path(catalog.service.db_path or DB_PATH).name))
 
     x = 0
     for index, (label, action) in enumerate(_breadcrumb(state)):
@@ -83,16 +87,13 @@ def render(state: Workspace, catalog: Catalog):
 
     if layout.compact:
         action_row = layout.action_row
-        _render_actions(board, state, 0, action_row, width)
-        content_row = action_row + 1
+        _render_actions(board, state, catalog, 0, action_row, width)
         if state.form and not inline_edit:
             render_editor(board, state, catalog, layout.panel_x, layout.panel_width)
-        elif current:
-            _inspector(board, state, catalog, layout.panel_x, layout.panel_width)
         elif state.key == "data":
-            for i, (label, key) in enumerate((("学生", "students"), ("课程", "courses"), ("选课", "grades"))):
-                if content_row + i < height - 2:
-                    board.put(0, content_row + i, metric_pair(label, len(catalog.records[key])), action=f"collection:{key}")
+            render_dashboard(board, state, catalog)
+        else:
+            _inspector(board, state, catalog, layout.panel_x, layout.panel_width)
 
         board.rows[height - 2] = []
         board.put(0, height - 2,
@@ -104,9 +105,9 @@ def render(state: Workspace, catalog: Catalog):
             noun = "校园概览"
             board.put(1, action_row, noun, screen._BOLD + screen._TEXT_ACCENT)
             action_x = max(15, screen._display_width(noun) + 5)
-            _render_actions(board, state, action_x, action_row, max(0, width - action_x - 1))
+            _render_actions(board, state, catalog, action_x, action_row, max(0, width - action_x - 1))
         else:
-            _render_actions(board, state, 1, action_row, max(0, width - 2))
+            _render_actions(board, state, catalog, 1, action_row, max(0, width - 2))
 
         x = 1
         if state.key == "data":
@@ -155,7 +156,7 @@ def render(state: Workspace, catalog: Catalog):
                   theme.notice(safe(state.notice), error=state.notice.startswith("未完成：")) if state.notice else "",
                   width=width)
 
-    board.rows[-1] = [(0, theme.footer(width))]
+    board.rows[-1] = [(0, theme.footer(width, switch_focus=True))]
     board.regions = [region for region in board.regions
                      if region.y < height and region.x + region.width - 1 <= width]
     return board.frame()

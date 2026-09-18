@@ -92,6 +92,12 @@ def _read_key_windows(timeout: float | None = None) -> str | None:
             return "home"
         if code == "O":
             return "end"
+        if code == "I":
+            return "page_up"
+        if code == "Q":
+            return "page_down"
+        if code == "\x0f":
+            return "focus_prev"
         return "other"
     return _plain_key(char)
 
@@ -175,6 +181,8 @@ def _read_key_posix(timeout: float | None = None) -> str | MouseClick | MouseScr
                 return "page_up"
             if sequence == b"[6~":
                 return "page_down"
+            if sequence == b"[Z":
+                return "focus_prev"
             if sequence in {b"[H", b"OH", b"[1~", b"[7~"}:
                 return "home"
             if sequence in {b"[F", b"OF", b"[4~", b"[8~"}:

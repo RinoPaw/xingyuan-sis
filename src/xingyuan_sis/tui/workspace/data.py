@@ -7,6 +7,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from ...auth import Identity
 from ...schema import FIELDS, Field
 from ...service import XingyuanService
 from ...student_filters import query_students
@@ -45,6 +46,9 @@ COLLECTIONS = {
         ("name", "班级", 22), ("code", "编号", 8), ("enrolled", "学生数", 8),
         ("major_name", "专业", 20),
     ), FIELDS["classes"]),
+    "announcements": Collection("公告", "班级公告", (
+        ("title", "标题", 24), ("class_name", "班级", 20), ("created_at", "发布时间", 20),
+    ), FIELDS["announcements"], ()),
 }
 ACADEMICS = ("departments", "majors", "classes")
 
@@ -58,9 +62,32 @@ _STUDENT_ENUMS: dict[str, tuple[str, ...]] = {
 
 
 class Catalog:
-    def __init__(self, db_path: Path | str | None):
+    def __init__(self, db_path: Path | str | None, identity: Identity | None = None):
         self.service = XingyuanService(db_path)
+        self.identity = identity
+        self.initial_password: str | None = None
         self.refresh()
+
+    @property
+    def read_only(self) -> bool:
+        return self.identity is not None and not self.identity.is_admin
+
+    def require_write(self) -> None:
+        if self.read_only:
+            raise ValueError("学生账户只能查询资料，个人信息仅允许修改自己的密码")
+
+    def can_browse(self, key: str) -> bool:
+        return not self.read_only or key in {"students", "grades", "announcements"}
+
+    def actions(self, key: str) -> tuple[tuple[str, str], ...]:
+        if self.read_only:
+            return (("搜索", "search"),)
+        if key == "data":
+            return (("导入", "import"), ("导出", "export"), ("演示", "seed"))
+        if key == "announcements":
+            return (("搜索", "search"), ("增加", "create"), ("删除", "delete"))
+        actions = (("搜索", "search"), ("增加", "create"), ("编辑", "edit"), ("删除", "delete"))
+        return actions + ((("重置密码", "reset-password"),) if key == "students" else ())
 
     def refresh(self) -> None:
         service = self.service
@@ -69,6 +96,9 @@ class Catalog:
             ("grades", service.list_enrollments), ("departments", service.list_departments),
             ("majors", service.list_majors), ("classes", service.list_classes),
         )}
+        self.records["announcements"] = [dict(row) for row in service.list_announcements(
+            self.identity.student_no or "" if self.read_only else None
+        )]
         self.species_families = [dict(row) for row in service.list_species_families()]
         self.species_branches = [dict(row) for row in service.list_species_branches()]
         departments = {row["id"]: row for row in self.records["departments"]}
@@ -110,21 +140,11 @@ class Catalog:
             str(value) for name, value in row.items() if name != "id" and not name.endswith("_id") and value is not None
         ).casefold() for term in terms)]
 
-    def metrics(self, key: str) -> list[tuple[str, str]]:
-        rows = self.records.get(key, [])
-        if key == "students":
-            return [("学生", str(len(rows))), ("在读", str(sum(r["status"] == "在读" for r in rows))),
-                    ("未分班", str(sum(r["class_id"] is None for r in rows)))]
-        if key == "courses":
-            return [("课程", str(len(rows))), ("学分合计", f"{sum(r['credits'] for r in rows):g}"),
-                    ("选课记录", str(len(self.records["grades"])))]
-        if key == "grades":
-            scores = [r["score"] for r in rows if r["score"] is not None]
-            return [("选课", str(len(rows))), ("待录入", str(len(rows) - len(scores))),
-                    ("平均分", f"{sum(scores) / len(scores):.1f}" if scores else "—")]
-        return [(COLLECTIONS[k].noun, str(len(self.records[k]))) for k in ACADEMICS]
-
     def related(self, key: str, row: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
+        if key == "announcements":
+            return "classes", [] if self.read_only else [
+                r for r in self.records["classes"] if r["id"] == row["class_id"]
+            ]
         if key in {"students", "courses"}:
             field = "student_id" if key == "students" else "course_id"
             return "grades", [r for r in self.records["grades"] if r[field] == row["id"]]
@@ -144,7 +164,9 @@ class Catalog:
         return values
 
     def fields(self, key: str, editing: bool = False) -> tuple[Field, ...]:
-        return tuple(f for f in COLLECTIONS[key].fields if not (key == "grades" and editing and f.key in {"student_no", "course_code"}))
+        if editing and (self.read_only or key == "announcements"):
+            return ()
+        return tuple(f for f in COLLECTIONS[key].fields if not editing or f.editable)
 
     def options(
         self,
@@ -156,7 +178,10 @@ class Catalog:
 
         if key == "students" and field_key in _STUDENT_ENUMS:
             options = [] if field.required else [(None, "未指定")]
-            return options + [(value, value) for value in _STUDENT_ENUMS[field_key]]
+            values = dict.fromkeys((*_STUDENT_ENUMS[field_key], *(
+                row[field_key] for row in self.records["students"] if row.get(field_key)
+            )))
+            return options + [(value, value) for value in values]
 
         if key == "students" and field_key == "family":
             return [(row["name"], row["name"]) for row in self.species_families]
@@ -172,6 +197,7 @@ class Catalog:
             ]
 
         target = {("students", "class_code"): ("classes", "code", "name"),
+                  ("announcements", "class_code"): ("classes", "code", "name"),
                   ("courses", "department_code"): ("departments", "code", "name"),
                   ("majors", "department_code"): ("departments", "code", "name"),
                   ("classes", "major_code"): ("majors", "code", "name"),
@@ -184,12 +210,17 @@ class Catalog:
         return options + [(r[identifier], f"{r[label]} · {r[identifier]}") for r in self.records[collection]]
 
     def save(self, key: str, values: dict[str, Any], original: dict[str, Any] | None = None) -> int:
+        self.require_write()
+        self.initial_password = None
         values = {field.key: field.parse(values.get(field.key)) for field in COLLECTIONS[key].fields}
         service = self.service
-        if original is None:
-            create = {"students": service.create_student, "courses": service.create_course,
+        if original is None and key == "students":
+            record_id, self.initial_password = service.register_student(**values)
+        elif original is None:
+            create = {"courses": service.create_course,
                       "grades": service.add_grade, "departments": service.create_department,
-                      "majors": service.create_major, "classes": service.create_class}[key]
+                      "majors": service.create_major, "classes": service.create_class,
+                      "announcements": service.create_announcement}[key]
             record_id = create(**values)
         else:
             record_id = original["id"]
@@ -200,6 +231,8 @@ class Catalog:
             elif key == "grades":
                 service.update_grade(student_no=original["student_no"], course_code=original["course_code"],
                                      semester=original["semester"], new_semester=values["semester"], score=values["score"])
+            elif key == "announcements":
+                raise ValueError("公告发布后不能编辑；可删除后重新发布")
             else:
                 values["new_code"] = values.pop("code")
                 update = {"departments": service.update_department_by_code,
@@ -209,8 +242,11 @@ class Catalog:
         return record_id
 
     def delete(self, key: str, row: dict[str, Any]) -> None:
+        self.require_write()
         service = self.service
-        if key == "grades":
+        if key == "announcements":
+            service.delete_announcement(row["id"])
+        elif key == "grades":
             service.delete_grade(**{name: row[name] for name in ("student_no", "course_code", "semester")})
         else:
             delete, identifier = {

@@ -44,7 +44,6 @@ def build_parser() -> argparse.ArgumentParser:
     _student_add_options(stu_add)
     stu_edit = stu_cmd.add_parser("edit", help="编辑学生")
     stu_edit.add_argument("student_no", help="当前学号")
-    stu_edit.add_argument("--new-no", dest="new_student_no", help="修改学号")
     _student_edit_options(stu_edit)
     stu_rm = stu_cmd.add_parser("rm", aliases=["remove", "delete"], help="删除学生")
     stu_rm.add_argument("student_no", help="学号")
@@ -55,6 +54,20 @@ def build_parser() -> argparse.ArgumentParser:
     _build_college_parser(groups)
     _build_major_parser(groups)
     _build_class_parser(groups)
+
+    notice = groups.add_parser("notice", help="班级公告")
+    notice_cmd = notice.add_subparsers(dest="action", required=True)
+    notice_ls = notice_cmd.add_parser("ls", aliases=["list"], help="列出可见公告")
+    notice_ls.add_argument("-s", "--search", default="")
+    notice_show = notice_cmd.add_parser("show", help="阅读公告")
+    notice_show.add_argument("id", type=int)
+    notice_add = notice_cmd.add_parser("add", help="发布班级公告")
+    notice_add.add_argument("--title")
+    notice_add.add_argument("--class", dest="class_code")
+    notice_add.add_argument("--body")
+    notice_rm = notice_cmd.add_parser("rm", aliases=["remove", "delete"], help="删除公告")
+    notice_rm.add_argument("id", type=int)
+    notice_rm.add_argument("-y", "--yes", action="store_true")
 
     course = groups.add_parser("course", aliases=["co"], help="课程")
     course_cmd = course.add_subparsers(dest="action", required=True)
@@ -140,7 +153,6 @@ def _student_add_options(parser: argparse.ArgumentParser) -> None:
 
 
 def _student_edit_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--name")
     parser.add_argument("--family")
     parser.add_argument("--branch")
     parser.add_argument("--year", dest="enrollment_year", type=int)

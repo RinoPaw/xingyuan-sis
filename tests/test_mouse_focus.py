@@ -10,6 +10,7 @@ from xingyuan_sis.tui import keys, screen, workspace
 from xingyuan_sis.tui.workspace import view as workspace_view
 from xingyuan_sis.tui.workspace.data import Catalog
 
+from xingyuan_sis.tui.workspace import events as workspace_events
 
 class MouseFocusTests(unittest.TestCase):
     def setUp(self):
@@ -35,7 +36,7 @@ class MouseFocusTests(unittest.TestCase):
         ), patch.object(screen, "_paint"), patch.object(
             screen, "_terminal_size", return_value=size
         ):
-            self.assertIsNone(workspace._interact(state, self.catalog))
+            self.assertIsNone(workspace_events.interact(state, self.catalog))
 
         self.assertFalse(state.details)
         self.assertEqual(state.selected, 0)
@@ -52,7 +53,7 @@ class MouseFocusTests(unittest.TestCase):
             screen, "_terminal_size", return_value=os.terminal_size((120, 24))
         ):
             with self.assertRaises(StopIteration):
-                workspace._interact(state, self.catalog)
+                workspace_events.interact(state, self.catalog)
 
         self.assertTrue(state.details)
         self.assertEqual(state.selected, 1)

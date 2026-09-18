@@ -4,8 +4,10 @@ from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
-from xingyuan_sis.cli import main as cli_main
+from xingyuan_sis.entry import main as cli_main
+from xingyuan_sis.auth import Identity
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.service import XingyuanService
@@ -14,6 +16,9 @@ from xingyuan_sis.tui.workspace.data import Catalog
 
 class UnifiedContractTests(unittest.TestCase):
     def setUp(self):
+        auth_patch = patch("xingyuan_sis.auth_cli.require_identity", return_value=Identity("Administrator", "admin"))
+        auth_patch.start()
+        self.addCleanup(auth_patch.stop)
         temp = TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.db = Path(temp.name) / 'test.db'
@@ -50,9 +55,9 @@ class UnifiedContractTests(unittest.TestCase):
 
     def test_student_edits_normalize_without_changing_other_fields(self):
         row = self.service.list_students()[0]
-        self.service.update_student_by_no(row['student_no'], name='  新名字  ', notes='  ')
+        self.service.update_student_by_no(row['student_no'], contact='  新联系方式  ', notes='  ')
         updated = self.service.student_by_no(row['student_no'])
-        self.assertEqual(updated['name'], '新名字')
+        self.assertEqual(updated['contact'], '新联系方式')
         self.assertIsNone(updated['notes'])
         for key in ('id', 'class_id', 'species_branch_id', 'enrollment_year'):
             self.assertEqual(updated[key], row[key])
@@ -71,15 +76,15 @@ class UnifiedContractTests(unittest.TestCase):
                     catalog.save('students', values, catalog.records['students'][0])
         path = self.db.with_suffix('.csv')
         path.write_text('student_no,name,family,branch,enrollment_year,birth_date\n'
-                        f"NEW1,坏日期,{row['family']},{row['branch']},2026,2007-02-30\n"
-                        f"NEW2,好日期,{row['family']},{row['branch']},2026,2008-02-29\n",
+                        f"00991001,坏日期,{row['family']},{row['branch']},2026,2007-02-30\n"
+                        f"00991002,好日期,{row['family']},{row['branch']},2026,2008-02-29\n",
                         encoding='utf-8')
         result = self.service.import_students(path)
         self.assertEqual(result.imported, 1)
         self.assertEqual(len(result.errors), 1)
         self.assertIn('第 2 行', result.errors[0])
-        self.assertIsNone(self.service.student_by_no('NEW1'))
-        self.assertEqual(self.service.student_by_no('NEW2')['birth_date'], '2008-02-29')
+        self.assertIsNone(self.service.student_by_no('00991001'))
+        self.assertEqual(self.service.student_by_no('00991002')['birth_date'], '2008-02-29')
 
     def test_empty_academic_names_and_semesters_are_rejected(self):
         with self.assertRaises(ValueError):

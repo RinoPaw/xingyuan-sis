@@ -31,31 +31,31 @@ class StudentEditNavigationTests(unittest.TestCase):
 
     def test_species_navigation_follows_visual_geometry(self):
         self._focus("family")
-        workspace_forms.move_form_position(self.state, "up")
-        self.assertEqual(self._focused_key(), "student_no")
+        workspace_forms.move_form_position(self.state, "up", self.catalog)
+        self.assertEqual(self._focused_key(), "family")
 
         self._focus("family")
-        workspace_forms.move_form_position(self.state, "right")
+        workspace_forms.move_form_position(self.state, "right", self.catalog)
         self.assertEqual(self._focused_key(), "branch")
 
-        workspace_forms.move_form_position(self.state, "left")
+        workspace_forms.move_form_position(self.state, "left", self.catalog)
         self.assertEqual(self._focused_key(), "family")
 
     def test_element_and_affinity_share_one_navigation_row(self):
         self._focus("primary_element")
-        workspace_forms.move_form_position(self.state, "right")
+        workspace_forms.move_form_position(self.state, "right", self.catalog)
         self.assertEqual(self._focused_key(), "primary_affinity")
 
-        workspace_forms.move_form_position(self.state, "left")
+        workspace_forms.move_form_position(self.state, "left", self.catalog)
         self.assertEqual(self._focused_key(), "primary_element")
 
         self._focus("status")
-        workspace_forms.move_form_position(self.state, "down")
+        workspace_forms.move_form_position(self.state, "down", self.catalog)
         self.assertEqual(self._focused_key(), "primary_element")
 
     def test_render_groups_element_with_affinity_not_status(self):
         row = self.state.current(self.catalog)
-        lines = student_inspector._lines(row, self.catalog, self.state)
+        lines = student_inspector.lines(row, self.catalog, self.state)
         actions = [[action for _, _, action in line if action.startswith("field:")] for line in lines]
         index_by_key = {
             field.key: index for index, field in enumerate(self.state.form.fields)
@@ -68,15 +68,22 @@ class StudentEditNavigationTests(unittest.TestCase):
         self.assertIn(affinity_action, element_line)
         self.assertNotIn(status_action, element_line)
 
-    def test_name_is_blue_only_when_focused(self):
+    def test_identity_is_read_only_while_editing(self):
         row = self.state.current(self.catalog)
-        self._focus("student_no")
-        lines = student_inspector._lines(row, self.catalog, self.state)
+        self._focus("family")
+        lines = student_inspector.lines(row, self.catalog, self.state)
         self.assertEqual(lines[0][0][1], screen._BOLD + screen._TEXT_PRIMARY)
+        self.assertFalse(lines[0][0][2])
+        self.assertFalse(lines[1][1][2])
+        self.assertNotIn("name", [field.key for field in self.state.form.fields])
+        self.assertNotIn("student_no", [field.key for field in self.state.form.fields])
 
-        self._focus("name")
-        lines = student_inspector._lines(row, self.catalog, self.state)
-        self.assertEqual(lines[0][0][1], screen._BOLD + screen._TEXT_ACCENT)
+    def test_down_from_species_reaches_gender_before_enrollment(self):
+        self._focus("family")
+        workspace_forms.move_form_position(self.state, "down", self.catalog)
+        self.assertEqual(self._focused_key(), "gender")
+        workspace_forms.move_form_position(self.state, "down", self.catalog)
+        self.assertEqual(self._focused_key(), "enrollment_year")
 
 
 if __name__ == "__main__":

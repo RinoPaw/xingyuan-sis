@@ -24,7 +24,7 @@ class WorkspaceInlineEditTests(unittest.TestCase):
 
     def test_student_fields_with_finite_values_are_options(self):
         state = workspace.Workspace("students")
-        workspace._open_form(state, self.catalog, "edit")
+        workspace_forms.open_form(state, self.catalog, "edit")
         values = state.form.values
 
         expected = {
@@ -69,7 +69,7 @@ class WorkspaceInlineEditTests(unittest.TestCase):
 
     def test_edit_form_stays_inside_the_same_record_inspector(self):
         state = workspace.Workspace("students")
-        workspace._open_form(state, self.catalog, "edit")
+        workspace_forms.open_form(state, self.catalog, "edit")
         row = state.current(self.catalog)
 
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((140, 35))), \
@@ -101,18 +101,18 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         self.assertTrue(any(region.action == "field:1" for region in frame.regions))
         self.assertTrue(any(region.action == "save" for region in frame.regions))
 
-    def test_student_edit_starts_on_name_without_reordering_schema_fields(self):
+    def test_student_edit_starts_on_first_editable_field(self):
         state = workspace.Workspace("students")
-        workspace._open_form(state, self.catalog, "edit")
-        self.assertEqual(state.form.fields[0].key, "student_no")
-        self.assertEqual(state.form.fields[1].key, "name")
-        self.assertEqual(state.form.position, 1)
+        workspace_forms.open_form(state, self.catalog, "edit")
+        self.assertEqual(state.form.fields[0].key, "family")
+        self.assertEqual(state.form.position, 0)
+        self.assertFalse({"student_no", "name"} & {field.key for field in state.form.fields})
 
     def test_enum_picker_expands_inside_the_inspector(self):
         state = workspace.Workspace("students")
-        workspace._open_form(state, self.catalog, "edit")
+        workspace_forms.open_form(state, self.catalog, "edit")
         index = next(i for i, field in enumerate(state.form.fields) if field.key == "status")
-        workspace._read_value(state, self.catalog, ("field", index))
+        workspace_forms.read_value(state, self.catalog, ("field", index))
 
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((140, 35))), \
              patch.object(workspace_view, "render_editor") as detached_editor:
@@ -124,31 +124,31 @@ class WorkspaceInlineEditTests(unittest.TestCase):
 
     def test_freeform_edit_uses_the_field_row_instead_of_bottom_prompt(self):
         state = workspace.Workspace("students")
-        workspace._open_form(state, self.catalog, "edit")
-        index = next(i for i, field in enumerate(state.form.fields) if field.key == "name")
-        original = state.form.values["name"]
+        workspace_forms.open_form(state, self.catalog, "edit")
+        index = next(i for i, field in enumerate(state.form.fields) if field.key == "contact")
+        original = state.form.values["contact"]
 
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
              patch.object(screen, "_paint"), \
-             patch.object(workspace_forms, "read_inline_input", return_value="原地新名字") as inline, \
+             patch.object(workspace_forms, "read_inline_input", return_value="原地联系方式") as inline, \
              patch.object(workspace_forms, "read_input") as bottom:
-            workspace._read_value(state, self.catalog, ("field", index))
+            workspace_forms.read_value(state, self.catalog, ("field", index))
 
         bottom.assert_not_called()
-        self.assertEqual(state.form.values["name"], "原地新名字")
-        self.assertEqual(inline.call_args.kwargs["initial_value"], original)
+        self.assertEqual(state.form.values["contact"], "原地联系方式")
+        self.assertEqual(inline.call_args.kwargs["initial_value"], original or "")
         self.assertGreater(inline.call_args.kwargs["row"], 0)
         self.assertGreater(inline.call_args.kwargs["column"], 0)
         self.assertGreater(inline.call_args.kwargs["width"], 0)
 
     def test_enum_edit_opens_picker_without_text_input(self):
         state = workspace.Workspace("students")
-        workspace._open_form(state, self.catalog, "edit")
+        workspace_forms.open_form(state, self.catalog, "edit")
         index = next(i for i, field in enumerate(state.form.fields) if field.key == "status")
 
         with patch.object(workspace_forms, "read_inline_input") as inline, \
              patch.object(workspace_forms, "read_input") as bottom:
-            workspace._read_value(state, self.catalog, ("field", index))
+            workspace_forms.read_value(state, self.catalog, ("field", index))
 
         inline.assert_not_called()
         bottom.assert_not_called()

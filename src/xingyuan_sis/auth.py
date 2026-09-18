@@ -148,6 +148,8 @@ def change_password(
         config = _admin_config()
         if config is None:
             raise ValueError("管理员尚未初始化")
+        if verify_password(password, config["password_hash"]):
+            raise ValueError("新密码不能与当前密码相同")
         config["password_hash"] = encoded
         _write_json(admin_path(), config)
         return Identity(ADMIN_USERNAME, "admin")
@@ -155,6 +157,11 @@ def change_password(
     if identity.student_no is None:
         raise ValueError("学生身份缺少学号")
     with connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT password_hash FROM students WHERE student_no = ?", (identity.student_no,)
+        ).fetchone()
+        if row is not None and verify_password(password, row["password_hash"]):
+            raise ValueError("新密码不能与当前密码相同")
         cursor = connection.execute(
             """
             UPDATE students

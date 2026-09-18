@@ -447,14 +447,14 @@ def _has_business_data(connection) -> bool:
 
 def _clear_business_data(connection) -> None:
     for table in (
-        "enrollments", "students", "species_branches", "species_families",
+        "announcements", "enrollments", "students", "species_branches", "species_families",
         "classes", "majors", "courses", "departments",
     ):
         connection.execute(f"DELETE FROM {table}")
     connection.execute(
-        "DELETE FROM sqlite_sequence WHERE name IN (?, ?, ?, ?, ?, ?, ?, ?)",
+        "DELETE FROM sqlite_sequence WHERE name IN (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             "departments", "majors", "classes", "species_families",
-            "species_branches", "students", "courses", "enrollments",
+            "species_branches", "students", "courses", "enrollments", "announcements",
         ),
     )

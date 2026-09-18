@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import sqlite3
-import sys
-from typing import Sequence
 
 from .common import print_table
 from .dispatcher import run_group
@@ -12,7 +9,7 @@ from ..database import initialize_database
 from ..service import XingyuanService
 
 
-__all__ = ["build_parser", "main", "print_table", "run"]
+__all__ = ["build_parser", "print_table", "run"]
 
 
 def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
@@ -30,19 +27,3 @@ def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
 
     service = XingyuanService(args.db)
     return run_group(service, args)
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    try:
-        return run(args, parser)
-    except KeyboardInterrupt:
-        print("\n已取消。", file=sys.stderr)
-        return 130
-    except EOFError:
-        print("\n输入已结束，操作已取消。", file=sys.stderr)
-        return 1
-    except (ValueError, sqlite3.Error, OSError) as error:
-        print(f"操作失败：{error}", file=sys.stderr)
-        return 1

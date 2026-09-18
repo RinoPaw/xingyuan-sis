@@ -151,11 +151,10 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
             optional["contact"] = prompt("联系方式")
             optional["dormitory"] = prompt("宿舍")
             optional["notes"] = prompt("备注")
-        service.create_student(
+        _, initial_password = service.register_student(
             student_no=str(student_no), name=str(name), family=str(family), branch=str(branch),
             enrollment_year=int(year), **optional,
         )
-        initial_password = reset_student_password(service.db_path, str(student_no))
         print(f"✓ 已创建 {name} ({student_no})")
         print(f"初始密码：{initial_password}")
         print("首次登录必须修改密码")
@@ -173,8 +172,6 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
         row = _student(service, args.student_no)
         values: dict[str, Any] = {}
         mapping = {
-            "student_no": args.new_student_no,
-            "name": args.name,
             "family": args.family,
             "branch": args.branch,
             "enrollment_year": args.enrollment_year,
@@ -195,8 +192,6 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
 
         if not values:
             fields = (
-                ("student_no", "学号", row["student_no"], False),
-                ("name", "姓名", row["name"], False),
                 ("family", "族系", row["family"], False),
                 ("branch", "支系", row["branch"], False),
                 ("enrollment_year", "入学年份", row["enrollment_year"], False),

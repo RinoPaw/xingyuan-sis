@@ -1,12 +1,16 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
+import os
 
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import screen
 from xingyuan_sis.tui.layout import WorkspaceLayout
 from xingyuan_sis.tui.workspace import student_inspector
+from xingyuan_sis.tui.workspace.state import Workspace
+from xingyuan_sis.tui.workspace.view import workspace_layout
 from xingyuan_sis.tui.workspace.data import Catalog
 
 
@@ -36,14 +40,14 @@ class WorkspaceLayoutDensityTests(unittest.TestCase):
         self.assertEqual(layout.panel_width, 36)
 
     def test_student_inspector_width_tracks_actual_content(self):
-        row = self.catalog.records["students"][0]
-        width = student_inspector.preferred_width(row, self.catalog)
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((160, 35))):
+            width = workspace_layout(Workspace("students"), self.catalog).inspector_width
         self.assertGreaterEqual(width, 28)
         self.assertLessEqual(width, 42)
 
     def test_student_inspector_summary_matches_archive_identity(self):
         row = self.catalog.records["students"][0]
-        rendered = student_inspector._lines(row, self.catalog)
+        rendered = student_inspector.lines(row, self.catalog)
         plain = "\n".join(
             screen._ANSI_RE.sub("", "".join(text for text, _, _ in line))
             for line in rendered

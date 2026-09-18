@@ -40,10 +40,11 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         "import": "导入学生 CSV",
         "export": "导出学生 CSV",
         "seed": "建立演示校园",
+        "reset-password": "重置学生密码",
     }
     board.put(x, heading_row, titles[form.mode], screen._BOLD + screen._TEXT_ACCENT, width=width)
 
-    if form.mode in {"delete", "seed"}:
+    if form.mode in {"delete", "seed", "reset-password"}:
         messages: list[tuple[str, str]] = [
             ("将写入一组完整的演示数据。", screen._TEXT_PRIMARY),
             ("仅支持空数据库，已有记录会保留。", screen._TEXT_SECONDARY),
@@ -58,12 +59,31 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
             if state.key in {"students", "courses"}:
                 _, related = catalog.related(state.key, form.original)
                 messages.append((f"同时移除 {len(related)} 条关联选课。", screen._TEXT_PRIMARY))
-        for index, (message, style) in enumerate(messages):
-            board.put(x, content_row + 1 + index * 2, message, style, width=width)
+            elif state.key == "classes":
+                _, students = catalog.related(state.key, form.original)
+                notices = sum(row["class_id"] == form.original["id"] for row in catalog.records["announcements"])
+                messages[2:] = [
+                    (f"! {len(students)} 名学生将变为未分班。", screen._TEXT_DANGER),
+                    (f"删除 {notices} 条班级公告，无法撤销。", screen._TEXT_DANGER),
+                ]
+        elif form.mode == "reset-password":
+            title, identifier = identity(state.key, form.original)
+            messages = [
+                (f"重置 {title} 的密码？", screen._TEXT_PRIMARY),
+                (identifier, screen._TEXT_SECONDARY),
+                ("旧密码将失效，下次登录须改密。", screen._TEXT_SECONDARY),
+            ]
+        capacity = max(1, board.height - 3 - content_row)
+        spacing = 2 if capacity >= len(messages) * 2 else 1
+        for index, (message, style) in enumerate(messages[:capacity]):
+            y = content_row + index * spacing
+            if y < board.height - 3:
+                board.put(x, y, message, style, width=width)
     else:
-        board.put(x, content_row, "* 必填  ·  更改暂存，保存后生效", screen._TEXT_SECONDARY, width=width)
-        field_row = content_row + 2
-        capacity = max(1, board.height - field_row - 4)
+        if not layout.compact:
+            board.put(x, content_row, "* 必填  ·  更改暂存，保存后生效", screen._TEXT_SECONDARY, width=width)
+        field_row = content_row if layout.compact else content_row + 2
+        capacity = max(1, board.height - field_row - (3 if layout.compact else 4))
         first = min(max(0, form.position - capacity + 1), max(0, len(form.fields) - capacity))
         for i, field in enumerate(form.fields[first:first + capacity], start=first):
             value = safe(form.values.get(field.key))
@@ -73,7 +93,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
                     value = next((label for key, label in options if key == form.values.get(field.key)), value)
             label_width = min(12, max(4, width // 3))
             label = screen._pad_cells(screen._clip_cells(field.label + ("*" if field.required else ""), label_width), label_width)
-            if i == form.position:
+            if i == form.position and not form.focus_save:
                 text = screen._pad_cells(screen._clip_cells(f"{label}  {value}", width), width)
                 board.put(
                     x, field_row + i - first, text,
@@ -87,14 +107,14 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
                     + screen._ansi(value, screen._TEXT_PRIMARY)
                 )
                 board.put(x, field_row + i - first, text, action=f"field:{i}", width=width)
-        if len(form.fields) > capacity:
+        if len(form.fields) > capacity and not layout.compact:
             board.put(
                 x, board.height - 4,
                 f"字段 {form.position + 1}/{len(form.fields)}  ·  ↑↓ 切换",
                 screen._TEXT_SECONDARY, width=width,
             )
 
-    save_label = " 保存 " if form.mode in {"create", "edit"} else " 确认 "
-    next_x = board.button(x, board.height - 3, save_label, "save")
+    save_label = "s 保存" if form.fields else "Enter 确认"
+    next_x = board.button(x, board.height - 3, save_label, "save", selected=form.focus_save or not form.fields)
     if next_x < x + width:
         board.put(next_x, board.height - 3, "Esc 取消", screen._TEXT_SECONDARY, width=max(1, x + width - next_x))

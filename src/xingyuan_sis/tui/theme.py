@@ -104,18 +104,22 @@ def notice(message: str, *, error: bool = False) -> str:
     return screen._ansi(("! " if error else "· ") + message, style) if message else ""
 
 
-def footer(width: int) -> str:
+def footer(width: int, *, switch_focus: bool = False) -> str:
     """Render the one global, non-interactive navigation hint."""
-    total = sum(screen._display_width(label) for label in _FOOTER_LABELS)
+    labels = ("[ Tab 切换区域 ]", *_FOOTER_LABELS) if switch_focus else _FOOTER_LABELS
+    total = sum(screen._display_width(label) for label in labels)
     if total >= width:
-        return screen._ansi(screen._clip_cells(" ".join(_FOOTER_LABELS), width), _BAR_SURFACE)
+        compact = "Tab 切换 · Enter 打开 · Esc 返回" if switch_focus else "方向键 移动 · Enter 打开 · Esc 返回"
+        if screen._display_width(compact) > width:
+            compact = "Tab Enter Esc" if switch_focus else "↑↓ Enter Esc"
+        return screen._ansi(screen._clip_cells(compact, width), _BAR_SURFACE)
 
     free = width - total
-    slots = len(_FOOTER_LABELS) + 1
+    slots = len(labels) + 1
     base_gap, extra = divmod(free, slots)
     gaps = [base_gap + (1 if index < extra else 0) for index in range(slots)]
     parts: list[str] = [bar_space(gaps[0])]
-    for index, label in enumerate(_FOOTER_LABELS):
+    for index, label in enumerate(labels):
         parts.append(screen._ansi(label, _BUTTON))
         parts.append(bar_space(gaps[index + 1]))
     return "".join(parts)

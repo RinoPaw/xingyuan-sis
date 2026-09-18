@@ -132,6 +132,8 @@ def authorize(identity: Identity, args: argparse.Namespace) -> None:
         return
     if args.group in {"stu", "student"} and args.action in {"ls", "list", "show"}:
         return
+    if args.group == "notice" and args.action in {"ls", "list", "show"}:
+        return
     raise ValueError("学生账户无权执行此操作")
 
 

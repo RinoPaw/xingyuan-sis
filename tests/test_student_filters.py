@@ -4,9 +4,11 @@ from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from xingyuan_sis.csv_io import STUDENT_FIELDS
-from xingyuan_sis.cli import main as cli_main
+from xingyuan_sis.entry import main as cli_main
+from xingyuan_sis.auth import Identity
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.student_query import parse_student_query
@@ -15,6 +17,9 @@ from xingyuan_sis.tui.workspace.data import Catalog
 
 class StudentFilterCliTests(unittest.TestCase):
     def setUp(self) -> None:
+        auth_patch = patch("xingyuan_sis.auth_cli.require_identity", return_value=Identity("Administrator", "admin"))
+        auth_patch.start()
+        self.addCleanup(auth_patch.stop)
         self.temp_dir = TemporaryDirectory()
         self.db_path = Path(self.temp_dir.name) / "test.db"
         initialize_database(self.db_path)

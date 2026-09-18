@@ -65,7 +65,7 @@ def run_command(
     *,
     interactive: bool = False,
 ) -> None:
-    from .cli import main
+    from .entry import main
 
     clear()
     args = ([] if db_path is None else ["--db", str(db_path)]) + argv
@@ -113,9 +113,11 @@ def _command_title(argv: list[str]) -> str:
         "course": "课程",
         "grade": "成绩",
         "data": "数据",
+        "notice": "班级公告",
+        "auth": "个人中心",
     }
     actions = {"ls": "列表", "show": "详情", "stats": "统计", "add": "新建", "edit": "编辑",
-               "rm": "删除", "import": "导入", "export": "导出", "seed": "演示数据"}
+               "rm": "删除", "passwd": "修改密码", "status": "账户身份", "reset-password": "重置密码", "import": "导入", "export": "导出", "seed": "演示数据"}
     action = argv[1]
     group = groups.get(argv[0], argv[0])
     return f"{group} / {actions.get(action, action)}"

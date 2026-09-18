@@ -17,6 +17,7 @@ class Field:
     default: Any = None
     minimum: float = 0
     maximum: float | None = None
+    editable: bool = True
 
     def parse(self, value: Any) -> Any:
         text = "" if value is None else str(value).strip()
@@ -24,6 +25,8 @@ class Field:
             if self.required:
                 raise ValueError(f"请填写{self.label}")
             return None
+        if self.kind == "digits" and re.fullmatch(r"[0-9]+", text) is None:
+            raise ValueError(f"{self.label}只能包含 0–9 的数字")
         if self.kind in {"int", "float"}:
             try:
                 number = int(text) if self.kind == "int" else float(text)
@@ -48,10 +51,11 @@ class Field:
 
 
 YEAR = Field("enrollment_year", "入学年份", True, "int", minimum=1900, maximum=9999)
+STUDENT_NUMBER = Field("student_no", "学号", True, "digits", editable=False)
 
 FIELDS: dict[str, tuple[Field, ...]] = {
     "students": (
-        Field("student_no", "学号", True), Field("name", "姓名", True),
+        STUDENT_NUMBER, Field("name", "姓名", True, editable=False),
         Field("family", "族系", True), Field("branch", "支系", True), YEAR,
         Field("class_code", "班级编号"), Field("status", "学籍状态", True, default="在读"),
         Field("gender", "性别"), Field("birth_date", "出生日期", kind="date"),
@@ -64,7 +68,7 @@ FIELDS: dict[str, tuple[Field, ...]] = {
         Field("department_code", "学院编号"),
     ),
     "grades": (
-        Field("student_no", "学号", True), Field("course_code", "课程编号", True),
+        STUDENT_NUMBER, Field("course_code", "课程编号", True, editable=False),
         Field("semester", "学期", True), Field("score", "成绩", kind="float", maximum=100),
     ),
     "departments": (Field("code", "学院编号", True), Field("name", "学院名称", True)),
@@ -72,6 +76,10 @@ FIELDS: dict[str, tuple[Field, ...]] = {
         Field("department_code", "学院编号", True)),
     "classes": (Field("code", "班级编号", True), Field("name", "班级名称", True),
         Field("major_code", "专业编号", True), YEAR),
+    "announcements": (
+        Field("title", "标题", True), Field("class_code", "班级编号", True),
+        Field("body", "正文", True),
+    ),
 }
 
 

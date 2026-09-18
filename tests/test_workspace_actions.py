@@ -36,17 +36,17 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertIn("Esc 返回", footer)
         self.assertFalse(any(region.y == 35 for region in frame.regions))
 
-    def test_escape_focus_can_choose_edit_and_enter_opens_it(self):
+    def test_shift_tab_can_choose_edit_and_enter_opens_it(self):
         state = workspace.Workspace("students")
-        with patch.object(keys, "_read_key", side_effect=["back", "right", "right", "select", "back", "back"]), \
+        with patch.object(keys, "_read_key", side_effect=["focus_prev", "right", "right", "select", "back", "back"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
              patch.object(workspace_events, "open_form") as open_form:
-            workspace._interact(state, self.catalog)
+            workspace_events.interact(state, self.catalog)
 
         open_form.assert_called_once_with(state, self.catalog, "edit")
 
-    def test_escape_to_actions_preserves_selected_record_for_delete(self):
+    def test_shift_tab_to_actions_preserves_selected_record_for_delete(self):
         state = workspace.Workspace("students", selected=15)
         selected_at_delete: list[int] = []
 
@@ -56,11 +56,11 @@ class WorkspaceActionTests(unittest.TestCase):
 
         with patch.object(
             keys, "_read_key",
-            side_effect=["back", "right", "right", "right", "select", "back", "back"],
+            side_effect=["focus_prev", "right", "right", "right", "select", "back", "back"],
         ), patch.object(screen, "_paint"), patch.object(
             screen, "_terminal_size", return_value=os.terminal_size((120, 35))
         ), patch.object(workspace_events, "open_form", side_effect=capture):
-            workspace._interact(state, self.catalog)
+            workspace_events.interact(state, self.catalog)
 
         self.assertEqual(selected_at_delete, [15])
         self.assertEqual(state.selected, 15)
@@ -91,7 +91,7 @@ class WorkspaceActionTests(unittest.TestCase):
                  patch.object(screen, "_paint"), \
                  patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
                  patch.object(workspace_events, "open_form") as open_form:
-                workspace._interact(state, self.catalog)
+                workspace_events.interact(state, self.catalog)
             open_form.assert_called_once_with(state, self.catalog, action)
 
 

@@ -2,7 +2,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from xingyuan_sis.csv_io import export_students_csv, import_students_csv
+from xingyuan_sis.service import XingyuanService
 from xingyuan_sis.database import connect, initialize_database
 from xingyuan_sis.repository import Repository
 from xingyuan_sis.seed_data import STUDENTS, seed_demo
@@ -18,7 +18,7 @@ class CsvTests(unittest.TestCase):
 
             initialize_database(source_db)
             seed_demo(source_db)
-            self.assertEqual(export_students_csv(csv_path, source_db), len(STUDENTS))
+            self.assertEqual(XingyuanService(source_db).export_students(csv_path), len(STUDENTS))
 
             # Reuse the canonical catalog from seed_data, then clear only the
             # student-owned rows so the CSV import gets a clean target roster.
@@ -28,7 +28,7 @@ class CsvTests(unittest.TestCase):
                 connection.execute("DELETE FROM enrollments")
                 connection.execute("DELETE FROM students")
 
-            result = import_students_csv(csv_path, target_db)
+            result = XingyuanService(target_db).import_students(csv_path)
             self.assertEqual(result.imported, len(STUDENTS))
             self.assertEqual(result.errors, [])
 

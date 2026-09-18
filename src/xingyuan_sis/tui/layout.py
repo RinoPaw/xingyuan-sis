@@ -8,6 +8,7 @@ from . import screen
 
 _CONTROL_ROWS = {
     "students": 0,
+    "announcements": 0,
     "courses": 1,
     "grades": 1,
     "departments": 1,
@@ -90,8 +91,3 @@ class WorkspaceLayout:
         """Scrollable detail capacity while reserving status and footer rows."""
         bottom_reserve = 2 if self.compact else 3
         return max(1, self.height - self.panel_content_row(key) - bottom_reserve)
-
-    @property
-    def detail_offset(self) -> int:
-        # The compact heading already identifies the current record.
-        return 1 if self.compact else 0

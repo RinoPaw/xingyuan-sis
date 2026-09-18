@@ -5,30 +5,14 @@ from pathlib import Path
 from ...student_query import parse_student_query
 from ...terminal_input import input_style, read_inline_input, read_input
 from .. import screen
-from ..view_common import safe
 from .data import Catalog, Field
 from .state import Form, Workspace
 
 
-_STUDENT_EDIT_ROWS: tuple[tuple[str, ...], ...] = (
-    ("name",),
-    ("student_no",),
-    ("family", "branch"),
-    ("enrollment_year",),
-    ("class_code",),
-    ("status",),
-    ("primary_element", "primary_affinity"),
-    ("gender",),
-    ("birth_date",),
-    ("contact",),
-    ("dormitory",),
-    ("notes",),
-)
-
-
 def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
+    catalog.require_write()
     row = state.current(catalog)
-    if mode in {"edit", "delete"} and row is None:
+    if mode in {"edit", "delete", "reset-password"} and row is None:
         state.notice = "先选择一条记录。"
         return
     if mode in {"create", "edit"}:
@@ -38,8 +22,8 @@ def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
             catalog.defaults(state.key, row if mode == "edit" else None),
             row if mode == "edit" else None,
         )
-        if mode == "edit" and state.key in {"students", "grades"}:
-            state.form.position = 1
+        if mode == "edit":
+            move_form_position(state, "home", catalog)
     elif mode in {"import", "export"}:
         state.form = Form(mode, (Field("path", "CSV 文件路径", True),), {"path": "data/students.csv"})
     else:
@@ -48,70 +32,64 @@ def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
     state.detail_scroll = 0
 
 
-def _move_linear_form_position(form: Form, direction: str) -> None:
-    if not form.fields:
-        return
-    if direction == "home":
-        form.position = 0
-    elif direction == "end":
-        form.position = len(form.fields) - 1
-    elif direction == "up":
-        form.position = max(0, form.position - 1)
-    elif direction == "down":
-        form.position = min(len(form.fields) - 1, form.position + 1)
-
-
-def move_form_position(state: Workspace, direction: str) -> None:
-    """Move form focus according to the rendered geometry when one exists."""
+def move_form_position(state: Workspace, direction: str, catalog: Catalog) -> None:
+    """Navigate the rendered field rows and the save control, in visual order."""
     form = state.form
     if form is None or not form.fields:
         return
-    if form.mode != "edit" or state.key != "students":
-        _move_linear_form_position(form, direction)
-        return
+    if form.mode == "edit":
+        from .view import content_lines
 
-    positions = {field.key: index for index, field in enumerate(form.fields)}
-    rows = [tuple(key for key in row if key in positions) for row in _STUDENT_EDIT_ROWS]
-    rows = [row for row in rows if row]
-    current_key = form.fields[form.position].key
-    location = next(
-        ((row_index, row.index(current_key)) for row_index, row in enumerate(rows) if current_key in row),
-        None,
-    )
-    if location is None:
-        _move_linear_form_position(form, direction)
+        row = state.current(catalog)
+        rows = [tuple(int(action.split(":")[1]) for _, _, action in line
+                      if action.startswith("field:"))
+                for line in content_lines(state.key, row, catalog, state)]
+        rows = [row for row in rows if row]
+    else:
+        rows = [(i,) for i in range(len(form.fields))]
+    order = list(dict.fromkeys(index for row in rows for index in row))
+    if not order:
         return
-
-    row_index, column_index = location
-    if direction == "home":
-        target = rows[0][0]
-    elif direction == "end":
-        target = rows[-1][-1]
-    elif direction == "left":
-        if column_index == 0:
-            return
-        target = rows[row_index][column_index - 1]
-    elif direction == "right":
-        if column_index + 1 >= len(rows[row_index]):
-            return
-        target = rows[row_index][column_index + 1]
+    if direction in {"focus", "focus_prev"}:
+        current = len(order) if form.focus_save else order.index(form.position)
+        target = (current + (1 if direction == "focus" else -1)) % (len(order) + 1)
+        form.focus_save = target == len(order)
+        if not form.focus_save:
+            form.position = order[target]
+        return
+    if direction in {"home", "end"}:
+        form.focus_save = False
+        form.position = order[0] if direction == "home" else order[-1]
+        return
+    if form.focus_save:
+        if direction == "up":
+            form.focus_save = False
+            form.position = order[-1]
+        return
+    row_index, column_index = next((i, row.index(form.position)) for i, row in enumerate(rows)
+                                  if form.position in row)
+    if direction in {"left", "right"}:
+        column = column_index + (-1 if direction == "left" else 1)
+        if 0 <= column < len(rows[row_index]):
+            form.position = rows[row_index][column]
     elif direction in {"up", "down"}:
         next_row = row_index + (-1 if direction == "up" else 1)
-        if not 0 <= next_row < len(rows):
-            return
-        target_row = rows[next_row]
-        target = target_row[min(column_index, len(target_row) - 1)]
-    else:
-        return
-    form.position = positions[target]
+        if next_row == len(rows):
+            form.focus_save = True
+        elif next_row >= 0:
+            form.position = rows[next_row][min(column_index, len(rows[next_row]) - 1)]
 
 
 def apply_form(state: Workspace, catalog: Catalog) -> None:
+    catalog.require_write()
     form = state.form
     if form is None:
         return
     if form.mode in {"create", "edit"}:
         record_id = catalog.save(state.key, form.values, form.original)
+        if catalog.initial_password is not None:
+            state.credentials = [(str(form.values["student_no"]), catalog.initial_password)]
+            catalog.initial_password = None
         rows = state.rows(catalog)
         state.selected = next((i for i, row in enumerate(rows) if row["id"] == record_id), state.selected)
         state.notice = (
@@ -119,6 +97,13 @@ def apply_form(state: Workspace, catalog: Catalog) -> None:
             if any(row["id"] == record_id for row in rows)
             else "已保存；这条记录不符合当前筛选条件。"
         )
+    elif form.mode == "reset-password":
+        from ...auth import reset_student_password
+
+        no = form.original["student_no"]
+        password = reset_student_password(catalog.service.db_path, no)
+        state.credentials = [(no, password)]
+        state.notice = "已重置密码；学生下次登录必须修改密码。"
     elif form.mode == "delete":
         catalog.delete(state.key, form.original)
         state.notice = "记录已删除。"
@@ -141,11 +126,24 @@ def apply_form(state: Workspace, catalog: Catalog) -> None:
             result = catalog.service.import_students(path)
             catalog.refresh()
             state.notice = f"已导入 {result.imported} 名学生；{len(result.errors)} 行未导入。"
+            state.credentials = result.credentials
             state.report = result.errors
             if result.errors:
                 state.switch("data")
     state.form = None
-    state.detail_scroll = 0
+    if form.mode in {"create", "edit"} and any(row["id"] == record_id for row in state.rows(catalog)):
+        state.details = True
+        if form.mode == "edit":
+            from .events import detail_targets
+
+            action = f"edit-field:{form.fields[form.position].key}"
+            state.detail_selected = next((i for i, (_, target) in enumerate(detail_targets(state, catalog))
+                                          if target == action), 0)
+        else:
+            state.detail_scroll, state.detail_selected = 0, 0
+    else:
+        state.details = False
+        state.detail_scroll, state.detail_selected = 0, 0
 
 
 def _inline_field_geometry(
@@ -200,6 +198,7 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
 
     field_ = state.form.fields[index]
     state.form.position = index
+    state.form.focus_save = False
     options = catalog.options(state.key, field_.key, state.form.values) if state.form.mode in {"create", "edit"} else None
     if options is not None:
         state.form.options = options
@@ -221,7 +220,7 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
     row, column, width = _inline_field_geometry(
         frame,
         index,
-        direct=state.form.mode == "edit" and state.key == "students",
+        direct=state.form.mode == "edit",
     )
     with input_style(True):
         raw = read_inline_input(

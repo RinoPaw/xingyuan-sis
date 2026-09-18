@@ -5,36 +5,45 @@ from pathlib import Path
 import sqlite3
 
 from .. import keys
+from ...auth import Identity
 from .data import Catalog
-from .events import (
-    _detail_geometry,
-    detail_targets as _detail_targets,
-    interact as _interact,
-    reveal_detail_selection as _reveal_detail_selection,
-    select_visible_detail_target as _select_visible_detail_target,
-)
-from .forms import apply_form as _apply_form, open_form as _open_form, read_value as _read_value
+from .events import interact
+from .forms import apply_form, read_value
 from .state import Form, Workspace
 
 
 __all__ = ["Form", "Workspace", "run"]
 
 
-def run(db_path: Path | str | None, collection: str) -> None:
-    catalog, state = Catalog(db_path), Workspace(collection)
+def run(
+    db_path: Path | str | None, collection: str, *, identity: Identity | None = None, query: str = "",
+) -> None:
+    catalog, state = Catalog(db_path, identity), Workspace(collection, query=query, details=bool(query))
+    if not catalog.can_browse(collection):
+        raise ValueError("学生账户无权执行管理操作")
     while True:
         try:
             with keys._mouse_tracking():
-                event = _interact(state, catalog)
+                event = interact(state, catalog)
             if event is None:
                 return
             if event[0] in {"field", "search"}:
                 try:
-                    _read_value(state, catalog, event)
+                    read_value(state, catalog, event)
                 except KeyboardInterrupt:
                     state.notice = "已取消输入。"
             elif event[0] == "save":
-                _apply_form(state, catalog)
+                apply_form(state, catalog)
+                if state.credentials:
+                    from ..viewer import show
+
+                    text = "首次登录必须修改密码。请将初始密码交给对应学生。\n\n" + "\n".join(
+                        f"学号  {no}\n初始密码  {password}\n" for no, password in state.credentials
+                    )
+                    try:
+                        show(text, "学生 / 初始密码")
+                    finally:
+                        state.credentials.clear()
             elif event[0] == "refresh":
                 row = state.current(catalog)
                 catalog.refresh()

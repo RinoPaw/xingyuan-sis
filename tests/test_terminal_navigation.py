@@ -22,7 +22,7 @@ class BreadcrumbTests(unittest.TestCase):
             child, _ = screen._breadcrumb("学生", 79)
         self.assertIn("首页", "\n".join(home.lines))
         self.assertIn("首页 / 学生", child)
-        with patch.object(basic_ui, "_clear"), patch("builtins.input", return_value="q"), \
+        with patch.object(basic_ui, "read_session", return_value=Identity("Administrator", "admin")), patch.object(basic_ui, "_clear"), patch("builtins.input", return_value="q"), \
              redirect_stdout(StringIO()) as output:
             basic_ui.run()
         self.assertIn("教务台\n首页\n", output.getvalue())
