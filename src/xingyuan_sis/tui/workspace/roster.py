@@ -6,6 +6,7 @@ from .. import screen
 from ..layout import WorkspaceLayout, visible_start
 from ..view_common import Board, panel_heading, safe
 from .data import COLLECTIONS, Catalog
+from .state import FocusArea
 
 if TYPE_CHECKING:
     from .state import Workspace
@@ -57,7 +58,7 @@ def _fit_columns(
 
 def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) -> None:
     rows = state.rows(catalog)
-    focused = not state.details and not state.action_focus and state.form is None
+    focused = state.focus is FocusArea.ROSTER and state.form is None
     layout = WorkspaceLayout(board.width, board.height)
     heading_row = layout.panel_heading_row(state.key)
     header_row = layout.panel_content_row(state.key)
