@@ -44,7 +44,7 @@ def lines(
         [label("性别  "), field("gender")],
         [label("年龄  "), field("age", _age(values))],
         [label("入学  "), field("enrollment_year", f"{safe(year)}级")],
-        [label("学院  "), (safe(row.get("department_name")), screen._TEXT_PRIMARY, "")],
+        [label("学院  "), field("department_name")],
         [label("班级  "), field("class_code")],
         [label("学籍  "), field("status")],
         [label("元素  "), field("primary_element"), (" · ", screen._TEXT_SECONDARY, ""), field("primary_affinity")],
