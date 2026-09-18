@@ -5,7 +5,7 @@ from ...terminal_input import input_style, read_inline_input
 from .. import screen
 from .data import Catalog
 from .presentation import project_record
-from .state import FieldSession, Workspace
+from .state import FieldSession, FocusArea, Workspace
 
 
 def start(state: Workspace, catalog: Catalog, field_key: str) -> None:
@@ -35,8 +35,7 @@ def start(state: Workspace, catalog: Catalog, field_key: str) -> None:
         anchor_key=field_key,
     )
     state.form = None
-    state.details = True
-    state.action_focus = False
+    state.set_focus(FocusArea.INSPECTOR)
     state.notice = "Enter 确认并保存 · Esc 取消。"
 
 
@@ -148,7 +147,6 @@ def commit(state: Workspace, catalog: Catalog) -> None:
     state.field_session = None
     rows = state.rows(catalog)
     state.selected = next((i for i, row in enumerate(rows) if row["id"] == record_id), state.selected)
-    state.details = True
     state.notice = (
         "已保存。"
         if any(row["id"] == record_id for row in rows)
@@ -156,6 +154,7 @@ def commit(state: Workspace, catalog: Catalog) -> None:
     )
 
     if any(row["id"] == record_id for row in rows):
+        state.set_focus(FocusArea.INSPECTOR)
         from .events import detail_targets
 
         action = f"field:{focus_key}"
@@ -164,5 +163,5 @@ def commit(state: Workspace, catalog: Catalog) -> None:
             0,
         )
     else:
-        state.details = False
+        state.set_focus(FocusArea.ROSTER)
         state.detail_scroll, state.detail_selected = 0, 0
