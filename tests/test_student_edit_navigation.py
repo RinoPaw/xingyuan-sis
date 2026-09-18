@@ -74,9 +74,9 @@ class StudentEditNavigationTests(unittest.TestCase):
         self.assertEqual(self._move("field:primary_element", "right"), "field:primary_affinity")
         self.assertIsNone(self._move("field:primary_element", "left"))
 
-    def test_read_only_identity_fields_are_focusable_but_not_editable(self):
+    def test_read_only_fields_are_focusable_but_not_editable(self):
         actions = self._actions()
-        for action in ("field:name", "field:student_no"):
+        for action in ("field:name", "field:student_no", "field:department_name"):
             with self.subTest(action=action):
                 self.state.set_focus(workspace.FocusArea.INSPECTOR)
                 self.state.field_session = None
@@ -89,6 +89,11 @@ class StudentEditNavigationTests(unittest.TestCase):
                 self.assertIsNone(self.state.field_session)
                 self.assertEqual(self._actions()[self.state.detail_selected], action)
                 self.assertIn("只读", self.state.notice)
+
+    def test_department_stays_in_the_vertical_focus_chain(self):
+        self.assertEqual(self._move("field:enrollment_year", "down"), "field:department_name")
+        self.assertEqual(self._move("field:department_name", "down"), "field:class_code")
+        self.assertEqual(self._move("field:class_code", "up"), "field:department_name")
 
     def test_enter_opens_only_selected_editable_field_session(self):
         actions = self._actions()
