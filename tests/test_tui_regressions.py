@@ -79,7 +79,7 @@ class TuiRegressionAuditTests(unittest.TestCase):
                 focused_region = next(r for r in focused_frame.regions if r.action == "row:0")
                 self.assertIn(screen._SURFACE_SELECTED, focused_frame.lines[focused_region.y - 1])
 
-                state.details = True
+                state.set_focus(workspace.FocusArea.INSPECTOR)
                 context = workspace_view.Board(60, 35)
                 workspace_view._roster(context, state, self.catalog, 59)
                 context_frame = context.frame()
@@ -134,20 +134,25 @@ class TuiRegressionAuditTests(unittest.TestCase):
         before = deepcopy(state.current(self.catalog))
         count = len(self.catalog.records["students"])
         workspace_forms.open_form(state, self.catalog, "delete")
-        with patch.object(keys, "_read_key", side_effect=["back", "back", "back"]), \
+        with patch.object(keys, "_read_key", side_effect=["back", "back"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             self.assertIsNone(workspace_events.interact(state, self.catalog))
         self.assertEqual(len(self.catalog.records["students"]), count)
         self.assertEqual(state.current(self.catalog), before)
 
-    def test_escape_unwinds_detail_focus_before_leaving_workspace(self):
-        state = workspace.Workspace("students", details=True)
+    def test_escape_unwinds_inspector_focus_before_leaving_workspace(self):
+        state = workspace.Workspace(
+            "students",
+            focus=workspace.FocusArea.INSPECTOR,
+            content_panel=workspace.ContentPanel.INSPECTOR,
+        )
         with patch.object(keys, "_read_key", side_effect=["back", "back"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             self.assertIsNone(workspace_events.interact(state, self.catalog))
-        self.assertFalse(state.details)
+        self.assertEqual(state.focus, workspace.FocusArea.ROSTER)
+        self.assertEqual(state.content_panel, workspace.ContentPanel.ROSTER)
 
     def test_student_inspector_keeps_one_current_information_hierarchy(self):
         state = workspace.Workspace("students")
