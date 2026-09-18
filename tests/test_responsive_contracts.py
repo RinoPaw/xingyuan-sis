@@ -9,31 +9,31 @@ from xingyuan_sis.auth import Identity
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import app, keys, portal, screen, workspace
+from xingyuan_sis.tui.workspace import events as workspace_events
 from xingyuan_sis.tui.workspace import view as workspace_view
 from xingyuan_sis.tui.workspace.data import Catalog
 
-from xingyuan_sis.tui.workspace import events as workspace_events
 
 class ResponsiveContractTests(unittest.TestCase):
     def setUp(self):
         temp = TemporaryDirectory()
         self.addCleanup(temp.cleanup)
-        self.db = Path(temp.name) / 'test.db'
+        self.db = Path(temp.name) / "test.db"
         initialize_database(self.db)
         seed_demo(self.db)
         self.catalog = Catalog(self.db)
-        self.identity = Identity('Administrator', 'admin')
+        self.identity = Identity("Administrator", "admin")
 
     def test_portal_down_selects_the_next_visible_row(self):
         for size in ((34, 18), (49, 24), (100, 7)):
-            with self.subTest(size=size), patch.object(screen, '_terminal_size', return_value=os.terminal_size(size)), \
-                 patch.object(screen, '_paint'), patch.object(screen, '_clear'), \
-                 patch.object(keys, '_read_key', side_effect=['down', 'select']):
+            with self.subTest(size=size), patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)), \
+                 patch.object(screen, "_paint"), patch.object(screen, "_clear"), \
+                 patch.object(keys, "_read_key", side_effect=["down", "select"]):
                 action = app._portal_home(self.db, selected=1, preferences={
-                    'identity': self.identity, 'portal_focus': 'secondary', 'animate': False,
+                    "identity": self.identity, "portal_focus": "secondary", "animate": False,
                 })
                 items = portal.secondary_items(self.identity, 1)
-                columns = portal.secondary_columns(max(1, size[0] - 1), 'secondary', height=size[1])
+                columns = portal.secondary_columns(max(1, size[0] - 1), "secondary", height=size[1])
                 expected = items[min(len(items) - 1, columns)].action
                 self.assertEqual(action, expected)
 
@@ -41,61 +41,63 @@ class ResponsiveContractTests(unittest.TestCase):
         for size in ((26, 8), (34, 12), (49, 9), (100, 7), (100, 24)):
             for index in range(7):
                 with self.subTest(size=size, selected=index), \
-                     patch.object(screen, '_terminal_size', return_value=os.terminal_size(size)):
-                    frame = portal.frame(self.identity, 1, 'secondary', {1: index}, {}, 0, animate=False)
-                    selected = next(r for r in frame.regions if r.action == f'secondary:{index}')
+                     patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
+                    frame = portal.frame(self.identity, 1, "secondary", {1: index}, {}, 0, animate=False)
+                    selected = next(r for r in frame.regions if r.action == f"secondary:{index}")
                     self.assertLess(selected.y, size[1])
                     self.assertIn(portal.secondary_items(self.identity, 1)[index].label, frame.lines[selected.y - 1])
                     self.assertEqual(screen._hit_action(keys.MouseClick(selected.x, selected.y), frame.regions), selected.action)
 
     def test_click_at_single_pane_boundary_opens_inspector(self):
-        state = workspace.Workspace('students')
-        with patch.object(screen, '_terminal_size', return_value=os.terminal_size((76, 24))), \
-             patch.object(screen, '_paint'), patch.object(keys, '_read_key', side_effect=['row:1', 'refresh']):
+        state = workspace.Workspace("students")
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((76, 24))), \
+             patch.object(screen, "_paint"), patch.object(keys, "_read_key", side_effect=["row:1", "refresh"]):
             workspace_events.interact(state, self.catalog)
             self.assertTrue(state.details)
-            frame = workspace_view.render(state, self.catalog)
-            self.assertIn('档案', '\n'.join(frame.lines))
+            self.assertIn("档案", "\n".join(workspace_view.render(state, self.catalog).lines))
 
-    def test_compact_detail_focus_is_visible_and_enter_edits_that_field(self):
-        state = workspace.Workspace('students')
-        with patch.dict(os.environ) as environment, \
-             patch('sys.stdout.isatty', return_value=True), \
-             patch.object(screen, '_terminal_size', return_value=os.terminal_size((30, 12))), \
-             patch.object(screen, '_paint') as paint, \
-             patch.object(keys, '_read_key', side_effect=['right', 'end', 'select']):
-            environment.pop('NO_COLOR', None)
+    def test_compact_detail_focus_is_visible_and_enter_opens_same_field_session(self):
+        state = workspace.Workspace("students")
+        with patch.dict(os.environ) as environment, patch("sys.stdout.isatty", return_value=True), \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size((30, 12))), \
+             patch.object(screen, "_paint") as paint, \
+             patch.object(keys, "_read_key", side_effect=["right", "end", "select"]):
+            environment.pop("NO_COLOR", None)
             event = workspace_events.interact(state, self.catalog)
-        self.assertEqual(event[0], 'field')
-        self.assertEqual(state.form.fields[event[1]].key, 'notes')
-        focused = next(line for line in paint.call_args_list[-1].args[0] if '备注' in screen._ANSI_RE.sub('', line))
+        self.assertEqual(event, ("field-edit", 0))
+        self.assertEqual(state.field_session.active_key, "notes")
+        self.assertIsNone(state.form)
+        focused = next(line for line in paint.call_args_list[-1].args[0] if "备注" in screen._ANSI_RE.sub("", line))
         self.assertIn(screen._SURFACE_SELECTED, focused)
-        self.assertNotIn('›', screen._ANSI_RE.sub('', focused))
+        self.assertNotIn("›", screen._ANSI_RE.sub("", focused))
 
     def test_narrow_workspace_keeps_every_filter_clickable(self):
-        with patch.object(screen, '_terminal_size', return_value=os.terminal_size((30, 24))):
-            for key in ('courses', 'grades'):
-                state = workspace.Workspace(key, view=2)
-                frame = workspace_view.render(state, self.catalog)
-                self.assertTrue({'view:0', 'view:1', 'view:2'} <= {r.action for r in frame.regions})
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((30, 24))):
+            for key in ("courses", "grades"):
+                frame = workspace_view.render(workspace.Workspace(key, view=2), self.catalog)
+                self.assertTrue({"view:0", "view:1", "view:2"} <= {r.action for r in frame.regions})
 
     def test_no_color_roster_has_a_visible_selected_record(self):
-        with patch.dict(os.environ, {'NO_COLOR': '1'}), \
-             patch.object(screen, '_terminal_size', return_value=os.terminal_size((120, 35))):
-            frame = workspace_view.render(workspace.Workspace('students', selected=1), self.catalog)
-        selected = next(r for r in frame.regions if r.action == 'row:1')
-        self.assertIn(self.catalog.records['students'][1]['name'], frame.lines[selected.y - 1])
-        self.assertIn('▌', frame.lines[selected.y - 1])
-        self.assertNotIn('\x1b', ''.join(frame.lines))
+        with patch.dict(os.environ, {"NO_COLOR": "1"}), \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+            frame = workspace_view.render(workspace.Workspace("students", selected=1), self.catalog)
+        selected = next(r for r in frame.regions if r.action == "row:1")
+        self.assertIn(self.catalog.records["students"][1]["name"], frame.lines[selected.y - 1])
+        self.assertIn("▌", frame.lines[selected.y - 1])
+        self.assertNotIn("\x1b", "".join(frame.lines))
 
     def test_related_return_restores_identity_and_inspector_context_after_reordering(self):
-        state = workspace.Workspace('students', selected=1, details=True, detail_selected=2, detail_scroll=3)
+        state = workspace.Workspace("students", selected=1, details=True, detail_selected=2, detail_scroll=3)
         original = state.current(self.catalog).copy()
         key, related = self.catalog.related(state.key, original)
-        state.visit(key, str(related[0]['id']), self.catalog)
-        self.catalog.service.delete_student_by_no(self.catalog.records['students'][0]['student_no'])
+        state.visit(key, str(related[0]["id"]), self.catalog)
+        self.catalog.service.delete_student_by_no(self.catalog.records["students"][0]["student_no"])
         self.catalog.refresh()
         state.restore(self.catalog)
-        self.assertEqual(state.current(self.catalog)['id'], original['id'])
+        self.assertEqual(state.current(self.catalog)["id"], original["id"])
         self.assertTrue(state.details)
         self.assertEqual((state.detail_selected, state.detail_scroll), (2, 3))
+
+
+if __name__ == "__main__":
+    unittest.main()
