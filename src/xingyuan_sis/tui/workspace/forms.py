@@ -6,7 +6,7 @@ from ...student_query import parse_student_query
 from ...terminal_input import input_style, read_inline_input, read_input
 from .. import screen
 from .data import Catalog, Field
-from .state import Form, Workspace
+from .state import FocusArea, Form, Workspace
 
 
 def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
@@ -34,9 +34,9 @@ def move_form_position(state: Workspace, direction: str) -> None:
     if form is None or not form.fields:
         return
     order = list(range(len(form.fields)))
-    if direction in {"focus", "focus_prev"}:
+    if direction == "focus":
         current = len(order) if form.focus_save else order.index(form.position)
-        target = (current + (1 if direction == "focus" else -1)) % (len(order) + 1)
+        target = (current + 1) % (len(order) + 1)
         form.focus_save = target == len(order)
         if not form.focus_save:
             form.position = order[target]
@@ -126,10 +126,10 @@ def apply_form(state: Workspace, catalog: Catalog) -> None:
     if form.mode == "create" and record_id is not None and any(
         row["id"] == record_id for row in state.rows(catalog)
     ):
-        state.details = True
+        state.set_focus(FocusArea.INSPECTOR)
         state.detail_scroll, state.detail_selected = 0, 0
     else:
-        state.details = False
+        state.set_focus(FocusArea.DASHBOARD if state.key == "data" else FocusArea.ROSTER)
         state.detail_scroll, state.detail_selected = 0, 0
 
 
