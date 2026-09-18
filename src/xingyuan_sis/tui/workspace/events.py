@@ -17,6 +17,19 @@ def _detail_geometry(state: Workspace, catalog: Catalog) -> tuple[int, int]:
     return layout.panel_width, layout.panel_capacity(state.key)
 
 
+def _action_line_map(lines: list) -> dict[str, list[int]]:
+    """Map each semantic inspector target to every rendered line it occupies."""
+    result: dict[str, list[int]] = {}
+    for index, line in enumerate(lines):
+        actions = dict.fromkeys(
+            action for _, _, action in line
+            if action and not action.startswith("option:")
+        )
+        for action in actions:
+            result.setdefault(action, []).append(index)
+    return result
+
+
 def detail_targets(state: Workspace, catalog: Catalog) -> list[tuple[int, str]]:
     from .view import detail_targets as view_targets, workspace_layout
 
@@ -27,14 +40,39 @@ def detail_targets(state: Workspace, catalog: Catalog) -> list[tuple[int, str]]:
     return view_targets(state.key, row, catalog, layout.panel_width)
 
 
-def reveal_detail_selection(state: Workspace, catalog: Catalog) -> None:
+def reveal_detail_selection(
+    state: Workspace,
+    catalog: Catalog,
+    edge: str | None = None,
+) -> None:
+    from .view import detail_lines, workspace_layout
+
     targets = detail_targets(state, catalog)
     if not targets:
         state.detail_selected = 0
         return
     state.detail_selected = min(max(0, state.detail_selected), len(targets) - 1)
-    _, capacity = _detail_geometry(state, catalog)
-    line = targets[state.detail_selected][0]
+
+    row = state.current(catalog)
+    layout = workspace_layout(state, catalog)
+    lines = detail_lines(state.key, row, catalog, layout.panel_width)
+    capacity = layout.panel_capacity(state.key)
+    action = targets[state.detail_selected][1]
+    occupied = _action_line_map(lines).get(action, [targets[state.detail_selected][0]])
+    first_visible = state.detail_scroll
+    last_visible = state.detail_scroll + capacity - 1
+
+    if edge == "end":
+        line = occupied[-1]
+    elif edge == "home":
+        line = occupied[0]
+    elif any(first_visible <= line <= last_visible for line in occupied):
+        return
+    elif occupied[-1] < first_visible:
+        line = occupied[-1]
+    else:
+        line = occupied[0]
+
     if line < state.detail_scroll:
         state.detail_scroll = line
     elif line >= state.detail_scroll + capacity:
@@ -56,10 +94,15 @@ def select_visible_detail_target(state: Workspace, catalog: Catalog) -> None:
     if not targets:
         state.detail_selected = -1
         return
+    action_lines = _action_line_map(lines)
     first, last = state.detail_scroll, state.detail_scroll + capacity - 1
-    visible = [(index, line) for index, (line, _) in enumerate(targets) if first <= line <= last]
+    visible = [
+        index
+        for index, (fallback_line, action) in enumerate(targets)
+        if any(first <= line <= last for line in action_lines.get(action, [fallback_line]))
+    ]
     if visible:
-        state.detail_selected = min(visible, key=lambda item: abs(item[0] - state.detail_selected))[0]
+        state.detail_selected = min(visible, key=lambda index: abs(index - state.detail_selected))
     else:
         state.detail_selected = -1
 
@@ -375,14 +418,17 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                         state.detail_scroll = 10**6
                     select_visible_detail_target(state, catalog)
                 else:
+                    reveal_edge = None
                     if key == "home":
                         state.detail_selected = 0
+                        reveal_edge = "home"
                     elif key == "end":
                         state.detail_selected = len(targets) - 1
+                        reveal_edge = "end"
                     else:
                         move_detail_selection(state, catalog, key)
                     state.detail_selected = min(max(0, state.detail_selected), len(targets) - 1)
-                    reveal_detail_selection(state, catalog)
+                    reveal_detail_selection(state, catalog, reveal_edge)
             elif state.key == "data":
                 state.detail_scroll = max(0, state.detail_scroll + amount)
                 if key == "home":
