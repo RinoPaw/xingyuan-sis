@@ -1,17 +1,17 @@
-# 档案展示与字段编辑模型
+# 档案展示与字段会话模型
 
-本文档规定记录型工作台的展示值与字段会话。目标不是“让两套页面看起来一样”，而是从模型上保证**不存在两套字段展示逻辑**。
+本文档规定记录型工作台的展示、字段身份和已有记录修改。目标不是让“浏览页”和“编辑页”长得一样，而是从模型上保证**根本不存在第二套已有记录页面**。
 
 ## 1. 唯一展示管线
 
-浏览、文本输入、枚举选择、外键选择都经过：
+所有已有记录都经过：
 
 ```text
 数据库当前记录
       │
-      ├─ 无字段修改 ───────────────┐
+      ├─ 无 FieldSession ──────────┐
       │                           │
-      └─ 当前字段临时值 ── overlay │
+      └─ FieldSession 临时值 ─ overlay
                                   ▼
                          projected record
                                   │
@@ -19,140 +19,140 @@
                          display_value(...)
                                   │
                                   ▼
-                           inspector layout
+                           archive content
 ```
 
-`projected record` 等于已提交记录，加上当前字段会话明确拥有的临时值。
+`projected record` 等于已提交记录加上当前 FieldSession 明确拥有的临时值。格式化函数不知道值来自数据库还是临时输入，因此不能出现 browse/edit 两套格式化分支。
 
-格式化代码不能写成：
+## 2. 稳定字段身份
+
+每个档案字段从浏览到修改始终使用：
 
 ```text
-if editing:
-    使用编辑态格式
-else:
-    使用浏览态格式
+field:<field_key>
 ```
 
-## 2. 三种独立概念
-
-档案字段必须区分：
+例如：
 
 ```text
-显示值
-焦点 target
-编辑能力
+field:name
+field:student_no
+field:family · field:branch
+field:gender
+...
 ```
 
-它们彼此独立。
+只读字段也有稳定 field target。`focusable` 与 `editable` 是独立属性。
 
-### 显示值
+进入已有记录修改后，当前字段仍然叫同一个 `field:<key>`；不会变成 `field:<index>`，也不存在 `field-target:<key>` 这一套平行身份。
 
-由 `presentation.py` 的 `project_record()` 与 `display_value()` 决定。
+## 3. FieldSession
 
-### 焦点 target
+已有记录的局部修改由 `FieldSession` 独立建模。它只拥有：
 
-浏览态每个档案字段都有稳定：
+- 当前字段或明确声明的原子字段组；
+- 这些字段的临时值；
+- 原记录；
+- 当前子字段（复合组时）；
+- 必要的选项列表与选中位置。
 
-```text
-field-target:<field_key>
-```
+普通字段会话只有一个 key。学生 `family + branch` 因为存在一致性约束，作为一个原子字段组：先选族系，再选支系，最后一次提交。
 
-只读字段也必须保留 target，因为它仍然是档案空间的一部分。
+FieldSession 不拥有整条记录，不拥有页面级保存按钮，也不承担新建表单的字段循环。
 
-### 编辑能力
+## 4. Form 与 FieldSession 不是 mode
 
-Enter 激活 target 后，再根据 Schema / Catalog 与当前身份判断字段能否修改。
-
-因此学生姓名、学号可以被选中，但创建后不可编辑；完整出生日期存在时，年龄也可以被选中，但应通过修改出生日期改变派生年龄。
-
-## 3. 字段会话
-
-已有记录的字段修改只拥有：
-
-- 当前字段；
-- 当前临时值；
-- 必要时的选项列表与选中位置；
-- 明确的原子复合字段组。
-
-当前学生 `family + branch` 是复合字段：选择新族系后继续选择支系，最后一次性提交。
-
-字段会话可以改变：
-
-- 当前 target 的样式；
-- 选项是否展开；
-- Enter / Esc 的局部含义。
-
-它不能改变：
-
-- 未编辑字段的值来源；
-- 其他字段格式化方式；
-- 档案区块结构；
-- 浏览态的稳定 target 身份。
-
-## 4. 完整 Form
-
-完整 Form 只用于天然的多字段或事务操作：
+完整 `Form` 只用于真正的独立事务：
 
 - 新建记录；
-- 导入 / 导出；
 - 删除确认；
 - 密码重置；
+- 导入 / 导出；
 - seed。
 
-已有记录不能通过 `open_form(..., "edit")` 再进入一套整条记录编辑页。已有记录只通过当前 `field-target` 打开单字段会话。
+已有记录修改不通过 `Form(mode="edit")` 表示，也不通过 `mode` 在同一个大状态类型里分叉。两个概念拥有不同生命周期，因此使用不同模型。
 
-## 5. 保存
+## 5. 保存与取消
 
-字段确认后直接沿业务主链：
+已有记录修改路径：
 
 ```text
-field session
-    ↓
+field:<key>
+   │ Enter
+   ▼
+FieldSession
+   │
+   ├─ 自由文本 / 数字 / 日期输入
+   └─ option 列表
+   │ Enter
+   ▼
 Schema / Service
-    ↓
+   ↓
 Repository
-    ↓
+   ↓
 Catalog refresh
+   ↓
+同一个 field:<key>
+```
+
+Enter 确认后立即保存；Esc 丢弃 FieldSession，数据库保持原值。字段会话期间没有记录级“保存”按钮。
+
+## 6. 选项是字段的临时子结构
+
+枚举和外键展开后临时增加：
+
+```text
+field:class_code
+  option:0
+  option:1
+  option:2
+```
+
+`option:*` 只在选项展开期间存在。它不是第二套档案导航，也不会替换 `field:class_code` 的身份。
+
+## 7. 最终几何只有一份
+
+档案结构进入 `inspector.py` 后先完成真实终端布局：
+
+```text
+content Line[]
     ↓
-原 field-target
+wrap + compact layout
+    ↓
+final Line[]
 ```
 
-字段编辑期间没有记录级保存按钮。Esc 取消当前字段并保持数据库不变。
+同一份 `final Line[]` 同时用于：
 
-## 6. 导航与展示分离
+- 屏幕绘制；
+- 鼠标 HitRegion；
+- target 提取；
+- `↑↓←→` 空间导航；
+- 当前焦点可见性和滚动。
 
-导航使用 inspector 的真实 `Line` 结构，不由字段编辑状态重新生成第二份顺序。
+因此窄屏发生换行后，方向键按照用户实际看到的位置移动，而不是按照换行前的隐藏逻辑行移动。
 
-浏览时：
+## 8. 派生信息
 
-```text
-field-target:name
-field-target:student_no
-field-target:family · field-target:branch
-...
-```
+未被 FieldSession 拥有的信息继续使用已提交记录。例如修改学生“入学年份”期间：
 
-进入当前字段编辑后，局部控件可暂时使用：
+- 入学年份可显示当前临时值；
+- 班级仍使用同一 `display_value()` 展示“班级名称 · 编号”；
+- 学院、学籍、元素、选课和个人信息不改变展示语义。
 
-```text
-field:0
-option:0
-option:1
-...
-```
+只有保存成功并刷新 Catalog 后，真正依赖被修改数据的派生信息才随数据库事实更新。
 
-这些局部 action 只在字段会话期间存在；保存 / 取消后回到原 `field-target:<key>`。
+## 9. 回归要求
 
-## 7. 回归要求
+至少验证：
 
-修改档案或字段编辑时至少验证：
-
-1. 进入字段会话前后，除当前字段临时值与局部控件外，其他文本一致；
-2. 同一枚举 / 外键值在浏览和编辑时使用同一 label；
-3. 姓名、学号等只读字段仍在焦点图；
-4. Enter 不会让只读 target 进入编辑；
-5. 编辑字段确认后立即保存并回到原 target；
-6. Esc 不写数据库；
-7. 字段编辑不存在记录级保存按钮；
+1. 字段进入 / 退出 FieldSession 前后 action 身份不变；
+2. 未编辑字段文本不因 FieldSession 存在而变化；
+3. 同一枚举 / 外键值始终使用同一 label；
+4. 只读字段仍在焦点图，但 Enter 不产生 FieldSession；
+5. FieldSession 不创建 `Form`；
+6. Enter 即时保存，Esc 不写数据库；
+7. 已有记录没有保存按钮；
 8. 复合字段只投影明确拥有的键；
-9. 修复某字段不应通过新增页面特判改变其他字段展示。
+9. 绘制、点击和方向导航消费同一份最终几何；
+10. 修复一个字段不能通过页面特判改变其他字段结构或展示。

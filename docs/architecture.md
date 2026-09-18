@@ -38,6 +38,7 @@ src/xingyuan_sis/
         ├── __init__.py
         ├── state.py
         ├── events.py
+        ├── field_session.py
         ├── forms.py
         ├── data.py
         ├── presentation.py
@@ -67,216 +68,187 @@ entry ───────────┼─ Basic UI
                   SQLite
 ```
 
-约束：
+UI 不直接写 SQL；Repository 不依赖界面；Schema 不依赖 Service、Repository 或 UI；跨层能力沿既有方向扩展，不通过反向 import 或旁路解决。
 
-- UI 不直接写 SQL；
-- Repository 不依赖 CLI、Basic UI 或 TUI；
-- Schema 不依赖 Service、Repository 或 UI；
-- 跨层能力沿现有依赖方向扩展，不通过反向 import 或旁路解决。
-
-`entry.py` 是唯一程序入口。带业务子命令时进入 CLI；无子命令时检测 TTY、ANSI 与即时按键能力，满足条件进入 TUI，否则进入 Basic UI。`--tui` 与 `--basic` 可以显式覆盖自动选择。
+`entry.py` 是唯一程序入口。带业务子命令时进入 CLI；无子命令时检测终端能力，满足条件进入 TUI，否则进入 Basic UI。
 
 ## 2. CLI / Basic UI
 
-CLI 的主调用链是：
+主调用链只有：
 
 ```text
 entry → cli/parser + cli/<domain> → service → repository → SQLite
 ```
 
-学院、专业、班级、学生、课程、成绩、公告都是业务实体。CLI 和 Basic UI 只负责参数、输入输出与身份检查，不复制 Service 的业务规则。
+学院、专业、班级、学生、课程、成绩、公告都是一级业务实体。CLI 和 Basic UI 只负责参数、输入输出与身份检查，不复制 Service 的规则。
 
 ## 3. TUI 门户
 
-登录后的顶层路径由 `tui/app.py` 与 `tui/portal.py` 负责：
+登录后顶层路径由 `tui/app.py + tui/portal.py` 唯一负责：
 
 ```text
 app.run → portal
 ```
 
-管理员和学生共享同一套门户结构，只根据身份与权限显示不同入口。学生查询、个人档案和班级公告继续复用工作台，不建立第二套学生专用页面。
+管理员和学生共享门户结构，只根据身份与权限显示不同入口。学生查询、个人档案和班级公告继续复用同一套工作台。
 
-## 4. 工作台
+## 4. 工作台职责
 
 ```text
 tui/app
    ↓
-tui/workspace/__init__.py      controller / 生命周期
-   ├─ state.py                 Workspace / Form / Location
-   ├─ events.py                键鼠事件与统一交互意图
-   ├─ forms.py                 单字段输入、完整表单与保存
-   ├─ data.py                  Catalog、数据快照与关系
-   ├─ presentation.py          projected record + display_value
-   └─ view.py                  工作台布局与 inspector 编排
+workspace/__init__.py       controller / 生命周期
+   ├─ state.py              Workspace / FieldSession / Form / Location
+   ├─ events.py             键鼠事件与通用交互意图
+   ├─ field_session.py      已有记录的局部字段会话
+   ├─ forms.py              新建 / 删除 / 导入等完整事务表单
+   ├─ data.py               Catalog、数据快照、权限与关系
+   ├─ presentation.py       record projection + display_value
+   └─ view.py               工作台布局与 inspector 编排
        ├─ roster.py
-       ├─ inspector.py         共享 target、绘制、换行与滚动
-       ├─ detail.py            普通实体内容
-       ├─ student_inspector.py 学生档案二维内容
-       ├─ editor.py            新建 / 确认 / 文件事务
+       ├─ inspector.py      最终几何、绘制、命中区、导航、滚动
+       ├─ detail.py         普通实体内容
+       ├─ student_inspector.py  学生档案内容
+       ├─ editor.py         完整事务页面
        └─ dashboard.py
 ```
 
-`workspace/__init__.py` 只管理生命周期：创建 Catalog 与 Workspace、接收控制事件、执行字段保存 / 刷新和统一错误处理。
+`Workspace` 保存名册、档案、工具栏等页面状态。`FieldSession` 与 `Form` 是两个不同概念：前者附着在现有档案的一个字段或原子字段组上；后者拥有一整个独立事务页面。已有记录编辑不会创建 `Form(mode="edit")`。
 
-`Catalog` 保存当前身份、可用操作和读取快照；界面重绘不查询数据库。写操作通过 Service 进入 Repository。
+`Catalog` 保存一次读取快照和当前身份可执行的操作；正常重绘不查询数据库。所有写操作最终通过 Service → Repository。
 
-## 5. 档案内容与展示
+## 5. 一个档案，一套字段身份
 
-`student_inspector.py` 定义学生特有的：
+`student_inspector.py` 和 `detail.py` 都只生成内容结构，字段在整个生命周期中拥有同一个稳定身份：
 
 ```text
-摘要 → 选课与成绩 → 个人信息
+field:<field_key>
 ```
 
-`detail.py` 定义学院、专业、班级、课程、成绩、公告等普通实体内容。
+例如：
 
-两者都生成同一种 `Line / Segment` 结构，由 `inspector.py` 统一处理：
+```text
+field:name
+field:student_no
+field:family · field:branch
+...
+```
 
-- 字段 target；
-- 选项展开；
-- 中文 / 宽字符换行；
-- 点击区域；
-- 当前焦点；
-- 视口滚动。
+“可以聚焦”和“可以编辑”彼此独立。姓名、学号等只读字段仍属于空间几何；Enter 激活后由权限和字段定义决定是否允许创建 `FieldSession`。
+
+进入字段修改不会把 `field:class_code` 换成 `field:0`，也不会生成另一套编辑 target 图。选项只临时增加：
+
+```text
+option:0
+option:1
+...
+```
+
+确认或取消后，字段身份从未发生变化。
+
+## 6. 唯一展示管线
 
 `presentation.py` 提供唯一字段展示管线：
 
 ```text
-数据库记录 + 当前字段临时值
-            ↓
-      projected record
-            ↓
-      display_value(...)
-            ↓
-         inspector
+数据库记录
+   +
+当前 FieldSession 拥有的临时值（若有）
+   ↓
+projected record
+   ↓
+display_value(...)
+   ↓
+档案内容
 ```
 
-浏览和字段修改不能各自实现一套值格式化逻辑。
+格式化器不知道“浏览态 / 编辑态”。同一个值只有一种 label 和格式。修改入学年份不会改变班级、学院等无关字段的展示方式。
 
-## 6. 焦点 target 与编辑能力
+学生 `family + branch` 是明确的原子复合字段组，可以共同进入 projection；其他字段不能被顺带复制进会话。
 
-“可以被选中”和“可以被修改”是两个独立概念。
+## 7. 最终几何是唯一几何
 
-浏览态每个档案字段拥有稳定 target：
+档案内容生成后只做一次布局：
 
 ```text
-field-target:<field_key>
+content Line[]
+    ↓
+wrap + compact layout
+    ↓
+final Line[]
+    ├─ render
+    ├─ hit regions
+    ├─ action targets
+    └─ directional navigation
 ```
 
-因此只读字段也属于档案空间结构。例如学生 `name`、`student_no` 创建后不可修改，但仍能被方向键选中。
+绘制、鼠标命中和方向键不得分别维护不同的“逻辑行”。窄窗口换行以后，导航看到的就是用户真正看到的行。
 
-按 Enter 后，事件层再查询当前字段是否 `editable`：
-
-- 可编辑：进入单字段编辑；
-- 不可编辑：保持当前 target，只提示该字段只读；
-- 学生只读身份：所有字段保持可导航，但不会进入写状态。
-
-字段编辑期间，局部编辑控件使用 `field:<index>`；它只属于当前字段会话，不是另一套档案导航图。保存后重新回到同一个 `field-target:<field_key>`。
-
-## 7. 档案导航
-
-档案导航只有一条主路径：
-
-```text
-键盘 ↑↓←→ ─┐
-鼠标滚轮 ──┼→ events.move_detail_selection()
-            │
-            ▼
-  inspector.directional_target()
-            │
-            ▼
-        当前渲染几何
-```
-
-`events.py` 不知道“学生物种”“元素亲和”等页面细节。空间关系直接从当前 inspector 的 `Line` 结构推导。
-
-普通档案是单列几何：
-
-```text
-A
-↓
-B
-↓
-C
-```
-
-学生档案含二维复合行：
-
-```text
-姓名
- ↓
-学号
- ↓
-族系 ← 支系
-       ↓
-      性别
-      ...
-      学籍
-       ↓
-主元素 ← 亲和
-```
-
-纵向进入复合行时选择右侧成员；`← / →` 在同一行移动。位于左成员继续按 `←` 时，`directional_target()` 返回 `None`，工作台据此退出档案并回到名册。
-
-右侧档案未获得焦点时，滚轮只滚动预览；档案获得焦点后，滚轮上下与键盘 `↑ / ↓` 调用同一个 target 导航入口。
+`events.py` 不知道“学生物种”“元素亲和”等页面细节。学生二维复合行和普通实体单列的差异由 `Line` 几何自然表达。
 
 ## 8. 已有记录字段修改
 
-已有记录不存在独立“编辑页面”或整条记录草稿。
+已有记录没有编辑页面：
 
 ```text
-field-target:<key>
-      │ Enter
-      ▼
-当前字段输入 / 选项
-      │ Enter
-      ▼
-校验 → Service → Repository → refresh
-      │
-      ▼
-field-target:<key>
+field:<key>
+   │ Enter
+   ▼
+FieldSession
+   │
+   ├─ 自由输入
+   └─ option 列表
+   │ Enter
+   ▼
+校验 → Service → Repository → Catalog.refresh()
+   │
+   ▼
+field:<key>
 ```
 
-规则：
+约束：
 
-- 文本 / 数字 / 日期字段：Enter 输入，第二次 Enter 立即保存；
-- 枚举 / 外键字段：Enter 展开选项，确认选项后立即保存；
-- Esc 取消当前字段，不写数据库；
-- 字段编辑期间没有记录级“保存”按钮；
-- 修改一个字段时，不把全部字段复制成第二套 `form.position` 导航。
+- 自由文本 / 数字 / 日期确认后立即保存；
+- 枚举 / 外键确认选项后立即保存；
+- Esc 丢弃 FieldSession，不写数据库；
+- 不存在已有记录级“保存”按钮；
+- 不存在已有记录的 `form.position` 导航；
+- 当前字段位置、档案结构与 target 身份不因编辑发生变化；
+- `family + branch` 按一个原子 FieldSession 提交。
 
-学生 `family + branch` 是明确的原子复合字段：修改族系后继续选择支系，最后一次性提交，避免产生不一致的中间状态。
+顶部“编辑”只把档案焦点移动到第一个可编辑的 `field:<key>`，不会打开表单。
 
-新建记录、删除确认、密码重置、导入 / 导出、seed 属于完整事务，仍然使用 `Form` / `editor.py` 和显式保存或确认。`open_form()` 不提供已有记录的 edit 模式。
+## 9. 完整事务 Form
 
-## 9. 数据库与数据
+`Form` 只用于真正需要独立事务页面的操作：
 
-`database.py::SCHEMA` 是当前 SQLite 结构的唯一声明。`initialize_database()` 只创建当前结构，不检测旧列、不执行隐式历史迁移。
+- 新建记录；
+- 删除确认；
+- 密码重置；
+- 导入 / 导出；
+- seed。
 
-学生 `birth_date` 支持：
+这些操作由 `forms.py + editor.py` 负责，可以拥有自己的字段顺序和显式保存 / 确认。它们不是档案的第二种状态。
 
-```text
-YYYY-MM-DD
-YYYY
---MM-DD
-NULL
-```
+## 10. 数据库与数据
 
-独立 `age` 只用于出生资料不足以精确计算年龄时。完整出生日期存在时，年龄实时派生，`age` 不重复保存。
+`database.py::SCHEMA` 是当前 SQLite 结构的唯一声明。`initialize_database()` 只创建当前结构，不隐式修补历史 schema。
 
-当前项目没有已发布数据库版本兼容承诺；未来若需要迁移，应建立显式版本迁移，不向初始化路径堆叠历史条件分支。
+学生出生资料支持 `YYYY-MM-DD`、`YYYY`、`--MM-DD` 和空值。完整生日存在时年龄实时派生；资料不足时可保存独立年龄。
 
-## 10. 测试原则
+当前项目没有已发布数据库版本兼容承诺。未来若需要迁移，应建立显式版本迁移，而不是把历史条件塞回初始化路径。
 
-测试保护当前生产行为，而不是保留历史私有 API。
+## 11. 回归原则
 
-关键交互应通过真实工作台事件链测试：
+结构性回归至少保护：
 
-- Enter / → 从名册进入档案时选中首 target；
-- 姓名、学号可聚焦但不可编辑；
-- 学生复合行的上下左右几何；
-- 滚轮与方向键在已聚焦档案中得到相同结果；
-- 单字段 Enter 即时保存，Esc 取消；
-- 已有记录编辑不存在保存按钮；
-- 新建 / 删除等完整事务仍保留显式保存或确认；
-- seed 测试验证关系和数据语义，不绑定偶然学号或班级位置。
+- 所有档案字段使用稳定 `field:<key>`；
+- 只读字段可聚焦但不可写；
+- Enter 从当前 field 创建局部 FieldSession，而非 Form；
+- FieldSession 只拥有当前字段或声明的复合组；
+- Enter 即时保存、Esc 取消；
+- 已有记录没有保存按钮；
+- 展示、命中区和方向导航消费同一份最终几何；
+- 滚轮与方向键聚焦档案时进入同一导航路径；
+- 新建 / 删除等完整事务仍通过 Form；
+- 测试保护当前行为，不要求恢复已删除的私有 API。
