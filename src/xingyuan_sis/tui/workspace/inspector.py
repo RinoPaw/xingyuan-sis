@@ -8,7 +8,7 @@ from ..layout import WorkspaceLayout, visible_start
 from ..view_common import Board, identity, panel_heading, safe
 from .data import Catalog
 from .presentation import display_value
-from .state import FieldSession, Workspace
+from .state import FieldSession, FocusArea, Workspace
 
 Segment = tuple[str, str, str]
 Line = list[Segment]
@@ -133,8 +133,9 @@ def render_inspector(
     top = layout.panel_content_row(state.key)
     bottom = board.height - 2
     row = state.current(catalog)
+    focused = state.focus is FocusArea.INSPECTOR
     if row is None:
-        board.put(x, layout.panel_heading_row(state.key), panel_heading("档案", state.details), width=width)
+        board.put(x, layout.panel_heading_row(state.key), panel_heading("档案", focused), width=width)
         board.put(
             x, top + 1,
             "没有匹配的记录" if state.query else "暂无记录",
@@ -152,7 +153,7 @@ def render_inspector(
     board.put(
         x,
         layout.panel_heading_row(state.key),
-        panel_heading(heading, (state.details and not state.action_focus) or session is not None),
+        panel_heading(heading, focused or session is not None),
         action="focus-details" if session is None else None,
         width=width,
     )
@@ -183,7 +184,7 @@ def render_inspector(
 
     max_scroll = max(0, len(lines) - capacity)
     state.detail_scroll = min(max(0, state.detail_scroll), max_scroll)
-    if session is not None or (state.details and selected_action):
+    if session is not None or (focused and selected_action):
         state.detail_scroll = visible_start(target_line, len(lines), capacity, state.detail_scroll)
 
     visible = lines[state.detail_scroll:state.detail_scroll + capacity]
@@ -196,7 +197,7 @@ def render_inspector(
                 break
             shown = screen._clip_cells(text, remaining)
             display = screen._display_width(shown)
-            selected = bool(action and action == selected_action and (state.details or session is not None))
+            selected = bool(action and action == selected_action and (focused or session is not None))
             drawn_style = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED if selected else style
 
             if action:
