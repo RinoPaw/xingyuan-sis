@@ -50,12 +50,13 @@ class WorkspaceActionTests(unittest.TestCase):
 
         with patch.object(
             keys, "_read_key",
-            side_effect=["focus", "focus", "right", "right", "select", "back"],
+            side_effect=["focus", "focus", "right", "right", "select", "refresh"],
         ), patch.object(screen, "_paint"), patch.object(
             screen, "_terminal_size", return_value=os.terminal_size((120, 35))
         ), patch.object(workspace_events, "open_form", side_effect=capture):
-            workspace_events.interact(state, self.catalog)
+            event = workspace_events.interact(state, self.catalog)
 
+        self.assertEqual(event, ("refresh", 0))
         self.assertEqual(selected_at_delete, [15])
         self.assertEqual(state.selected, 15)
 
