@@ -88,27 +88,39 @@ def layout_lines(lines: list[Line], width: int, layout: WorkspaceLayout) -> list
     return wrapped[content_offset(wrapped, layout):]
 
 
-def action_targets(lines: list[Line]) -> list[tuple[int, str]]:
-    result: list[tuple[int, str]] = []
-    seen: set[str] = set()
+def action_line_map(lines: list[Line], *, include_options: bool = False) -> dict[str, list[int]]:
+    """Map each semantic target to every physical line it occupies."""
+    result: dict[str, list[int]] = {}
     for index, line in enumerate(lines):
-        for _, _, action in line:
-            if action and action not in seen:
-                result.append((index, action))
-                seen.add(action)
+        actions = dict.fromkeys(
+            action for _, _, action in line
+            if action and (include_options or not action.startswith("option:"))
+        )
+        for action in actions:
+            result.setdefault(action, []).append(index)
     return result
 
 
-def directional_target(lines: list[Line], current: str, direction: str) -> str | None:
-    """Navigate directly on the final visible line geometry.
+def action_targets(lines: list[Line]) -> list[tuple[int, str]]:
+    """Return semantic targets in display order, anchored at their first line."""
+    return [(indexes[0], action) for action, indexes in action_line_map(lines, include_options=True).items()]
 
-    Vertical movement enters the rightmost target of the adjacent target row.
-    Horizontal movement stays inside the current row. Returning ``None`` on a
-    left move lets the caller leave the inspector.
+
+def directional_target(lines: list[Line], current: str, direction: str) -> str | None:
+    """Navigate directly on the final visible semantic geometry.
+
+    Consecutive physical lines carrying the same actions are one semantic row,
+    so wrapping or multiline content never creates a second navigation stop.
     """
-    rows = [list(dict.fromkeys(action for _, _, action in line if action and not action.startswith("option:")))
-            for line in lines]
-    rows = [row for row in rows if row]
+    rows: list[list[str]] = []
+    for line in lines:
+        row = list(dict.fromkeys(
+            action for _, _, action in line
+            if action and not action.startswith("option:")
+        ))
+        if row and (not rows or row != rows[-1]):
+            rows.append(row)
+
     location = next(((i, row.index(current)) for i, row in enumerate(rows) if current in row), None)
     if location is None:
         return None
@@ -169,11 +181,6 @@ def render_inspector(
             if session.options
             else f"field:{session.active_key}"
         )
-        target_line = next(
-            (i for i, line in enumerate(lines)
-             if any(action == selected_action for _, _, action in line)),
-            0,
-        )
     else:
         targets = action_targets(lines)
         if targets and state.detail_selected >= 0:
@@ -182,10 +189,19 @@ def render_inspector(
         elif not targets:
             state.detail_selected = -1
 
+    spans = action_line_map(lines, include_options=True)
+    occupied = spans.get(selected_action, [target_line]) if selected_action else [target_line]
+    if occupied:
+        target_line = occupied[0]
+
     max_scroll = max(0, len(lines) - capacity)
     state.detail_scroll = min(max(0, state.detail_scroll), max_scroll)
     if session is not None or (focused and selected_action):
-        state.detail_scroll = visible_start(target_line, len(lines), capacity, state.detail_scroll)
+        first_visible = state.detail_scroll
+        last_visible = state.detail_scroll + capacity - 1
+        if not any(first_visible <= line <= last_visible for line in occupied):
+            target_line = occupied[-1] if occupied[-1] < first_visible else occupied[0]
+            state.detail_scroll = visible_start(target_line, len(lines), capacity, state.detail_scroll)
 
     visible = lines[state.detail_scroll:state.detail_scroll + capacity]
     for offset_in_view, segments in enumerate(visible):
