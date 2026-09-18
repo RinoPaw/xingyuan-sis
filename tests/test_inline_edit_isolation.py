@@ -26,8 +26,16 @@ class InlineEditIsolationTests(unittest.TestCase):
     def _generic_text(lines):
         return ["".join(text for text, _, _ in line) for line in lines]
 
+    @staticmethod
+    def _inspector_state(collection: str):
+        return workspace.Workspace(
+            collection,
+            focus=workspace.FocusArea.INSPECTOR,
+            content_panel=workspace.ContentPanel.INSPECTOR,
+        )
+
     def test_student_field_session_only_projects_owned_values(self):
-        state = workspace.Workspace("students", details=True)
+        state = self._inspector_state("students")
         row = state.current(self.catalog)
         baseline = self._student_text(student_inspector.lines(row, self.catalog))
 
@@ -50,7 +58,7 @@ class InlineEditIsolationTests(unittest.TestCase):
         )
         for collection, field_key in cases:
             with self.subTest(collection=collection):
-                state = workspace.Workspace(collection, details=True)
+                state = self._inspector_state(collection)
                 row = state.current(self.catalog)
                 baseline = self._generic_text(detail.lines(collection, row, self.catalog))
 
