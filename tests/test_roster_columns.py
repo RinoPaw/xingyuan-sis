@@ -4,14 +4,14 @@ from xingyuan_sis.tui import screen
 from xingyuan_sis.tui.view_common import Board
 from xingyuan_sis.tui.workspace.data import COLLECTIONS
 from xingyuan_sis.tui.workspace.roster import _fit_columns, render_roster
+from xingyuan_sis.tui.workspace.state import FocusArea
 
 
 class _State:
     key = "students"
     selected = 0
     roster_scroll = 0
-    details = False
-    action_focus = False
+    focus = FocusArea.ROSTER
     form = None
     query = ""
     view = 0
