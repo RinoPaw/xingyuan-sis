@@ -12,6 +12,7 @@ from xingyuan_sis.tui.workspace.data import Catalog
 
 from xingyuan_sis.tui.workspace import events as workspace_events
 
+
 class RosterViewportTests(unittest.TestCase):
     def setUp(self):
         self.temp = TemporaryDirectory()
@@ -22,12 +23,12 @@ class RosterViewportTests(unittest.TestCase):
         self.catalog = Catalog(self.db)
 
     def test_moving_up_inside_visible_window_does_not_scroll_page(self):
-        size = (120, 42)  # roster capacity: 33 rows
+        size = (120, 42)  # 33 panel rows minus the roster column header = 32 records
         state = workspace.Workspace("students", selected=33)
 
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
             workspace_view.render(state, self.catalog)
-        self.assertEqual(state.roster_scroll, 1)
+        self.assertEqual(state.roster_scroll, 2)
 
         with patch.object(keys, "_read_key", side_effect=["up", "back", "back"]), \
              patch.object(screen, "_paint"), \
@@ -35,7 +36,7 @@ class RosterViewportTests(unittest.TestCase):
             workspace_events.interact(state, self.catalog)
 
         self.assertEqual(state.selected, 32)
-        self.assertEqual(state.roster_scroll, 1)
+        self.assertEqual(state.roster_scroll, 2)
 
     def test_viewport_moves_only_after_selection_crosses_an_edge(self):
         size = (120, 42)
