@@ -8,6 +8,13 @@ from .data import Catalog, Field
 
 @dataclass
 class Form:
+    """A complete transaction form.
+
+    Existing-record field editing does not use this type. Forms are reserved for
+    create/import/export/delete/reset/seed style transactions that genuinely own
+    their own page and focus cycle.
+    """
+
     mode: str
     fields: tuple[Field, ...] = ()
     values: dict[str, Any] = field(default_factory=dict)
@@ -16,6 +23,27 @@ class Form:
     options: list[tuple[Any, str]] | None = None
     option_index: int = 0
     focus_save: bool = False
+
+
+@dataclass
+class FieldSession:
+    """Local interaction state attached to one stable inspector field target."""
+
+    fields: tuple[Field, ...]
+    values: dict[str, Any]
+    original: dict[str, Any]
+    anchor_key: str
+    active: int = 0
+    options: list[tuple[Any, str]] | None = None
+    option_index: int = 0
+
+    @property
+    def field(self) -> Field:
+        return self.fields[self.active]
+
+    @property
+    def active_key(self) -> str:
+        return self.field.key
 
 
 @dataclass(frozen=True)
@@ -47,6 +75,7 @@ class Workspace:
     action_selected: int = 0
     notice: str = ""
     form: Form | None = None
+    field_session: FieldSession | None = None
     report: list[str] = field(default_factory=list)
     credentials: list[tuple[str, str]] = field(default_factory=list)
     history: list[Location] = field(default_factory=list)
@@ -63,7 +92,8 @@ class Workspace:
 
     def switch(self, key: str) -> None:
         self.key, self.view, self.query, self.selected, self.roster_scroll = key, 0, "", 0, 0
-        self.details, self.detail_scroll, self.detail_selected, self.form = False, 0, 0, None
+        self.details, self.detail_scroll, self.detail_selected = False, 0, 0
+        self.form, self.field_session = None, None
         self.action_focus, self.action_selected = False, 0
 
     def visit(self, key: str, identifier: str, catalog: Catalog) -> None:

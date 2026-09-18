@@ -10,6 +10,7 @@ from .state import Form, Workspace
 
 
 def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
+    """Open a complete transaction form; existing-record editing lives elsewhere."""
     catalog.require_write()
     if mode == "edit":
         raise ValueError("已有记录请在档案字段上直接修改。")
@@ -18,46 +19,19 @@ def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
         state.notice = "先选择一条记录。"
         return
     if mode == "create":
-        state.form = Form(
-            mode,
-            catalog.fields(state.key),
-            catalog.defaults(state.key),
-        )
+        state.form = Form(mode, catalog.fields(state.key), catalog.defaults(state.key))
     elif mode in {"import", "export"}:
         state.form = Form(mode, (Field("path", "CSV 文件路径", True),), {"path": "data/students.csv"})
     else:
         state.form = Form(mode, original=row)
+    state.field_session = None
     state.notice = "更改尚未保存。Esc 取消。"
     state.detail_scroll = 0
 
 
-def open_field(state: Workspace, catalog: Catalog, field_key: str) -> None:
-    catalog.require_write()
-    row = state.current(catalog)
-    if row is None:
-        state.notice = "先选择一条记录。"
-        return
-    fields = {field.key: field for field in catalog.fields(state.key, True)}
-    if field_key not in fields:
-        raise ValueError("这个字段不能直接修改。")
-    if field_key == "age":
-        from ...schema import is_complete_birth_date
-
-        if is_complete_birth_date(row.get("birth_date")):
-            raise ValueError("完整出生日期已自动计算年龄，请修改出生日期。")
-    owned = (fields[field_key],)
-    if state.key == "students" and field_key == "family":
-        owned += (fields["branch"],)
-    state.form = Form("edit", owned, {field.key: row.get(field.key) for field in owned}, row)
-    state.details = True
-    state.action_focus = False
-    state.notice = "Enter 确认并保存 · Esc 取消。"
-
-
 def move_form_position(state: Workspace, direction: str) -> None:
-    """Only new-record and file forms have a field/save focus cycle."""
     form = state.form
-    if form is None or not form.fields or form.mode == "edit":
+    if form is None or not form.fields:
         return
     order = list(range(len(form.fields)))
     if direction in {"focus", "focus_prev"}:
@@ -84,30 +58,14 @@ def move_form_position(state: Workspace, direction: str) -> None:
             form.position = position
 
 
-def option_values(state: Workspace) -> dict:
-    """Resolve related options using committed values plus the current field group."""
-    from .presentation import project_record
-
-    return project_record(state.form.original, state.form) if state.form.mode == "edit" else state.form.values
-
-
-def accept_option(state: Workspace, catalog: Catalog, index: int) -> tuple[str, int] | None:
+def accept_option(state: Workspace, index: int) -> None:
     form = state.form
-    field_key = form.fields[form.position].key
-    form.values[field_key] = form.options[index][0]
-    if state.key == "students" and field_key == "family":
-        branches = catalog.options("students", "branch", option_values(state))
-        if not any(value == form.values.get("branch") for value, _ in branches):
-            form.values["branch"] = None
+    if form is None or form.options is None or not form.options:
+        return
+    field = form.fields[form.position]
+    form.values[field.key] = form.options[index][0]
     form.options = None
-    if form.mode != "edit":
-        state.notice = "已选择，尚未保存。"
-        return None
-    if form.position + 1 < len(form.fields):
-        form.position += 1
-        read_value(state, catalog, ("field", form.position))
-        return None
-    return "save", 0
+    state.notice = "已选择，尚未保存。"
 
 
 def apply_form(state: Workspace, catalog: Catalog) -> None:
@@ -115,9 +73,11 @@ def apply_form(state: Workspace, catalog: Catalog) -> None:
     form = state.form
     if form is None:
         return
-    if form.mode in {"create", "edit"}:
+
+    record_id: int | None = None
+    if form.mode == "create":
         values = {field.key: form.values.get(field.key) for field in form.fields}
-        record_id = catalog.save(state.key, values, form.original)
+        record_id = catalog.save(state.key, values)
         if catalog.initial_password is not None:
             state.credentials = [(str(form.values["student_no"]), catalog.initial_password)]
             catalog.initial_password = None
@@ -161,37 +121,20 @@ def apply_form(state: Workspace, catalog: Catalog) -> None:
             state.report = result.errors
             if result.errors:
                 state.switch("data")
-    state.form = None
-    if form.mode in {"create", "edit"} and any(row["id"] == record_id for row in state.rows(catalog)):
-        state.details = True
-        if form.mode == "edit":
-            from .events import detail_targets
 
-            action = f"field-target:{form.fields[form.position].key}"
-            state.detail_selected = next(
-                (
-                    i
-                    for i, (_, target) in enumerate(detail_targets(state, catalog))
-                    if target == action
-                ),
-                0,
-            )
-        else:
-            state.detail_scroll, state.detail_selected = 0, 0
+    state.form = None
+    if form.mode == "create" and record_id is not None and any(
+        row["id"] == record_id for row in state.rows(catalog)
+    ):
+        state.details = True
+        state.detail_scroll, state.detail_selected = 0, 0
     else:
         state.details = False
         state.detail_scroll, state.detail_selected = 0, 0
 
 
-def _inline_field_geometry(
-    frame: screen.ScreenFrame,
-    index: int,
-    *,
-    direct: bool = False,
-) -> tuple[int, int, int]:
+def _form_field_geometry(frame: screen.ScreenFrame, index: int) -> tuple[int, int, int]:
     region = next(region for region in frame.regions if region.action == f"field:{index}")
-    if direct:
-        return region.y, region.x, max(1, region.width)
     label_width = min(12, max(4, region.width // 3))
     value_column = region.x + label_width + 2
     value_width = max(1, region.width - label_width - 2)
@@ -199,6 +142,7 @@ def _inline_field_geometry(
 
 
 def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> None:
+    """Read search text or one field belonging to a complete transaction form."""
     from .view import render
 
     kind, index = event
@@ -233,42 +177,31 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
         state.notice = f"搜索：{raw}" if raw else "已显示全部记录。"
         return
 
-    field_ = state.form.fields[index]
-    state.form.position = index
-    state.form.focus_save = False
-    options = (
-        catalog.options(state.key, field_.key, option_values(state))
-        if state.form.mode in {"create", "edit"}
-        else None
-    )
+    form = state.form
+    if form is None:
+        return
+    field_ = form.fields[index]
+    form.position = index
+    form.focus_save = False
+    options = catalog.options(state.key, field_.key, form.values)
     if options is not None:
-        state.form.options = options
-        state.form.option_index = next(
-            (
-                i
-                for i, (value, _) in enumerate(options)
-                if value == state.form.values.get(field_.key)
-            ),
+        form.options = options
+        form.option_index = next(
+            (i for i, (value, _) in enumerate(options) if value == form.values.get(field_.key)),
             0,
         )
-        suffix = "继续" if state.form.position + 1 < len(state.form.fields) else "保存"
-        state.notice = f"↑↓ 选择，Enter {suffix if state.form.mode == 'edit' else '暂存'}。Esc 取消。"
+        state.notice = "↑↓ 选择，Enter 暂存。Esc 取消。"
         return
 
-    current = state.form.values.get(field_.key)
+    current = form.values.get(field_.key)
     state.notice = (
-        "直接在当前字段修改 · Enter "
-        + ("保存" if state.form.mode == "edit" else "暂存")
+        "直接在当前字段修改 · Enter 暂存"
         + (" · 清空后 Enter 可置空" if not field_.required else "")
         + " · Esc 取消"
     )
     frame = render(state, catalog)
     screen._paint(frame.lines)
-    row, column, width = _inline_field_geometry(
-        frame,
-        index,
-        direct=state.form.mode == "edit",
-    )
+    row, column, width = _form_field_geometry(frame, index)
     with input_style(True):
         raw = read_inline_input(
             f"{field_.label} > ",
@@ -278,9 +211,5 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
             initial_value="" if current is None else str(current),
         ).strip()
 
-    value = field_.parse(raw if raw else None)
-    state.form.values[field_.key] = value
-    if state.form.mode == "edit":
-        apply_form(state, catalog)
-    else:
-        state.notice = "字段已暂存。Esc 取消。"
+    form.values[field_.key] = field_.parse(raw if raw else None)
+    state.notice = "字段已暂存。Esc 取消。"

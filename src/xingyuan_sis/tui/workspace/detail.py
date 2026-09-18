@@ -5,25 +5,30 @@ from typing import Any
 from .. import screen
 from ..view_common import safe
 from .data import COLLECTIONS, Catalog
-from .inspector import Line, is_editing, expand_options, field_segment
+from .inspector import Line, expand_options, field_segment
 from .presentation import project_record
 from .state import Workspace
 
 
 def lines(
-    key: str, row: dict[str, Any], catalog: Catalog, state: Workspace | None = None,
+    key: str,
+    row: dict[str, Any],
+    catalog: Catalog,
+    state: Workspace | None = None,
 ) -> list[Line]:
-    """One archive geometry for both browsing and editing each entity."""
-    values = project_record(row, state.form if state else None)
+    """Describe one archive geometry; field sessions only overlay its values."""
+    session = state.field_session if state else None
+    values = project_record(row, session)
     result: list[Line] = []
     title_key = "title" if key == "announcements" else "student_no" if key == "grades" else "name"
     ordered = sorted(COLLECTIONS[key].fields, key=lambda field: field.key != title_key)
+
     for field in ordered:
         style = screen._BOLD + screen._TEXT_PRIMARY if field.key == title_key else screen._TEXT_PRIMARY
-        segment = field_segment(state, catalog, key, values, field.key, style=style)
+        segment = field_segment(catalog, key, values, field.key, style=style)
         if key == "announcements" and field.key == "body":
             result.extend(([], [("正文", screen._BOLD + screen._TEXT_PRIMARY, "")]))
-            for paragraph in str(row["body"]).splitlines():
+            for paragraph in str(values.get("body") or "").splitlines():
                 result.append([(safe(paragraph) if paragraph else "", screen._TEXT_PRIMARY, "")])
         elif field.key == title_key:
             result.append([segment])
@@ -45,5 +50,6 @@ def lines(
             else:
                 label = safe(item["name"])
             result.append([("↗ " + label, screen._TEXT_ACCENT + "\x1b[4m",
-                            "" if is_editing(state) else f"related:{related_key}:{item['id']}")])
-    return expand_options(result, state)
+                            f"related:{related_key}:{item['id']}")])
+
+    return expand_options(result, session)

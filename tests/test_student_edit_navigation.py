@@ -8,7 +8,7 @@ from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import keys, screen, workspace
 from xingyuan_sis.tui.workspace import events as workspace_events
-from xingyuan_sis.tui.workspace import forms as workspace_forms
+from xingyuan_sis.tui.workspace import field_session as workspace_field
 from xingyuan_sis.tui.workspace.data import Catalog
 
 
@@ -52,90 +52,61 @@ class StudentEditNavigationTests(unittest.TestCase):
         self.assertEqual(event, ("refresh", 0))
         self.assertTrue(self.state.details)
         actions = self._actions()
-        self.assertEqual(actions[self.state.detail_selected], "field-target:name")
-        self.assertEqual(
-            self._move("field-target:name", "down"),
-            "field-target:student_no",
-        )
+        self.assertEqual(actions[self.state.detail_selected], "field:name")
+        self.assertEqual(self._move("field:name", "down"), "field:student_no")
 
     def test_species_composite_row_uses_real_event_geometry(self):
-        self.assertEqual(
-            self._move("field-target:student_no", "down"),
-            "field-target:branch",
-        )
-        self.assertEqual(
-            self._move("field-target:gender", "up"),
-            "field-target:branch",
-        )
-        self.assertEqual(
-            self._move("field-target:branch", "up"),
-            "field-target:student_no",
-        )
-        self.assertEqual(
-            self._move("field-target:branch", "left"),
-            "field-target:family",
-        )
-        self.assertEqual(
-            self._move("field-target:family", "right"),
-            "field-target:branch",
-        )
-        self.assertIsNone(self._move("field-target:family", "left"))
+        self.assertEqual(self._move("field:student_no", "down"), "field:branch")
+        self.assertEqual(self._move("field:gender", "up"), "field:branch")
+        self.assertEqual(self._move("field:branch", "up"), "field:student_no")
+        self.assertEqual(self._move("field:branch", "left"), "field:family")
+        self.assertEqual(self._move("field:family", "right"), "field:branch")
+        self.assertIsNone(self._move("field:family", "left"))
 
-    def test_element_composite_row_uses_the_same_real_event_geometry(self):
-        self.assertEqual(
-            self._move("field-target:status", "down"),
-            "field-target:primary_affinity",
-        )
-        self.assertEqual(
-            self._move("field-target:primary_affinity", "up"),
-            "field-target:status",
-        )
-        self.assertEqual(
-            self._move("field-target:primary_affinity", "left"),
-            "field-target:primary_element",
-        )
-        self.assertEqual(
-            self._move("field-target:primary_element", "right"),
-            "field-target:primary_affinity",
-        )
-        self.assertIsNone(self._move("field-target:primary_element", "left"))
+    def test_element_composite_row_uses_same_real_event_geometry(self):
+        self.assertEqual(self._move("field:status", "down"), "field:primary_affinity")
+        self.assertEqual(self._move("field:primary_affinity", "up"), "field:status")
+        self.assertEqual(self._move("field:primary_affinity", "left"), "field:primary_element")
+        self.assertEqual(self._move("field:primary_element", "right"), "field:primary_affinity")
+        self.assertIsNone(self._move("field:primary_element", "left"))
 
     def test_read_only_identity_fields_are_focusable_but_not_editable(self):
         actions = self._actions()
-        for action in ("field-target:name", "field-target:student_no"):
+        for action in ("field:name", "field:student_no"):
             with self.subTest(action=action):
                 self.state.details = True
-                self.state.form = None
+                self.state.field_session = None
                 self.state.detail_selected = actions.index(action)
                 with patch.object(keys, "_read_key", side_effect=["select", "refresh"]), \
                      patch.object(screen, "_paint"), \
                      patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
                     event = workspace_events.interact(self.state, self.catalog)
                 self.assertEqual(event, ("refresh", 0))
-                self.assertIsNone(self.state.form)
+                self.assertIsNone(self.state.field_session)
                 self.assertEqual(self._actions()[self.state.detail_selected], action)
                 self.assertIn("只读", self.state.notice)
 
-    def test_enter_opens_only_the_selected_editable_field(self):
+    def test_enter_opens_only_selected_editable_field_session(self):
         actions = self._actions()
-        self.state.detail_selected = actions.index("field-target:primary_element")
+        self.state.detail_selected = actions.index("field:primary_element")
 
         with patch.object(keys, "_read_key", side_effect=["select"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             event = workspace_events.interact(self.state, self.catalog)
 
-        self.assertEqual(event, ("field", 0))
-        self.assertEqual([field.key for field in self.state.form.fields], ["primary_element"])
+        self.assertEqual(event, ("field-edit", 0))
+        self.assertEqual([field.key for field in self.state.field_session.fields], ["primary_element"])
+        self.assertIsNone(self.state.form)
 
     def test_complete_birth_date_keeps_derived_age_focusable_but_not_directly_editable(self):
         row = self.state.current(self.catalog)
         self.catalog.service.update_student_by_no(row["student_no"], birth_date="2000-01-01", age=99)
         self.catalog.refresh()
         actions = self._actions()
-        self.assertIn("field-target:age", actions)
+        self.assertIn("field:age", actions)
         with self.assertRaisesRegex(ValueError, "自动计算年龄"):
-            workspace_forms.open_field(self.state, self.catalog, "age")
+            workspace_field.start(self.state, self.catalog, "age")
 
 
 if __name__ == "__main__":

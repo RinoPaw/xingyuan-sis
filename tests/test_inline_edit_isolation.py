@@ -1,4 +1,3 @@
-from xingyuan_sis.tui.workspace import forms as workspace_forms
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -6,7 +5,7 @@ import unittest
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import workspace
-from xingyuan_sis.tui.workspace import detail, student_inspector
+from xingyuan_sis.tui.workspace import detail, field_session, student_inspector
 from xingyuan_sis.tui.workspace.data import Catalog
 
 
@@ -27,12 +26,12 @@ class InlineEditIsolationTests(unittest.TestCase):
     def _generic_text(lines):
         return ["".join(text for text, _, _ in line) for line in lines]
 
-    def test_student_edit_only_projects_the_selected_field_group(self):
+    def test_student_field_session_only_projects_owned_values(self):
         state = workspace.Workspace("students", details=True)
         row = state.current(self.catalog)
         baseline = self._student_text(student_inspector.lines(row, self.catalog))
 
-        workspace_forms.open_field(state, self.catalog, "enrollment_year")
+        field_session.start(state, self.catalog, "enrollment_year")
         editing = self._student_text(student_inspector.lines(row, self.catalog, state))
 
         self.assertEqual(baseline, editing)
@@ -41,7 +40,7 @@ class InlineEditIsolationTests(unittest.TestCase):
         self.assertEqual(baseline_class, editing_class)
         self.assertIn(" · ", editing_class)
 
-    def test_generic_inspectors_do_not_reformat_unrelated_fields_during_edit(self):
+    def test_generic_inspectors_do_not_reformat_unrelated_fields_during_field_session(self):
         cases = (
             ("courses", "name"),
             ("grades", "semester"),
@@ -55,7 +54,7 @@ class InlineEditIsolationTests(unittest.TestCase):
                 row = state.current(self.catalog)
                 baseline = self._generic_text(detail.lines(collection, row, self.catalog))
 
-                workspace_forms.open_field(state, self.catalog, field_key)
+                field_session.start(state, self.catalog, field_key)
                 editing = self._generic_text(detail.lines(collection, row, self.catalog, state))
 
                 self.assertEqual(baseline, editing)

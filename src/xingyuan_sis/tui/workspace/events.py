@@ -3,7 +3,8 @@ from __future__ import annotations
 from .. import keys, screen
 from ..layout import WorkspaceLayout
 from .data import ACADEMICS, COLLECTIONS, Catalog
-from .forms import accept_option, move_form_position, open_field, open_form
+from .field_session import accept_option as accept_field_option, cancel as cancel_field_session, start as start_field_session
+from .forms import accept_option as accept_form_option, move_form_position, open_form
 from .state import Workspace
 
 
@@ -43,18 +44,16 @@ def reveal_detail_selection(state: Workspace, catalog: Catalog) -> None:
 
 
 def select_visible_detail_target(state: Workspace, catalog: Catalog) -> None:
-    from .inspector import content_offset, wrap_lines
-    from .view import content_lines, workspace_layout
+    from .view import detail_lines, workspace_layout
 
     row = state.current(catalog)
     if row is None:
         state.detail_selected = -1
         return
     layout = workspace_layout(state, catalog)
-    lines = content_lines(state.key, row, catalog)
-    total = len(wrap_lines(lines, layout.panel_width)) - content_offset(lines, layout)
+    lines = detail_lines(state.key, row, catalog, layout.panel_width)
     capacity = layout.panel_capacity(state.key)
-    state.detail_scroll = min(max(0, state.detail_scroll), max(0, total - capacity))
+    state.detail_scroll = min(max(0, state.detail_scroll), max(0, len(lines) - capacity))
     targets = detail_targets(state, catalog)
     if not targets:
         state.detail_selected = -1
@@ -62,17 +61,14 @@ def select_visible_detail_target(state: Workspace, catalog: Catalog) -> None:
     first, last = state.detail_scroll, state.detail_scroll + capacity - 1
     visible = [(index, line) for index, (line, _) in enumerate(targets) if first <= line <= last]
     if visible:
-        state.detail_selected = min(
-            visible,
-            key=lambda item: abs(item[0] - state.detail_selected),
-        )[0]
+        state.detail_selected = min(visible, key=lambda item: abs(item[0] - state.detail_selected))[0]
     else:
         state.detail_selected = -1
 
 
 def move_detail_selection(state: Workspace, catalog: Catalog, direction: str) -> None:
     from .inspector import directional_target
-    from .view import content_lines
+    from .view import detail_lines, workspace_layout
 
     targets = detail_targets(state, catalog)
     if not targets or state.detail_selected < 0:
@@ -81,8 +77,10 @@ def move_detail_selection(state: Workspace, catalog: Catalog, direction: str) ->
         return
     actions = [action for _, action in targets]
     current = actions[min(state.detail_selected, len(actions) - 1)]
+    row = state.current(catalog)
+    layout = workspace_layout(state, catalog)
     target = directional_target(
-        content_lines(state.key, state.current(catalog), catalog),
+        detail_lines(state.key, row, catalog, layout.panel_width),
         current,
         direction,
     )
@@ -99,16 +97,16 @@ def _activate_detail_action(
     catalog: Catalog,
     action: str,
 ) -> tuple[bool, tuple[str, int] | None]:
-    """Activate one inspector target without coupling navigation to page-specific fields."""
+    """Activate a stable inspector target without page-specific field knowledge."""
     if action.startswith("related:"):
         _, collection, identifier = action.split(":")
         state.visit(collection, identifier, catalog)
         return True, None
 
-    if not action.startswith("field-target:"):
+    if not action.startswith("field:"):
         return False, None
 
-    field_key = action.removeprefix("field-target:")
+    field_key = action.removeprefix("field:")
     targets = detail_targets(state, catalog)
     actions = [target for _, target in targets]
     if action in actions:
@@ -117,16 +115,16 @@ def _activate_detail_action(
     state.details = True
     reveal_detail_selection(state, catalog)
 
-    editable = {field.key for field in catalog.fields(state.key, True)}
     if catalog.read_only:
         state.notice = "当前档案为只读。"
         return True, None
+    editable = {field.key for field in catalog.fields(state.key, True)}
     if field_key not in editable:
         state.notice = "该字段为只读。"
         return True, None
 
-    open_field(state, catalog, field_key)
-    return True, ("field", 0)
+    start_field_session(state, catalog, field_key)
+    return True, ("field-edit", 0)
 
 
 def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
@@ -142,7 +140,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
         wheel = isinstance(key, keys.MouseScroll)
         wheel_over_details = False
         if wheel:
-            if not state.form:
+            if state.form is None and state.field_session is None:
                 wheel_over_details = any(
                     region.action == "focus-details"
                     and region.y == key.y
@@ -155,7 +153,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
         if not key:
             continue
 
-        if key in {"focus", "focus_prev"} and not state.form:
+        if key in {"focus", "focus_prev"} and state.form is None and state.field_session is None:
             areas = (
                 ("roster", "details", "actions")
                 if state.key != "data" and state.current(catalog)
@@ -164,16 +162,14 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             current_area = "actions" if state.action_focus else "details" if state.details else "roster"
             if current_area not in areas:
                 current_area = "roster"
-            area = areas[
-                (areas.index(current_area) + (1 if key == "focus" else -1)) % len(areas)
-            ]
+            area = areas[(areas.index(current_area) + (1 if key == "focus" else -1)) % len(areas)]
             state.action_focus, state.details = area == "actions", area == "details"
             if state.details:
                 reveal_detail_selection(state, catalog)
             continue
 
         actions = tuple(action for _, action in catalog.actions(state.key))
-        if state.action_focus and not state.form:
+        if state.action_focus and state.form is None and state.field_session is None:
             if key == "left":
                 state.action_selected = max(0, state.action_selected - 1)
                 continue
@@ -195,9 +191,8 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 key = actions[state.action_selected]
 
         if key in {"back", "cancel"}:
-            if state.form and state.form.mode == "edit":
-                state.form = None
-                state.notice = "已取消本次字段修改。"
+            if state.field_session is not None:
+                cancel_field_session(state)
             elif state.form and state.form.options is not None:
                 state.form.options = None
             elif state.form:
@@ -214,6 +209,23 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 return None
             continue
 
+        if state.field_session is not None:
+            session = state.field_session
+            if session.options is not None:
+                if key in {"up", "down", "home", "end"}:
+                    index = session.option_index + (-1 if key == "up" else 1)
+                    if key == "home":
+                        index = 0
+                    elif key == "end":
+                        index = len(session.options) - 1
+                    session.option_index = min(max(0, index), max(0, len(session.options) - 1))
+                elif key == "select" or key.startswith("option:"):
+                    if session.options:
+                        index = int(key.split(":")[1]) if key.startswith("option:") else session.option_index
+                        accept_field_option(state, catalog, index)
+                continue
+            continue
+
         if state.form:
             form = state.form
             if form.options is not None:
@@ -223,34 +235,21 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                         index = 0
                     elif key == "end":
                         index = len(form.options) - 1
-                    form.option_index = min(
-                        max(0, index),
-                        max(0, len(form.options) - 1),
-                    )
+                    form.option_index = min(max(0, index), max(0, len(form.options) - 1))
                 elif key == "select" or key.startswith("option:"):
                     if form.options:
-                        index = (
-                            int(key.split(":")[1])
-                            if key.startswith("option:")
-                            else form.option_index
-                        )
-                        event = accept_option(state, catalog, index)
-                        if event is not None:
-                            return event
+                        index = int(key.split(":")[1]) if key.startswith("option:") else form.option_index
+                        accept_form_option(state, index)
                 continue
-            if (key == "save" and form.mode != "edit") or (
-                key == "select" and (form.focus_save or not form.fields)
-            ):
+            if key == "save" or (key == "select" and (form.focus_save or not form.fields)):
                 return "save", 0
-            if key == "select" and state.form.fields:
-                return "field", state.form.position
+            if key == "select" and form.fields:
+                return "field", form.position
             if key.startswith("field:"):
-                state.form.position = int(key.split(":")[1])
-                state.form.focus_save = False
-                return "field", state.form.position
-            if key in {
-                "up", "down", "left", "right", "home", "end", "focus", "focus_prev"
-            }:
+                form.position = int(key.split(":")[1])
+                form.focus_save = False
+                return "field", form.position
+            if key in {"up", "down", "left", "right", "home", "end", "focus", "focus_prev"}:
                 move_form_position(state, key)
             continue
 
@@ -299,10 +298,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             if state.details and state.key != "data":
                 targets = detail_targets(state, catalog)
                 if targets and state.detail_selected >= 0:
-                    state.detail_selected = min(
-                        max(0, state.detail_selected),
-                        len(targets) - 1,
-                    )
+                    state.detail_selected = min(max(0, state.detail_selected), len(targets) - 1)
                     target = targets[state.detail_selected][1]
                     handled, event = _activate_detail_action(state, catalog, target)
                     if handled:
@@ -317,10 +313,8 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             continue
         elif key in {"up", "down", "page_up", "page_down", "home", "end"}:
             if not state.details and key == "up" and not wheel:
-                if (
-                    (state.key == "data" and state.detail_scroll == 0)
-                    or (state.key != "data" and state.selected == 0)
-                ):
+                if ((state.key == "data" and state.detail_scroll == 0)
+                        or (state.key != "data" and state.selected == 0)):
                     state.action_focus = True
                     continue
             amount = max(1, screen._terminal_size().lines - 11) if key.startswith("page_") else 1
@@ -339,12 +333,9 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                     state.detail_selected = 0
             elif state.details and state.key != "data":
                 targets = detail_targets(state, catalog)
-                if (
-                    key in {"page_up", "page_down"}
-                    or not targets
-                    or (catalog.read_only and key in {"home", "end"})
-                    or (state.detail_selected < 0 and key not in {"home", "end"})
-                ):
+                if (key in {"page_up", "page_down"} or not targets
+                        or (catalog.read_only and key in {"home", "end"})
+                        or (state.detail_selected < 0 and key not in {"home", "end"})):
                     state.detail_scroll = max(0, state.detail_scroll + amount)
                     if key == "home":
                         state.detail_scroll = 0
@@ -358,10 +349,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                         state.detail_selected = len(targets) - 1
                     else:
                         move_detail_selection(state, catalog, key)
-                    state.detail_selected = min(
-                        max(0, state.detail_selected),
-                        len(targets) - 1,
-                    )
+                    state.detail_selected = min(max(0, state.detail_selected), len(targets) - 1)
                     reveal_detail_selection(state, catalog)
             elif state.key == "data":
                 state.detail_scroll = max(0, state.detail_scroll + amount)
@@ -399,10 +387,8 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             targets = detail_targets(state, catalog)
             editable_keys = {field.key for field in catalog.fields(state.key, True)}
             editable = [
-                i
-                for i, (_, action) in enumerate(targets)
-                if action.startswith("field-target:")
-                and action.removeprefix("field-target:") in editable_keys
+                i for i, (_, action) in enumerate(targets)
+                if action.startswith("field:") and action.removeprefix("field:") in editable_keys
             ]
             if editable:
                 state.action_focus, state.details = False, True

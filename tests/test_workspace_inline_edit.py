@@ -10,7 +10,8 @@ from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import keys, screen, workspace
 from xingyuan_sis.tui.text_edit import TextBuffer
 from xingyuan_sis.tui.workspace import events as workspace_events
-from xingyuan_sis.tui.workspace import forms as workspace_forms, student_inspector, view as workspace_view
+from xingyuan_sis.tui.workspace import field_session as workspace_field
+from xingyuan_sis.tui.workspace import student_inspector, view as workspace_view
 from xingyuan_sis.tui.workspace.data import Catalog
 
 
@@ -69,9 +70,9 @@ class WorkspaceInlineEditTests(unittest.TestCase):
                 values = self.catalog.defaults(collection, self.catalog.records[collection][0])
                 self.assertIsNotNone(self.catalog.options(collection, field, values))
 
-    def test_field_edit_stays_inside_the_same_record_inspector_without_save_button(self):
+    def test_field_edit_stays_inside_same_record_inspector_with_stable_target(self):
         state = workspace.Workspace("students", details=True)
-        workspace_forms.open_field(state, self.catalog, "contact")
+        workspace_field.start(state, self.catalog, "contact")
         row = state.current(self.catalog)
 
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((140, 35))), \
@@ -85,19 +86,21 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         self.assertIn("物种", plain)
         self.assertIn("选课与成绩", plain)
         self.assertIn("个人信息", plain)
-        self.assertTrue(any(region.action == "field:0" for region in frame.regions))
+        self.assertTrue(any(region.action == "field:contact" for region in frame.regions))
         self.assertFalse(any(region.action == "save" for region in frame.regions))
+        self.assertIsNone(state.form)
 
-    def test_field_session_contains_only_the_selected_field(self):
+    def test_field_session_contains_only_selected_field_group(self):
         state = workspace.Workspace("students")
-        workspace_forms.open_field(state, self.catalog, "contact")
-        self.assertEqual([field.key for field in state.form.fields], ["contact"])
-        self.assertEqual(state.form.position, 0)
+        workspace_field.start(state, self.catalog, "contact")
+        self.assertEqual([field.key for field in state.field_session.fields], ["contact"])
+        self.assertEqual(state.field_session.active_key, "contact")
+        self.assertIsNone(state.form)
 
-    def test_enum_picker_expands_inside_the_inspector_without_save_button(self):
+    def test_enum_picker_expands_inside_inspector_without_replacing_field_target(self):
         state = workspace.Workspace("students", details=True)
-        workspace_forms.open_field(state, self.catalog, "status")
-        workspace_forms.read_value(state, self.catalog, ("field", 0))
+        workspace_field.start(state, self.catalog, "status")
+        workspace_field.edit_current(state, self.catalog)
 
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((140, 35))), \
              patch.object(workspace_view, "render_editor") as detached_editor:
@@ -105,45 +108,42 @@ class WorkspaceInlineEditTests(unittest.TestCase):
 
         detached_editor.assert_not_called()
         self.assertTrue(any(region.action.startswith("option:") for region in frame.regions))
-        self.assertTrue(any(region.action == "field:0" for region in frame.regions))
+        self.assertTrue(any(region.action == "field:status" for region in frame.regions))
         self.assertFalse(any(region.action == "save" for region in frame.regions))
 
     def test_freeform_enter_saves_immediately(self):
         state = workspace.Workspace("students", details=True)
-        workspace_forms.open_field(state, self.catalog, "contact")
+        workspace_field.start(state, self.catalog, "contact")
         original_no = state.current(self.catalog)["student_no"]
 
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
              patch.object(screen, "_paint"), \
-             patch.object(workspace_forms, "read_inline_input", return_value="原地新联系方式") as inline, \
-             patch.object(workspace_forms, "read_input") as bottom:
-            workspace_forms.read_value(state, self.catalog, ("field", 0))
+             patch.object(workspace_field, "read_inline_input", return_value="原地新联系方式") as inline:
+            workspace_field.edit_current(state, self.catalog)
 
-        bottom.assert_not_called()
-        self.assertIsNone(state.form)
+        self.assertIsNone(state.field_session)
         self.assertEqual(self.catalog.service.student_by_no(original_no)["contact"], "原地新联系方式")
         self.assertGreater(inline.call_args.kwargs["row"], 0)
         self.assertGreater(inline.call_args.kwargs["column"], 0)
         self.assertGreater(inline.call_args.kwargs["width"], 0)
 
-    def test_enum_enter_returns_save_immediately(self):
+    def test_enum_enter_saves_inside_same_event_path(self):
         state = workspace.Workspace("students", details=True)
         original = state.current(self.catalog).copy()
-        workspace_forms.open_field(state, self.catalog, "status")
-        workspace_forms.read_value(state, self.catalog, ("field", 0))
+        workspace_field.start(state, self.catalog, "status")
+        workspace_field.edit_current(state, self.catalog)
         target_index = next(
-            i for i, (value, _) in enumerate(state.form.options)
+            i for i, (value, _) in enumerate(state.field_session.options)
             if value != original["status"]
         )
 
-        with patch.object(keys, "_read_key", side_effect=[f"option:{target_index}"]), \
+        with patch.object(keys, "_read_key", side_effect=[f"option:{target_index}", "refresh"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             event = workspace_events.interact(state, self.catalog)
 
-        self.assertEqual(event, ("save", 0))
-        workspace_forms.apply_form(state, self.catalog)
-        self.assertIsNone(state.form)
+        self.assertEqual(event, ("refresh", 0))
+        self.assertIsNone(state.field_session)
         self.assertNotEqual(
             self.catalog.service.student_by_no(original["student_no"])["status"],
             original["status"],
@@ -152,26 +152,23 @@ class WorkspaceInlineEditTests(unittest.TestCase):
     def test_family_edit_completes_branch_before_one_atomic_save(self):
         state = workspace.Workspace("students", details=True)
         original = state.current(self.catalog).copy()
-        workspace_forms.open_field(state, self.catalog, "family")
-        workspace_forms.read_value(state, self.catalog, ("field", 0))
+        workspace_field.start(state, self.catalog, "family")
+        workspace_field.edit_current(state, self.catalog)
         family_index = next(
-            i for i, (value, _) in enumerate(state.form.options)
+            i for i, (value, _) in enumerate(state.field_session.options)
             if value != original["family"] and any(
                 row["family_name"] == value for row in self.catalog.species_branches
             )
         )
+        chosen_family = state.field_session.options[family_index][0]
+        workspace_field.accept_option(state, self.catalog, family_index)
+        self.assertEqual(state.field_session.active_key, "branch")
+        chosen_branch = state.field_session.options[0][0]
+        workspace_field.accept_option(state, self.catalog, 0)
 
-        with patch.object(keys, "_read_key", side_effect=[f"option:{family_index}", "option:0"]), \
-             patch.object(screen, "_paint"), \
-             patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
-            event = workspace_events.interact(state, self.catalog)
-
-        self.assertEqual(event, ("save", 0))
-        new_family = state.form.values["family"]
-        new_branch = state.form.values["branch"]
-        workspace_forms.apply_form(state, self.catalog)
+        self.assertIsNone(state.field_session)
         changed = self.catalog.service.student_by_no(original["student_no"])
-        self.assertEqual((changed["family"], changed["branch"]), (new_family, new_branch))
+        self.assertEqual((changed["family"], changed["branch"]), (chosen_family, chosen_branch))
 
     def test_complete_birth_date_derives_age_but_keeps_age_in_focus_graph(self):
         row = self.catalog.records["students"][0]
@@ -182,10 +179,10 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         age_line = next(line for line in lines if line and line[0][0].startswith("年龄"))
 
         self.assertIsNone(row["age"])
-        self.assertTrue(any(action == "field-target:age" for _, _, action in age_line))
+        self.assertTrue(any(action == "field:age" for _, _, action in age_line))
         self.assertTrue(any(text.endswith("岁") for text, _, _ in age_line))
         with self.assertRaisesRegex(ValueError, "自动计算年龄"):
-            workspace_forms.open_field(workspace.Workspace("students"), self.catalog, "age")
+            workspace_field.start(workspace.Workspace("students"), self.catalog, "age")
 
     def test_inline_redraw_never_clears_the_whole_terminal_row(self):
         buffer = TextBuffer.from_value("林岚")

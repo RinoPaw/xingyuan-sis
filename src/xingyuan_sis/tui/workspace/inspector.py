@@ -1,4 +1,4 @@
-"""Shared field rendering, option expansion and viewport for all record inspectors."""
+"""Shared record-field geometry, rendering, hit targets and navigation."""
 from __future__ import annotations
 
 from typing import Any
@@ -8,62 +8,48 @@ from ..layout import WorkspaceLayout, visible_start
 from ..view_common import Board, identity, panel_heading, safe
 from .data import Catalog
 from .presentation import display_value
-from .state import Workspace
+from .state import FieldSession, Workspace
 
 Segment = tuple[str, str, str]
 Line = list[Segment]
 
 
-def is_editing(state: Workspace | None) -> bool:
-    return state is not None and state.form is not None and state.form.mode == "edit"
-
-
 def field_segment(
-    state: Workspace | None, catalog: Catalog, key: str, row: dict[str, Any],
-    field_key: str, text: str | None = None, style: str = screen._TEXT_PRIMARY,
+    catalog: Catalog,
+    collection: str,
+    values: dict[str, Any],
+    field_key: str,
+    text: str | None = None,
+    style: str = screen._TEXT_PRIMARY,
 ) -> Segment:
-    """Render one field.
+    """Create the stable target for one displayed field.
 
-    Browse targets describe focus, not editability. Every displayed field therefore
-    owns a stable ``field-target:<key>`` action. Enter decides separately whether
-    the field may be edited. During a field edit, only that local edit session owns
-    an interactive ``field:<index>`` action.
+    ``field:<key>`` is the field's identity in every inspector state. Editability
+    is deliberately absent from this function; Enter resolves that separately.
     """
-    editing = is_editing(state)
-    if editing:
-        index = next((i for i, field in enumerate(state.form.fields) if field.key == field_key), None)
-        action = f"field:{index}" if index is not None else ""
-        selected = index == state.form.position and not state.form.focus_save
-    else:
-        action = f"field-target:{field_key}"
-        selected = False
-    shown = display_value(catalog, key, row, field_key)
-    return (
-        shown if text is None else text,
-        screen._BOLD + screen._TEXT_ACCENT if selected else style,
-        action,
-    )
+    shown = display_value(catalog, collection, values, field_key)
+    return shown if text is None else text, style, f"field:{field_key}"
 
 
-def expand_options(lines: list[Line], state: Workspace | None) -> list[Line]:
-    if not is_editing(state) or state.form.options is None:
+def expand_options(lines: list[Line], session: FieldSession | None) -> list[Line]:
+    if session is None or session.options is None:
         return lines
-    target = f"field:{state.form.position}"
+    target = f"field:{session.active_key}"
     insert_at = next(
         (i + 1 for i, line in enumerate(lines) if any(action == target for _, _, action in line)),
         len(lines),
     )
     options = [[(
         "  " + safe(label),
-        screen._BOLD + screen._TEXT_ACCENT if i == state.form.option_index else screen._TEXT_PRIMARY,
+        screen._BOLD + screen._TEXT_ACCENT if i == session.option_index else screen._TEXT_PRIMARY,
         f"option:{i}",
-    )] for i, (_, label) in enumerate(state.form.options)]
+    )] for i, (_, label) in enumerate(session.options)]
     lines[insert_at:insert_at] = options or [[("  暂无可选记录", screen._TEXT_SECONDARY, "")]]
     return lines
 
 
 def wrap_lines(lines: list[Line], width: int) -> list[Line]:
-    """Wrap terminal cells while retaining field and link hit targets."""
+    """Wrap terminal cells while retaining field and link identities."""
     result: list[Line] = []
     width = max(1, width)
     for line in lines:
@@ -88,6 +74,20 @@ def wrap_lines(lines: list[Line], width: int) -> list[Line]:
     return result
 
 
+def content_offset(lines: list[Line], layout: WorkspaceLayout) -> int:
+    """Return the compact heading offset from final wrapped geometry."""
+    first_is_field = bool(
+        lines and any(action.startswith("field:") for _, _, action in lines[0])
+    )
+    return 1 if layout.compact and not first_is_field else 0
+
+
+def layout_lines(lines: list[Line], width: int, layout: WorkspaceLayout) -> list[Line]:
+    """Produce the single final geometry used by rendering, hit testing and navigation."""
+    wrapped = wrap_lines(lines, width)
+    return wrapped[content_offset(wrapped, layout):]
+
+
 def action_targets(lines: list[Line]) -> list[tuple[int, str]]:
     result: list[tuple[int, str]] = []
     seen: set[str] = set()
@@ -100,13 +100,14 @@ def action_targets(lines: list[Line]) -> list[tuple[int, str]]:
 
 
 def directional_target(lines: list[Line], current: str, direction: str) -> str | None:
-    """Navigate by rendered geometry.
+    """Navigate directly on the final visible line geometry.
 
-    Vertical movement follows rows and enters the rightmost target of a composite
-    row. Horizontal movement stays in the current row. Returning ``None`` on a
-    left move means the caller may leave the inspector.
+    Vertical movement enters the rightmost target of the adjacent target row.
+    Horizontal movement stays inside the current row. Returning ``None`` on a
+    left move lets the caller leave the inspector.
     """
-    rows = [list(dict.fromkeys(action for _, _, action in line if action)) for line in lines]
+    rows = [list(dict.fromkeys(action for _, _, action in line if action and not action.startswith("option:")))
+            for line in lines]
     rows = [row for row in rows if row]
     location = next(((i, row.index(current)) for i, row in enumerate(rows) if current in row), None)
     if location is None:
@@ -116,19 +117,8 @@ def directional_target(lines: list[Line], current: str, direction: str) -> str |
         return rows[row][column - 1] if column else None
     if direction == "right":
         return rows[row][min(column + 1, len(rows[row]) - 1)]
-    target = min(max(0, row + (-1 if direction == "up" else 1)), len(rows) - 1)
-    return rows[target][-1]
-
-
-def content_offset(lines: list[Line], layout: WorkspaceLayout) -> int:
-    # A compact identity heading may replace a non-focusable title, never a field target.
-    field_title = bool(
-        lines and any(
-            action.startswith(("field:", "field-target:"))
-            for _, _, action in lines[0]
-        )
-    )
-    return 1 if layout.compact and not field_title else 0
+    target_row = min(max(0, row + (-1 if direction == "up" else 1)), len(rows) - 1)
+    return rows[target_row][-1]
 
 
 def render_inspector(
@@ -157,46 +147,34 @@ def render_inspector(
             board.button(x, top + 3, "新建记录", "create")
         return
 
-    editing = is_editing(state)
+    session = state.field_session
     heading = identity(state.key, row)[0] if layout.compact else "档案"
     board.put(
         x,
         layout.panel_heading_row(state.key),
-        panel_heading(heading, (state.details and not state.action_focus) or editing),
-        action="focus-details" if not editing else None,
+        panel_heading(heading, (state.details and not state.action_focus) or session is not None),
+        action="focus-details" if session is None else None,
         width=width,
     )
 
-    # Existing-record editing keeps the archive itself in place. In compact mode
-    # the first archive field must not suddenly be consumed by the identity heading
-    # just because only the active field owns an editing action.
-    offset = 0 if editing else content_offset(raw_lines, layout)
-    raw_lines = wrap_lines(raw_lines, width)
-    lines = raw_lines[offset:]
+    lines = layout_lines(raw_lines, width, layout)
     capacity = layout.panel_capacity(state.key)
 
     selected_action = ""
     target_line = 0
-    if editing:
+    if session is not None:
         selected_action = (
-            f"option:{state.form.option_index}"
-            if state.form.options is not None and state.form.options
-            else f"field:{state.form.position}"
+            f"option:{session.option_index}"
+            if session.options
+            else f"field:{session.active_key}"
         )
         target_line = next(
-            (
-                index
-                for index, line in enumerate(lines)
-                if any(action == selected_action for _, _, action in line)
-            ),
+            (i for i, line in enumerate(lines)
+             if any(action == selected_action for _, _, action in line)),
             0,
         )
     else:
-        targets = [
-            (line - offset, action)
-            for line, action in action_targets(raw_lines)
-            if line >= offset
-        ]
+        targets = action_targets(lines)
         if targets and state.detail_selected >= 0:
             state.detail_selected = min(state.detail_selected, len(targets) - 1)
             target_line, selected_action = targets[state.detail_selected]
@@ -205,7 +183,7 @@ def render_inspector(
 
     max_scroll = max(0, len(lines) - capacity)
     state.detail_scroll = min(max(0, state.detail_scroll), max_scroll)
-    if editing or (state.details and selected_action):
+    if session is not None or (state.details and selected_action):
         state.detail_scroll = visible_start(target_line, len(lines), capacity, state.detail_scroll)
 
     visible = lines[state.detail_scroll:state.detail_scroll + capacity]
@@ -218,36 +196,23 @@ def render_inspector(
                 break
             shown = screen._clip_cells(text, remaining)
             display = screen._display_width(shown)
-            selected = bool(
-                action
-                and action == selected_action
-                and (editing or state.details)
-                and not (editing and state.form.focus_save)
-            )
-            drawn_style = (
-                screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
-                if selected
-                else style
-            )
+            selected = bool(action and action == selected_action and (state.details or session is not None))
+            drawn_style = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED if selected else style
 
             if action:
                 hit_width = max(1, display)
-                if editing and action.startswith("field:"):
-                    field_index = int(action.split(":")[1])
-                    field_key = state.form.fields[field_index].key
-                    freeform = catalog.options(state.key, field_key, state.form.values) is None
-                    if (
-                        selected
-                        and state.form.options is None
-                        and freeform
-                        and segment_index == len(segments) - 1
-                    ):
-                        hit_width = max(hit_width, remaining)
+                if (
+                    session is not None
+                    and action == f"field:{session.active_key}"
+                    and session.options is None
+                    and segment_index == len(segments) - 1
+                ):
+                    hit_width = max(hit_width, remaining)
                 board.regions.append(screen.HitRegion(cursor + 1, y + 1, hit_width, action))
             board.put(cursor, y, shown, drawn_style, width=remaining)
             cursor += display
 
-    if not editing:
+    if session is None:
         if len(lines) > capacity and not layout.compact:
             board.put(
                 x,

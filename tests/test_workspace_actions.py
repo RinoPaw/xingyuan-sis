@@ -51,11 +51,12 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertTrue(state.details)
         self.assertFalse(state.action_focus)
         self.assertIsNone(state.form)
+        self.assertIsNone(state.field_session)
         targets = workspace_events.detail_targets(state, self.catalog)
         current = targets[state.detail_selected][1]
         editable = {field.key for field in self.catalog.fields("students", True)}
-        self.assertTrue(current.startswith("field-target:"))
-        self.assertIn(current.removeprefix("field-target:"), editable)
+        self.assertTrue(current.startswith("field:"))
+        self.assertIn(current.removeprefix("field:"), editable)
 
     def test_shift_tab_to_actions_preserves_selected_record_for_delete(self):
         state = workspace.Workspace("students", selected=15)
@@ -117,6 +118,7 @@ class WorkspaceActionTests(unittest.TestCase):
         open_form.assert_not_called()
         self.assertTrue(state.details)
         self.assertIsNone(state.form)
+        self.assertIsNone(state.field_session)
 
 
 if __name__ == "__main__":

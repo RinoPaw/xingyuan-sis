@@ -8,15 +8,20 @@ from .. import keys
 from ...auth import Identity
 from .data import Catalog
 from .events import interact
+from .field_session import cancel as cancel_field_session, edit_current
 from .forms import apply_form, read_value
-from .state import Form, Workspace
+from .state import FieldSession, Form, Workspace
 
 
-__all__ = ["Form", "Workspace", "run"]
+__all__ = ["FieldSession", "Form", "Workspace", "run"]
 
 
 def run(
-    db_path: Path | str | None, collection: str, *, identity: Identity | None = None, query: str = "",
+    db_path: Path | str | None,
+    collection: str,
+    *,
+    identity: Identity | None = None,
+    query: str = "",
 ) -> None:
     catalog, state = Catalog(db_path, identity), Workspace(collection, query=query, details=bool(query))
     if not catalog.can_browse(collection):
@@ -27,12 +32,15 @@ def run(
                 event = interact(state, catalog)
             if event is None:
                 return
-            if event[0] in {"field", "search"}:
+            if event[0] == "field-edit":
+                try:
+                    edit_current(state, catalog)
+                except KeyboardInterrupt:
+                    cancel_field_session(state, "已取消输入。")
+            elif event[0] in {"field", "search"}:
                 try:
                     read_value(state, catalog, event)
                 except KeyboardInterrupt:
-                    if state.form and state.form.mode == "edit":
-                        state.form = None
                     state.notice = "已取消输入。"
             elif event[0] == "save":
                 apply_form(state, catalog)
@@ -55,10 +63,14 @@ def run(
                 )
                 state.notice = "已刷新。"
         except KeyboardInterrupt:
-            if state.form:
+            if state.field_session is not None:
+                cancel_field_session(state, "已取消输入。")
+            elif state.form:
                 state.form = None
                 state.notice = "已取消编辑，记录保持原样。"
             else:
                 return
         except (ValueError, sqlite3.Error, OSError) as error:
+            if state.field_session is not None:
+                state.field_session = None
             state.notice = f"未完成：{error}"

@@ -6,7 +6,7 @@ from ...schema import age_from_birth_date
 from .. import screen
 from ..view_common import safe
 from .data import Catalog
-from .inspector import Line, Segment, is_editing, field_segment, expand_options
+from .inspector import Line, Segment, expand_options, field_segment
 from .presentation import project_record
 from .state import Workspace
 
@@ -22,8 +22,9 @@ def lines(
     catalog: Catalog,
     state: Workspace | None = None,
 ) -> list[Line]:
-    editing = is_editing(state)
-    values = project_record(row, state.form if state else None)
+    """Describe the student archive once; editing never changes its target graph."""
+    session = state.field_session if state else None
+    values = project_record(row, session)
 
     def label(text: str) -> Segment:
         return text, screen._TEXT_SECONDARY, ""
@@ -33,10 +34,10 @@ def lines(
         text: str | None = None,
         style: str = screen._TEXT_PRIMARY,
     ) -> Segment:
-        return field_segment(state, catalog, "students", values, key, text, style)
+        return field_segment(catalog, "students", values, key, text, style)
 
     year = values.get("enrollment_year")
-    lines: list[Line] = [
+    result: list[Line] = [
         [field("name", style=screen._BOLD + screen._TEXT_PRIMARY)],
         [label("学号  "), field("student_no")],
         [label("物种  "), field("family"), (" · ", screen._TEXT_SECONDARY, ""), field("branch")],
@@ -50,23 +51,22 @@ def lines(
     ]
 
     related_key, related = catalog.related("students", row)
-    lines.extend((
+    result.extend((
         [],
         [(f"选课与成绩  {len(related):02d}", screen._BOLD + screen._TEXT_PRIMARY, "")],
     ))
     if not related:
-        lines.append([("暂无关联记录", screen._TEXT_SECONDARY, "")])
+        result.append([("暂无关联记录", screen._TEXT_SECONDARY, "")])
     else:
         for item in related:
             score = safe(item["score"]) if item["score"] is not None else "待录入"
-            action = "" if editing else f"related:{related_key}:{item['id']}"
-            lines.append([(
+            result.append([(
                 f"↗ {safe(item['course_name'])}  ·  {score}",
                 screen._TEXT_ACCENT + "\x1b[4m",
-                action,
+                f"related:{related_key}:{item['id']}",
             )])
 
-    lines.extend((
+    result.extend((
         [],
         [("个人信息", screen._BOLD + screen._TEXT_PRIMARY, "")],
         [label("出生日期  "), field("birth_date")],
@@ -75,4 +75,4 @@ def lines(
         [label("备注      "), field("notes")],
     ))
 
-    return expand_options(lines, state)
+    return expand_options(result, session)
