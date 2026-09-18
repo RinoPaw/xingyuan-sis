@@ -50,7 +50,7 @@ class WorkspaceActionTests(unittest.TestCase):
 
         with patch.object(
             keys, "_read_key",
-            side_effect=["focus_prev", "right", "right", "select", "back"],
+            side_effect=["focus", "focus", "right", "right", "select", "back"],
         ), patch.object(screen, "_paint"), patch.object(
             screen, "_terminal_size", return_value=os.terminal_size((120, 35))
         ), patch.object(workspace_events, "open_form", side_effect=capture):
@@ -59,8 +59,8 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertEqual(selected_at_delete, [15])
         self.assertEqual(state.selected, 15)
 
-    def test_action_focus_keeps_current_record_weakly_selected(self):
-        state = workspace.Workspace("students", selected=15, action_focus=True)
+    def test_toolbar_focus_keeps_current_record_weakly_selected(self):
+        state = workspace.Workspace("students", selected=15, focus=workspace.FocusArea.TOOLBAR)
         selected = state.current(self.catalog)
 
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
@@ -98,7 +98,7 @@ class WorkspaceActionTests(unittest.TestCase):
 
         self.assertEqual(event, ("refresh", 0))
         open_form.assert_not_called()
-        self.assertFalse(state.details)
+        self.assertEqual(state.focus, workspace.FocusArea.ROSTER)
         self.assertIsNone(state.form)
         self.assertIsNone(state.field_session)
 
@@ -109,7 +109,7 @@ class WorkspaceActionTests(unittest.TestCase):
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             event = workspace_events.interact(state, self.catalog)
         self.assertEqual(event, ("refresh", 0))
-        self.assertFalse(state.details)
+        self.assertEqual(state.focus, workspace.FocusArea.ROSTER)
 
 
 if __name__ == "__main__":
