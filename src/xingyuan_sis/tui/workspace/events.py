@@ -7,7 +7,7 @@ from .commands import FORM_SAVE, available as available_commands, toolbar as too
 from .data import ACADEMICS, COLLECTIONS, Catalog
 from .field_session import accept_option as accept_field_option, cancel as cancel_field_session, start as start_field_session
 from .forms import accept_option as accept_form_option, move_form_position, open_form
-from .state import Workspace
+from .state import FocusArea, Workspace
 
 
 def _detail_geometry(state: Workspace, catalog: Catalog) -> tuple[int, int]:
@@ -71,7 +71,7 @@ def move_detail_selection(state: Workspace, catalog: Catalog, direction: str) ->
     targets = detail_targets(state, catalog)
     if not targets or state.detail_selected < 0:
         if direction == "left":
-            state.details = False
+            state.set_focus(FocusArea.ROSTER)
         return
     actions = [action for _, action in targets]
     current = actions[min(state.detail_selected, len(actions) - 1)]
@@ -84,7 +84,7 @@ def move_detail_selection(state: Workspace, catalog: Catalog, direction: str) ->
     )
     if target is None:
         if direction == "left":
-            state.details = False
+            state.set_focus(FocusArea.ROSTER)
         return
     state.detail_selected = actions.index(target)
     reveal_detail_selection(state, catalog)
@@ -114,12 +114,22 @@ def _page_detail(state: Workspace, catalog: Catalog, direction: str) -> None:
     select_visible_detail_target(state, catalog)
 
 
+def _focus_cycle(state: Workspace, catalog: Catalog) -> tuple[FocusArea, ...]:
+    if state.key == "data":
+        return (FocusArea.DASHBOARD, FocusArea.TOOLBAR)
+    if state.current(catalog) is None:
+        return (FocusArea.ROSTER, FocusArea.TOOLBAR)
+    return (FocusArea.ROSTER, FocusArea.INSPECTOR, FocusArea.TOOLBAR)
+
+
 def _activate_detail_action(
     state: Workspace,
     catalog: Catalog,
-    action: str,
+    action: object,
 ) -> tuple[bool, tuple[str, int] | None]:
     """Activate a stable inspector target without page-specific field knowledge."""
+    if not isinstance(action, str):
+        return False, None
     if action.startswith("related:"):
         _, collection, identifier = action.split(":")
         state.visit(collection, identifier, catalog)
@@ -133,8 +143,7 @@ def _activate_detail_action(
     actions = [target for _, target in targets]
     if action in actions:
         state.detail_selected = actions.index(action)
-    state.action_focus = False
-    state.details = True
+    state.set_focus(FocusArea.INSPECTOR)
     reveal_detail_selection(state, catalog)
 
     if catalog.read_only:
@@ -181,29 +190,22 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
         elif state.form is not None and state.form.fields:
             key = resolve_shortcut(key, (FORM_SAVE,))
 
-        if key in {"focus", "focus_prev"} and state.form is None and state.field_session is None:
-            areas = (
-                ("roster", "details", "actions")
-                if state.key != "data" and state.current(catalog)
-                else ("roster", "actions")
-            )
-            current_area = "actions" if state.action_focus else "details" if state.details else "roster"
-            if current_area not in areas:
-                current_area = "roster"
-            area = areas[(areas.index(current_area) + (1 if key == "focus" else -1)) % len(areas)]
-            state.action_focus, state.details = area == "actions", area == "details"
-            if state.details:
+        if key == "focus" and state.form is None and state.field_session is None:
+            areas = _focus_cycle(state, catalog)
+            current = state.focus if state.focus in areas else areas[0]
+            state.set_focus(areas[(areas.index(current) + 1) % len(areas)])
+            if state.focus is FocusArea.INSPECTOR:
                 reveal_detail_selection(state, catalog)
             continue
 
         toolbar = toolbar_commands(catalog, state.key)
         toolbar_actions = tuple(command.action for command in toolbar)
-        if state.action_focus and state.form is None and state.field_session is None:
+        if state.focus is FocusArea.TOOLBAR and state.form is None and state.field_session is None:
             if key == "left":
                 state.action_selected = max(0, state.action_selected - 1)
                 continue
             if key == "right":
-                state.action_selected = min(len(toolbar_actions) - 1, state.action_selected + 1)
+                state.action_selected = min(max(0, len(toolbar_actions) - 1), state.action_selected + 1)
                 continue
             if key == "home":
                 state.action_selected = 0
@@ -214,7 +216,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             if key == "up":
                 continue
             if key == "down":
-                state.action_focus = False
+                state.focus_content()
                 continue
             if key == "select" and toolbar_actions:
                 key = toolbar_actions[state.action_selected]
@@ -227,11 +229,11 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             elif state.form:
                 state.form = None
                 state.notice = "已取消，记录保持原样。"
-            elif state.details:
-                state.details = False
+            elif state.focus is FocusArea.INSPECTOR:
+                state.set_focus(FocusArea.ROSTER)
                 state.detail_scroll = 0
-            elif state.action_focus:
-                state.action_focus = False
+            elif state.focus is FocusArea.TOOLBAR:
+                state.focus_content()
             elif state.history:
                 state.restore(catalog)
             else:
@@ -278,7 +280,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 form.position = int(key.split(":")[1])
                 form.focus_save = False
                 return "field", form.position
-            if key in {"up", "down", "left", "right", "home", "end", "focus", "focus_prev"}:
+            if key in {"up", "down", "left", "right", "home", "end", "focus"}:
                 move_form_position(state, key)
             continue
 
@@ -298,29 +300,29 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             state.history.clear()
             state.switch(key.split(":")[1])
         elif isinstance(key, str) and key.startswith("row:"):
-            state.action_focus = False
             state.selected = int(key.split(":")[1])
             state.detail_scroll = 0
             state.detail_selected = 0
-            state.details = not WorkspaceLayout.measure().split
+            state.set_focus(
+                FocusArea.ROSTER if WorkspaceLayout.measure().split else FocusArea.INSPECTOR
+            )
+            if state.focus is FocusArea.INSPECTOR:
+                reveal_detail_selection(state, catalog)
         elif key == "right":
-            if state.details and state.key != "data":
+            if state.focus is FocusArea.INSPECTOR and state.key != "data":
                 move_detail_selection(state, catalog, "right")
             elif state.key != "data":
-                state.action_focus = False
-                state.details = True
+                state.set_focus(FocusArea.INSPECTOR)
                 state.detail_selected = 0
                 reveal_detail_selection(state, catalog)
         elif key == "left":
-            if state.key != "data":
-                state.action_focus = False
+            if state.focus is FocusArea.INSPECTOR and state.key != "data":
                 move_detail_selection(state, catalog, "left")
         elif key == "focus-details":
-            state.action_focus = False
-            state.details = True
+            state.set_focus(FocusArea.INSPECTOR)
             reveal_detail_selection(state, catalog)
         elif key == "select":
-            if state.details and state.key != "data":
+            if state.focus is FocusArea.INSPECTOR and state.key != "data":
                 targets = detail_targets(state, catalog)
                 if targets and state.detail_selected >= 0:
                     state.detail_selected = min(max(0, state.detail_selected), len(targets) - 1)
@@ -331,13 +333,13 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                             return event
                         continue
                 continue
-            state.details = not state.details
-            if state.details:
+            if state.focus is FocusArea.ROSTER and state.key != "data":
+                state.set_focus(FocusArea.INSPECTOR)
                 state.detail_selected = 0
                 reveal_detail_selection(state, catalog)
             continue
         elif key in {"page_up", "page_down"}:
-            if state.details and state.key != "data":
+            if state.focus is FocusArea.INSPECTOR and state.key != "data":
                 _page_detail(state, catalog, key)
             elif state.key == "data":
                 capacity = WorkspaceLayout.measure().panel_capacity(state.key)
@@ -348,25 +350,25 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             else:
                 _page_roster(state, catalog, key)
         elif key in {"up", "down", "home", "end"}:
-            if not state.details and key == "up" and not wheel:
+            if state.focus in {FocusArea.ROSTER, FocusArea.DASHBOARD} and key == "up" and not wheel:
                 if ((state.key == "data" and state.detail_scroll == 0)
                         or (state.key != "data" and state.selected == 0)):
-                    state.action_focus = True
+                    state.set_focus(FocusArea.TOOLBAR)
                     continue
             amount = -1 if key == "up" else 1
             if wheel and state.key != "data":
                 if wheel_over_details:
-                    if state.details and state.detail_selected >= 0:
+                    if state.focus is FocusArea.INSPECTOR and state.detail_selected >= 0:
                         move_detail_selection(state, catalog, key)
                     else:
                         state.detail_scroll = max(0, state.detail_scroll + amount)
-                    if state.details and state.detail_selected < 0:
+                    if state.focus is FocusArea.INSPECTOR and state.detail_selected < 0:
                         select_visible_detail_target(state, catalog)
                 else:
                     state.selected += amount
                     state.detail_scroll = 0
                     state.detail_selected = 0
-            elif state.details and state.key != "data":
+            elif state.focus is FocusArea.INSPECTOR and state.key != "data":
                 targets = detail_targets(state, catalog)
                 if (not targets
                         or (catalog.read_only and key in {"home", "end"})
@@ -401,7 +403,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 state.detail_scroll = 0
                 state.detail_selected = 0
         elif (isinstance(key, str) and key.startswith("view:")) or key in {"1", "2", "3", "4"}:
-            state.action_focus = False
+            state.focus_content()
             index = int(key.split(":")[1]) if key.startswith("view:") else int(key) - 1
             if state.key == "data":
                 state.switch(("students", "courses", "grades", "departments")[index])
@@ -411,7 +413,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 state.view, state.selected, state.roster_scroll = index, 0, 0
                 state.detail_scroll, state.detail_selected = 0, 0
         elif key == "search" and "search" in {command.action for command in commands}:
-            state.action_focus = False
+            state.focus_content()
             return "search", 0
         elif key == "reset-search":
             state.query, state.selected, state.roster_scroll = "", 0, 0
@@ -421,5 +423,5 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
         elif key in {"create", "delete", "reset-password", "import", "export", "seed"}:
             if key not in {command.action for command in commands}:
                 continue
-            state.action_focus = False
+            state.focus_content()
             open_form(state, catalog, key)
