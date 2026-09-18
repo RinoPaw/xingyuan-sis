@@ -63,7 +63,7 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
     heading_row = layout.panel_heading_row(state.key)
     header_row = layout.panel_content_row(state.key)
     data_row = header_row + 1
-    capacity = layout.panel_capacity(state.key)
+    capacity = layout.roster_capacity(state.key)
     first = roster_window(state, len(rows), capacity)
     heading = panel_heading("名册", focused)
     range_text = f"  {len(rows):02d}" + (
