@@ -170,7 +170,8 @@ class WorkspaceFlowTests(unittest.TestCase):
         state = Workspace("grades")
         forms.open_form(state, self.catalog, "create")
         state.form.options = []
-        self.interact(state, ["select", "back", "refresh"])
+        with self.assertRaises(StopIteration):
+            self.interact(state, ["select", "back"])
         self.assertIsNotNone(state.form)
         self.assertIsNone(state.form.options)
 
