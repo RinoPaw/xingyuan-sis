@@ -53,7 +53,8 @@ class ResponsiveContractTests(unittest.TestCase):
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((76, 24))), \
              patch.object(screen, "_paint"), patch.object(keys, "_read_key", side_effect=["row:1", "refresh"]):
             workspace_events.interact(state, self.catalog)
-            self.assertTrue(state.details)
+            self.assertEqual(state.focus, workspace.FocusArea.INSPECTOR)
+            self.assertEqual(state.content_panel, workspace.ContentPanel.INSPECTOR)
             self.assertIn("档案", "\n".join(workspace_view.render(state, self.catalog).lines))
 
     def test_compact_detail_focus_is_visible_and_enter_opens_same_field_session(self):
@@ -87,7 +88,14 @@ class ResponsiveContractTests(unittest.TestCase):
         self.assertNotIn("\x1b", "".join(frame.lines))
 
     def test_related_return_restores_identity_and_inspector_context_after_reordering(self):
-        state = workspace.Workspace("students", selected=1, details=True, detail_selected=2, detail_scroll=3)
+        state = workspace.Workspace(
+            "students",
+            selected=1,
+            focus=workspace.FocusArea.INSPECTOR,
+            content_panel=workspace.ContentPanel.INSPECTOR,
+            detail_selected=2,
+            detail_scroll=3,
+        )
         original = state.current(self.catalog).copy()
         key, related = self.catalog.related(state.key, original)
         state.visit(key, str(related[0]["id"]), self.catalog)
@@ -95,7 +103,8 @@ class ResponsiveContractTests(unittest.TestCase):
         self.catalog.refresh()
         state.restore(self.catalog)
         self.assertEqual(state.current(self.catalog)["id"], original["id"])
-        self.assertTrue(state.details)
+        self.assertEqual(state.focus, workspace.FocusArea.INSPECTOR)
+        self.assertEqual(state.content_panel, workspace.ContentPanel.INSPECTOR)
         self.assertEqual((state.detail_selected, state.detail_scroll), (2, 3))
 
 
