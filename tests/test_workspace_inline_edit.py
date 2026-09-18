@@ -24,6 +24,14 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         seed_demo(self.db)
         self.catalog = Catalog(self.db)
 
+    @staticmethod
+    def inspector_state(collection: str = "students"):
+        return workspace.Workspace(
+            collection,
+            focus=workspace.FocusArea.INSPECTOR,
+            content_panel=workspace.ContentPanel.INSPECTOR,
+        )
+
     def test_student_fields_with_finite_values_are_options(self):
         values = self.catalog.defaults("students", self.catalog.records["students"][0])
 
@@ -71,7 +79,7 @@ class WorkspaceInlineEditTests(unittest.TestCase):
                 self.assertIsNotNone(self.catalog.options(collection, field, values))
 
     def test_field_edit_stays_inside_same_record_inspector_with_stable_target(self):
-        state = workspace.Workspace("students", details=True)
+        state = self.inspector_state()
         workspace_field.start(state, self.catalog, "contact")
         row = state.current(self.catalog)
 
@@ -98,7 +106,7 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         self.assertIsNone(state.form)
 
     def test_enum_picker_expands_inside_inspector_without_replacing_field_target(self):
-        state = workspace.Workspace("students", details=True)
+        state = self.inspector_state()
         workspace_field.start(state, self.catalog, "status")
         workspace_field.edit_current(state, self.catalog)
 
@@ -112,7 +120,7 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         self.assertFalse(any(region.action == "save" for region in frame.regions))
 
     def test_freeform_enter_saves_immediately(self):
-        state = workspace.Workspace("students", details=True)
+        state = self.inspector_state()
         workspace_field.start(state, self.catalog, "contact")
         original_no = state.current(self.catalog)["student_no"]
 
@@ -128,7 +136,7 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         self.assertGreater(inline.call_args.kwargs["width"], 0)
 
     def test_enum_enter_saves_inside_same_event_path(self):
-        state = workspace.Workspace("students", details=True)
+        state = self.inspector_state()
         original = state.current(self.catalog).copy()
         workspace_field.start(state, self.catalog, "status")
         workspace_field.edit_current(state, self.catalog)
@@ -150,7 +158,7 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         )
 
     def test_family_edit_completes_branch_before_one_atomic_save(self):
-        state = workspace.Workspace("students", details=True)
+        state = self.inspector_state()
         original = state.current(self.catalog).copy()
         workspace_field.start(state, self.catalog, "family")
         workspace_field.edit_current(state, self.catalog)
