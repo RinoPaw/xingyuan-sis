@@ -18,7 +18,7 @@ from xingyuan_sis.service import XingyuanService
 from xingyuan_sis.tui import app, screen
 from xingyuan_sis.tui.workspace import events, forms, view
 from xingyuan_sis.tui.workspace.data import Catalog
-from xingyuan_sis.tui.workspace.state import Workspace
+from xingyuan_sis.tui.workspace.state import ContentPanel, FocusArea, Workspace
 
 
 class DocumentRequirementTests(unittest.TestCase):
@@ -113,7 +113,8 @@ class DocumentRequirementTests(unittest.TestCase):
         no, password = state.credentials[0]
         self.assertEqual(no, "00990001")
         self.assertTrue(authenticate(self.db, no, password).must_change_password)
-        self.assertTrue(state.details)
+        self.assertEqual(state.focus, FocusArea.INSPECTOR)
+        self.assertEqual(state.content_panel, ContentPanel.INSPECTOR)
 
     def test_csv_registration_uses_same_validation_and_reports_successful_credentials(self):
         path = self.root / "new.csv"
@@ -205,7 +206,11 @@ class DocumentRequirementTests(unittest.TestCase):
         self.service.create_announcement(title="长公告", body="\n".join(f"第{i}行公告正文" for i in range(30)) + "\n最后一行",
                                          class_code=self.sample["class_code"])
         catalog = Catalog(self.db, Identity(self.sample["student_no"], "student", self.sample["student_no"]))
-        state = Workspace("announcements", details=True)
+        state = Workspace(
+            "announcements",
+            focus=FocusArea.INSPECTOR,
+            content_panel=ContentPanel.INSPECTOR,
+        )
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((30, 12))), \
              patch.object(screen, "_paint"), patch("xingyuan_sis.tui.keys._read_key", side_effect=["end", "refresh"]):
             events.interact(state, catalog)
