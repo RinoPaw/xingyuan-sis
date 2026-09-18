@@ -89,7 +89,7 @@ class KeyboardAndTerminalTests(unittest.TestCase):
         for sequence, expected in ((b"[A", "up"), (b"OB", "down"),
                                    (b"[D", "left"), (b"OC", "right"),
                                    (b"[H", "home"), (b"[4~", "end"),
-                                   (b"[Z", "focus_prev"), (b"[5~", "page_up"), (b"[6~", "page_down"),
+                                   (b"[Z", "other"), (b"[5~", "page_up"), (b"[6~", "page_down"),
                                    (b"[3~", "other"), (b"", "back")):
             with self.subTest(sequence=sequence), patch("sys.stdin.fileno", return_value=10), \
                  patch("termios.tcgetattr", return_value=[1, 2, 3]), patch("tty.setcbreak") as cbreak, \
