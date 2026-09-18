@@ -20,6 +20,14 @@ class MouseFocusTests(unittest.TestCase):
         seed_demo(self.db)
         self.catalog = Catalog(self.db)
 
+    @staticmethod
+    def inspector_state(collection: str):
+        return workspace.Workspace(
+            collection,
+            focus=workspace.FocusArea.INSPECTOR,
+            content_panel=workspace.ContentPanel.INSPECTOR,
+        )
+
     def test_right_wheel_scrolls_without_stealing_roster_focus(self):
         state = workspace.Workspace("students")
         size = os.terminal_size((120, 24))
@@ -31,13 +39,13 @@ class MouseFocusTests(unittest.TestCase):
         with patch.object(
             keys,
             "_read_key",
-            side_effect=[keys.MouseScroll(x, y, "down"), "back", "back"],
+            side_effect=[keys.MouseScroll(x, y, "down"), "back"],
         ), patch.object(screen, "_paint"), patch.object(
             screen, "_terminal_size", return_value=size
         ):
             self.assertIsNone(workspace_events.interact(state, self.catalog))
 
-        self.assertFalse(state.details)
+        self.assertEqual(state.focus, workspace.FocusArea.ROSTER)
         self.assertEqual(state.selected, 0)
         self.assertEqual(state.detail_selected, 0)
         self.assertGreater(state.detail_scroll, 0)
@@ -46,7 +54,7 @@ class MouseFocusTests(unittest.TestCase):
         size = os.terminal_size((120, 24))
         for collection in ("students", "courses"):
             with self.subTest(collection=collection):
-                arrow = workspace.Workspace(collection, details=True)
+                arrow = self.inspector_state(collection)
                 with patch.object(keys, "_read_key", side_effect=["down", "refresh"]), \
                      patch.object(screen, "_paint"), \
                      patch.object(screen, "_terminal_size", return_value=size):
@@ -55,7 +63,7 @@ class MouseFocusTests(unittest.TestCase):
                         ("refresh", 0),
                     )
 
-                wheel = workspace.Workspace(collection, details=True)
+                wheel = self.inspector_state(collection)
                 with patch.object(screen, "_terminal_size", return_value=size):
                     frame = workspace_view.render(wheel, self.catalog)
                 region = next(region for region in frame.regions if region.action == "focus-details")
@@ -73,10 +81,10 @@ class MouseFocusTests(unittest.TestCase):
 
                 self.assertEqual(wheel.detail_selected, arrow.detail_selected)
                 self.assertEqual(wheel.detail_scroll, arrow.detail_scroll)
-                self.assertTrue(wheel.details)
+                self.assertEqual(wheel.focus, workspace.FocusArea.INSPECTOR)
 
     def test_left_wheel_does_not_take_focus_from_the_inspector(self):
-        state = workspace.Workspace("students", details=True)
+        state = self.inspector_state("students")
         with patch.object(
             keys,
             "_read_key",
@@ -89,7 +97,7 @@ class MouseFocusTests(unittest.TestCase):
                 ("refresh", 0),
             )
 
-        self.assertTrue(state.details)
+        self.assertEqual(state.focus, workspace.FocusArea.INSPECTOR)
         self.assertEqual(state.selected, 1)
 
 
