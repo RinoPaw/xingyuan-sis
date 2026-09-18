@@ -22,29 +22,42 @@ def field_segment(
     state: Workspace | None, catalog: Catalog, key: str, row: dict[str, Any],
     field_key: str, text: str | None = None, style: str = screen._TEXT_PRIMARY,
 ) -> Segment:
+    """Render one field.
+
+    Browse targets describe focus, not editability. Every displayed field therefore
+    owns a stable ``field-target:<key>`` action. Enter decides separately whether
+    the field may be edited. During a field edit, only that local edit session owns
+    an interactive ``field:<index>`` action.
+    """
     editing = is_editing(state)
-    fields = catalog.fields(key, True)
     if editing:
         index = next((i for i, field in enumerate(state.form.fields) if field.key == field_key), None)
         action = f"field:{index}" if index is not None else ""
         selected = index == state.form.position and not state.form.focus_save
     else:
-        action = f"edit-field:{field_key}" if any(f.key == field_key for f in fields) else ""
+        action = f"field-target:{field_key}"
         selected = False
     shown = display_value(catalog, key, row, field_key)
-    return (shown if text is None else text,
-            screen._BOLD + screen._TEXT_ACCENT if selected else style, action)
+    return (
+        shown if text is None else text,
+        screen._BOLD + screen._TEXT_ACCENT if selected else style,
+        action,
+    )
 
 
 def expand_options(lines: list[Line], state: Workspace | None) -> list[Line]:
     if not is_editing(state) or state.form.options is None:
         return lines
     target = f"field:{state.form.position}"
-    insert_at = next((i + 1 for i, line in enumerate(lines)
-                      if any(action == target for _, _, action in line)), len(lines))
-    options = [[("  " + safe(label),
-                 screen._BOLD + screen._TEXT_ACCENT if i == state.form.option_index else screen._TEXT_PRIMARY,
-                 f"option:{i}")] for i, (_, label) in enumerate(state.form.options)]
+    insert_at = next(
+        (i + 1 for i, line in enumerate(lines) if any(action == target for _, _, action in line)),
+        len(lines),
+    )
+    options = [[(
+        "  " + safe(label),
+        screen._BOLD + screen._TEXT_ACCENT if i == state.form.option_index else screen._TEXT_PRIMARY,
+        f"option:{i}",
+    )] for i, (_, label) in enumerate(state.form.options)]
     lines[insert_at:insert_at] = options or [[("  暂无可选记录", screen._TEXT_SECONDARY, "")]]
     return lines
 
@@ -87,7 +100,12 @@ def action_targets(lines: list[Line]) -> list[tuple[int, str]]:
 
 
 def directional_target(lines: list[Line], current: str, direction: str) -> str | None:
-    """Navigate the content's rows; composite rows use their rightmost vertical target."""
+    """Navigate by rendered geometry.
+
+    Vertical movement follows rows and enters the rightmost target of a composite
+    row. Horizontal movement stays in the current row. Returning ``None`` on a
+    left move means the caller may leave the inspector.
+    """
     rows = [list(dict.fromkeys(action for _, _, action in line if action)) for line in lines]
     rows = [row for row in rows if row]
     location = next(((i, row.index(current)) for i, row in enumerate(rows) if current in row), None)
@@ -103,10 +121,14 @@ def directional_target(lines: list[Line], current: str, direction: str) -> str |
 
 
 def content_offset(lines: list[Line], layout: WorkspaceLayout) -> int:
-    # A compact identity heading may replace a read-only title, never an editable field.
-    editable_title = bool(lines and any(action.startswith(("field:", "edit-field:"))
-                                       for _, _, action in lines[0]))
-    return 1 if layout.compact and not editable_title else 0
+    # A compact identity heading may replace a non-focusable title, never a field target.
+    field_title = bool(
+        lines and any(
+            action.startswith(("field:", "field-target:"))
+            for _, _, action in lines[0]
+        )
+    )
+    return 1 if layout.compact and not field_title else 0
 
 
 def render_inspector(
@@ -123,7 +145,12 @@ def render_inspector(
     row = state.current(catalog)
     if row is None:
         board.put(x, layout.panel_heading_row(state.key), panel_heading("档案", state.details), width=width)
-        board.put(x, top + 1, "没有匹配的记录" if state.query else "暂无记录", screen._TEXT_SECONDARY, width=width)
+        board.put(
+            x, top + 1,
+            "没有匹配的记录" if state.query else "暂无记录",
+            screen._TEXT_SECONDARY,
+            width=width,
+        )
         if state.query:
             board.button(x, top + 3, "清除搜索", "reset-search")
         elif not catalog.read_only:
@@ -154,8 +181,11 @@ def render_inspector(
             else f"field:{state.form.position}"
         )
         target_line = next(
-            (index for index, line in enumerate(lines)
-             if any(action == selected_action for _, _, action in line)),
+            (
+                index
+                for index, line in enumerate(lines)
+                if any(action == selected_action for _, _, action in line)
+            ),
             0,
         )
     else:
@@ -185,8 +215,12 @@ def render_inspector(
                 break
             shown = screen._clip_cells(text, remaining)
             display = screen._display_width(shown)
-            selected = bool(action and action == selected_action and (editing or state.details)
-                            and not (editing and state.form.focus_save))
+            selected = bool(
+                action
+                and action == selected_action
+                and (editing or state.details)
+                and not (editing and state.form.focus_save)
+            )
             drawn_style = (
                 screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
                 if selected
@@ -199,7 +233,12 @@ def render_inspector(
                     field_index = int(action.split(":")[1])
                     field_key = state.form.fields[field_index].key
                     freeform = catalog.options(state.key, field_key, state.form.values) is None
-                    if selected and state.form.options is None and freeform and segment_index == len(segments) - 1:
+                    if (
+                        selected
+                        and state.form.options is None
+                        and freeform
+                        and segment_index == len(segments) - 1
+                    ):
                         hit_width = max(hit_width, remaining)
                 board.regions.append(screen.HitRegion(cursor + 1, y + 1, hit_width, action))
             board.put(cursor, y, shown, drawn_style, width=remaining)

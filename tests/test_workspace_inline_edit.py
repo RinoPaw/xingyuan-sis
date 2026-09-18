@@ -1,4 +1,3 @@
-from xingyuan_sis.tui.workspace import events as workspace_events
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import os
@@ -10,6 +9,7 @@ from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import keys, screen, workspace
 from xingyuan_sis.tui.text_edit import TextBuffer
+from xingyuan_sis.tui.workspace import events as workspace_events
 from xingyuan_sis.tui.workspace import forms as workspace_forms, student_inspector, view as workspace_view
 from xingyuan_sis.tui.workspace.data import Catalog
 
@@ -48,7 +48,10 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         ]
         self.assertEqual([value for value, _ in branches], expected_branches)
 
-        for field in ("student_no", "name", "enrollment_year", "age", "birth_date", "contact", "dormitory", "notes"):
+        for field in (
+            "student_no", "name", "enrollment_year", "age",
+            "birth_date", "contact", "dormitory", "notes",
+        ):
             with self.subTest(freeform=field):
                 self.assertIsNone(self.catalog.options("students", field, values))
 
@@ -128,7 +131,10 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         original = state.current(self.catalog).copy()
         workspace_forms.open_field(state, self.catalog, "status")
         workspace_forms.read_value(state, self.catalog, ("field", 0))
-        target_index = next(i for i, (value, _) in enumerate(state.form.options) if value != original["status"])
+        target_index = next(
+            i for i, (value, _) in enumerate(state.form.options)
+            if value != original["status"]
+        )
 
         with patch.object(keys, "_read_key", side_effect=[f"option:{target_index}"]), \
              patch.object(screen, "_paint"), \
@@ -138,7 +144,10 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         self.assertEqual(event, ("save", 0))
         workspace_forms.apply_form(state, self.catalog)
         self.assertIsNone(state.form)
-        self.assertNotEqual(self.catalog.service.student_by_no(original["student_no"])["status"], original["status"])
+        self.assertNotEqual(
+            self.catalog.service.student_by_no(original["student_no"])["status"],
+            original["status"],
+        )
 
     def test_family_edit_completes_branch_before_one_atomic_save(self):
         state = workspace.Workspace("students", details=True)
@@ -164,7 +173,7 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         changed = self.catalog.service.student_by_no(original["student_no"])
         self.assertEqual((changed["family"], changed["branch"]), (new_family, new_branch))
 
-    def test_complete_birth_date_derives_age_instead_of_exposing_manual_age(self):
+    def test_complete_birth_date_derives_age_but_keeps_age_in_focus_graph(self):
         row = self.catalog.records["students"][0]
         self.catalog.service.update_student_by_no(row["student_no"], birth_date="2000-01-01", age=99)
         self.catalog.refresh()
@@ -173,8 +182,10 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         age_line = next(line for line in lines if line and line[0][0].startswith("年龄"))
 
         self.assertIsNone(row["age"])
-        self.assertFalse(any(action == "edit-field:age" for _, _, action in age_line))
+        self.assertTrue(any(action == "field-target:age" for _, _, action in age_line))
         self.assertTrue(any(text.endswith("岁") for text, _, _ in age_line))
+        with self.assertRaisesRegex(ValueError, "自动计算年龄"):
+            workspace_forms.open_field(workspace.Workspace("students"), self.catalog, "age")
 
     def test_inline_redraw_never_clears_the_whole_terminal_row(self):
         buffer = TextBuffer.from_value("林岚")

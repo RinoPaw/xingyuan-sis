@@ -10,7 +10,6 @@ from xingyuan_sis.tui import keys, screen, workspace
 from xingyuan_sis.tui.workspace import events as workspace_events, view as workspace_view
 from xingyuan_sis.tui.workspace.data import Catalog
 
-from xingyuan_sis.tui.workspace import events as workspace_events
 
 class MouseFocusTests(unittest.TestCase):
     def setUp(self):
@@ -43,47 +42,52 @@ class MouseFocusTests(unittest.TestCase):
         self.assertEqual(state.detail_selected, 0)
         self.assertGreater(state.detail_scroll, 0)
 
-    def test_focused_inspector_wheel_uses_the_same_geometry_as_arrow_navigation(self):
+    def test_focused_inspector_wheel_uses_the_same_event_path_as_down_arrow(self):
         size = os.terminal_size((120, 24))
         for collection in ("students", "courses"):
             with self.subTest(collection=collection):
-                state = workspace.Workspace(collection, details=True)
-                with patch.object(screen, "_terminal_size", return_value=size):
-                    frame = workspace_view.render(state, self.catalog)
-                    targets = workspace_events.detail_targets(state, self.catalog)
-                actions = [action for _, action in targets]
-                expected = workspace_view.directional_target(
-                    collection,
-                    actions,
-                    state.detail_selected,
-                    "down",
-                )
-                region = next(region for region in frame.regions if region.action == "focus-details")
+                arrow = workspace.Workspace(collection, details=True)
+                with patch.object(keys, "_read_key", side_effect=["down", "refresh"]), \
+                     patch.object(screen, "_paint"), \
+                     patch.object(screen, "_terminal_size", return_value=size):
+                    self.assertEqual(
+                        workspace_events.interact(arrow, self.catalog),
+                        ("refresh", 0),
+                    )
 
+                wheel = workspace.Workspace(collection, details=True)
+                with patch.object(screen, "_terminal_size", return_value=size):
+                    frame = workspace_view.render(wheel, self.catalog)
+                region = next(region for region in frame.regions if region.action == "focus-details")
                 with patch.object(
                     keys,
                     "_read_key",
-                    side_effect=[keys.MouseScroll(region.x, region.y, "down")],
+                    side_effect=[keys.MouseScroll(region.x, region.y, "down"), "refresh"],
                 ), patch.object(screen, "_paint"), patch.object(
                     screen, "_terminal_size", return_value=size
                 ):
-                    with self.assertRaises(StopIteration):
-                        workspace_events.interact(state, self.catalog)
+                    self.assertEqual(
+                        workspace_events.interact(wheel, self.catalog),
+                        ("refresh", 0),
+                    )
 
-                self.assertEqual(state.detail_selected, expected)
-                self.assertTrue(state.details)
+                self.assertEqual(wheel.detail_selected, arrow.detail_selected)
+                self.assertEqual(wheel.detail_scroll, arrow.detail_scroll)
+                self.assertTrue(wheel.details)
 
     def test_left_wheel_does_not_take_focus_from_the_inspector(self):
         state = workspace.Workspace("students", details=True)
         with patch.object(
             keys,
             "_read_key",
-            side_effect=[keys.MouseScroll(2, 12, "down")],
+            side_effect=[keys.MouseScroll(2, 12, "down"), "refresh"],
         ), patch.object(screen, "_paint"), patch.object(
             screen, "_terminal_size", return_value=os.terminal_size((120, 24))
         ):
-            with self.assertRaises(StopIteration):
-                workspace_events.interact(state, self.catalog)
+            self.assertEqual(
+                workspace_events.interact(state, self.catalog),
+                ("refresh", 0),
+            )
 
         self.assertTrue(state.details)
         self.assertEqual(state.selected, 1)

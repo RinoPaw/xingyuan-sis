@@ -35,7 +35,6 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
 
     titles = {
         "create": "新建 · " + COLLECTIONS[state.key].noun if state.key in COLLECTIONS else "新建",
-        "edit": "编辑 · " + COLLECTIONS[state.key].noun if state.key in COLLECTIONS else "编辑",
         "delete": "删除记录",
         "import": "导入学生 CSV",
         "export": "导出学生 CSV",
@@ -87,12 +86,15 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         first = min(max(0, form.position - capacity + 1), max(0, len(form.fields) - capacity))
         for i, field in enumerate(form.fields[first:first + capacity], start=first):
             value = safe(form.values.get(field.key))
-            if form.mode in {"create", "edit"}:
+            if form.mode == "create":
                 options = catalog.options(state.key, field.key, form.values)
                 if options is not None:
                     value = next((label for key, label in options if key == form.values.get(field.key)), value)
             label_width = min(12, max(4, width // 3))
-            label = screen._pad_cells(screen._clip_cells(field.label + ("*" if field.required else ""), label_width), label_width)
+            label = screen._pad_cells(
+                screen._clip_cells(field.label + ("*" if field.required else ""), label_width),
+                label_width,
+            )
             if i == form.position and not form.focus_save:
                 text = screen._pad_cells(screen._clip_cells(f"{label}  {value}", width), width)
                 board.put(

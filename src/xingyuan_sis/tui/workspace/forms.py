@@ -11,6 +11,8 @@ from .state import Form, Workspace
 
 def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
     catalog.require_write()
+    if mode == "edit":
+        raise ValueError("已有记录请在档案字段上直接修改。")
     row = state.current(catalog)
     if mode in {"delete", "reset-password"} and row is None:
         state.notice = "先选择一条记录。"
@@ -165,9 +167,15 @@ def apply_form(state: Workspace, catalog: Catalog) -> None:
         if form.mode == "edit":
             from .events import detail_targets
 
-            action = f"edit-field:{form.fields[form.position].key}"
-            state.detail_selected = next((i for i, (_, target) in enumerate(detail_targets(state, catalog))
-                                          if target == action), 0)
+            action = f"field-target:{form.fields[form.position].key}"
+            state.detail_selected = next(
+                (
+                    i
+                    for i, (_, target) in enumerate(detail_targets(state, catalog))
+                    if target == action
+                ),
+                0,
+            )
         else:
             state.detail_scroll, state.detail_selected = 0, 0
     else:
@@ -228,11 +236,19 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
     field_ = state.form.fields[index]
     state.form.position = index
     state.form.focus_save = False
-    options = catalog.options(state.key, field_.key, option_values(state)) if state.form.mode in {"create", "edit"} else None
+    options = (
+        catalog.options(state.key, field_.key, option_values(state))
+        if state.form.mode in {"create", "edit"}
+        else None
+    )
     if options is not None:
         state.form.options = options
         state.form.option_index = next(
-            (i for i, (value, _) in enumerate(options) if value == state.form.values.get(field_.key)),
+            (
+                i
+                for i, (value, _) in enumerate(options)
+                if value == state.form.values.get(field_.key)
+            ),
             0,
         )
         suffix = "继续" if state.form.position + 1 < len(state.form.fields) else "保存"
@@ -241,7 +257,8 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
 
     current = state.form.values.get(field_.key)
     state.notice = (
-        "直接在当前字段修改 · Enter " + ("保存" if state.form.mode == "edit" else "暂存")
+        "直接在当前字段修改 · Enter "
+        + ("保存" if state.form.mode == "edit" else "暂存")
         + (" · 清空后 Enter 可置空" if not field_.required else "")
         + " · Esc 取消"
     )

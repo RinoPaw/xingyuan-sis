@@ -37,7 +37,14 @@ class WorkspaceFlowTests(unittest.TestCase):
             with self.subTest(size=size):
                 state = Workspace("students", selected=17)
                 original = state.current(self.catalog).copy()
-                self.assertEqual(self.interact(state, ["focus_prev", "right", "right", "right", "select", "select"], size), ("save", 0))
+                self.assertEqual(
+                    self.interact(
+                        state,
+                        ["focus_prev", "right", "right", "right", "select", "select"],
+                        size,
+                    ),
+                    ("save", 0),
+                )
                 self.assertEqual(state.form.mode, "delete")
                 self.assertEqual(state.form.original["id"], original["id"])
                 self.assertEqual(state.current(self.catalog)["id"], original["id"])
@@ -50,10 +57,12 @@ class WorkspaceFlowTests(unittest.TestCase):
         state = Workspace("students", selected=40, roster_scroll=30)
         self.render(state)
         original = (state.selected, state.roster_scroll)
-        for sequence, expected in ((["focus", "refresh"], (True, False)),
-                                   (["focus", "refresh"], (False, True)),
-                                   (["focus", "refresh"], (False, False)),
-                                   (["focus_prev", "refresh"], (False, True))):
+        for sequence, expected in (
+            (["focus", "refresh"], (True, False)),
+            (["focus", "refresh"], (False, True)),
+            (["focus", "refresh"], (False, False)),
+            (["focus_prev", "refresh"], (False, True)),
+        ):
             self.interact(state, sequence)
             self.assertEqual((state.details, state.action_focus), expected)
             self.assertEqual((state.selected, state.roster_scroll), original)
@@ -66,47 +75,43 @@ class WorkspaceFlowTests(unittest.TestCase):
         self.assertEqual(state.current(self.catalog), original)
         self.assertIsNone(self.interact(state, ["back"]))
 
-    def test_all_other_entities_edit_in_their_existing_archive_geometry(self):
+    def test_other_entities_edit_one_field_inside_existing_archive_geometry(self):
         for key in ("departments", "majors", "classes", "courses", "grades"):
+            editable_key = self.catalog.fields(key, True)[0].key
             for size in ((140, 45), (80, 24), (30, 12)):
                 with self.subTest(key=key, size=size):
                     state = Workspace(key, details=True)
                     before = self.render(state, size)
-                    forms.open_form(state, self.catalog, "edit")
+                    old = next(
+                        r for r in before.regions
+                        if r.action == f"field-target:{editable_key}"
+                    )
+                    forms.open_field(state, self.catalog, editable_key)
                     after = self.render(state, size)
-                    self.assertNotIn("编辑中", "".join(after.lines))
-                    for region in after.regions:
-                        if region.action.startswith("field:"):
-                            index = int(region.action.split(":")[1])
-                            field_key = state.form.fields[index].key
-                            old = next((r for r in before.regions if r.action == f"edit-field:{field_key}"), None)
-                            if old is not None:
-                                self.assertEqual((region.x, region.y), (old.x, old.y))
-                    self.assertTrue(any(r.action == "save" for r in after.regions))
+                    active = next(r for r in after.regions if r.action == "field:0")
+                    self.assertEqual((active.x, active.y), (old.x, old.y))
+                    self.assertFalse(any(r.action == "save" for r in after.regions))
 
-    def test_every_editable_field_is_reachable_after_resize(self):
+    def test_every_editable_field_is_reachable_after_resize_without_record_save_button(self):
         for key in ("students", "departments", "majors", "classes", "courses", "grades"):
-            state = Workspace(key)
-            forms.open_form(state, self.catalog, "edit")
-            for index, field in enumerate(state.form.fields):
-                state.form.position = index
+            for field in self.catalog.fields(key, True):
                 for size in ((120, 35), (40, 20), (24, 10)):
                     with self.subTest(key=key, field=field.key, size=size):
+                        state = Workspace(key, details=True)
+                        forms.open_field(state, self.catalog, field.key)
                         frame = self.render(state, size)
-                        self.assertTrue(any(r.action == f"field:{index}" for r in frame.regions))
-                        self.assertTrue(any(r.action == "save" for r in frame.regions))
+                        self.assertTrue(any(r.action == "field:0" for r in frame.regions))
+                        self.assertFalse(any(r.action == "save" for r in frame.regions))
 
-    def test_tab_reaches_save_and_enter_saves_without_a_shortcut(self):
+    def test_create_form_keeps_explicit_save_target(self):
         state = Workspace("courses")
-        original = state.current(self.catalog).copy()
-        forms.open_form(state, self.catalog, "edit")
-        state.form.values["hours"] = original["hours"] + 1
-        event = self.interact(state, ["focus"] * len(state.form.fields) + ["select"])
+        forms.open_form(state, self.catalog, "create")
+        event = self.interact(
+            state,
+            ["focus"] * len(state.form.fields) + ["select"],
+        )
         self.assertEqual(event, ("save", 0))
         self.assertTrue(state.form.focus_save)
-        forms.apply_form(state, self.catalog)
-        self.assertTrue(state.details)
-        self.assertEqual(state.current(self.catalog)["hours"], original["hours"] + 1)
 
     def test_short_create_and_confirmation_keep_controls_above_status(self):
         for size in ((24, 8), (30, 10), (40, 20)):
@@ -135,9 +140,13 @@ class WorkspaceFlowTests(unittest.TestCase):
         self.assertIn(row["name"], "".join(frame.lines))
         forbidden = {"create", "edit", "delete", "import", "export", "seed", "reset-password"}
         self.assertFalse(forbidden & {r.action for r in frame.regions})
-        self.assertFalse(any(r.action.startswith("edit-field:") for r in frame.regions))
+        self.assertTrue(any(r.action == "field-target:name" for r in frame.regions))
         related = catalog.related("students", row)[1][0]
-        self.interact(state, ["delete", "edit-field:status", "collection:data", f"related:grades:{related['id']}", "edit", "refresh"], catalog=catalog)
+        self.interact(
+            state,
+            ["delete", "collection:data", f"related:grades:{related['id']}", "edit", "refresh"],
+            catalog=catalog,
+        )
         self.assertEqual(state.key, "grades")
         self.assertIsNone(state.form)
         self.assertFalse(forbidden & {r.action for r in self.render(state, catalog=catalog).regions})
@@ -160,17 +169,31 @@ class WorkspaceFlowTests(unittest.TestCase):
         self.interact(state, ["end", "refresh"], size=(30, 12))
         self.assertIn("学号已存在", "".join(self.render(state, (30, 12)).lines))
 
-    def test_changing_family_clears_incompatible_branch_before_save(self):
-        state = Workspace("students")
-        forms.open_form(state, self.catalog, "edit")
-        index = next(i for i, field in enumerate(state.form.fields) if field.key == "family")
-        forms.read_value(state, self.catalog, ("field", index))
-        target = next(i for i, (value, _) in enumerate(state.form.options) if value != state.form.values["family"])
-        self.interact(state, [f"option:{target}", "save"])
-        self.assertIsNone(state.form.values["branch"])
-        with self.assertRaisesRegex(ValueError, "支系"):
-            forms.apply_form(state, self.catalog)
+    def test_family_change_waits_for_branch_then_commits_atomically(self):
+        state = Workspace("students", details=True)
+        original = state.current(self.catalog).copy()
+        forms.open_field(state, self.catalog, "family")
+        forms.read_value(state, self.catalog, ("field", 0))
+        family_index = next(
+            i
+            for i, (value, _) in enumerate(state.form.options)
+            if value != original["family"]
+            and any(row["family_name"] == value for row in self.catalog.species_branches)
+        )
+
+        with patch.object(keys, "_read_key", side_effect=[f"option:{family_index}"]), \
+             patch.object(screen, "_paint"), \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+            with self.assertRaises(StopIteration):
+                events.interact(state, self.catalog)
+
         self.assertIsNotNone(state.form)
+        self.assertEqual(state.form.position, 1)
+        self.assertIsNotNone(state.form.options)
+        self.assertEqual(
+            self.catalog.service.student_by_no(original["student_no"])["family"],
+            original["family"],
+        )
 
     def test_empty_picker_can_be_cancelled_without_leaving_draft(self):
         state = Workspace("grades")
@@ -190,3 +213,7 @@ class WorkspaceFlowTests(unittest.TestCase):
                 self.assertEqual(state.key, key)
                 self.assertEqual(state.current(self.catalog)["id"], original["id"])
                 self.assertTrue(state.details)
+
+
+if __name__ == "__main__":
+    unittest.main()

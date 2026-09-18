@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...schema import age_from_birth_date, is_complete_birth_date
+from ...schema import age_from_birth_date
 from .. import screen
 from ..view_common import safe
 from .data import Catalog
-from .state import Workspace
 from .inspector import Line, Segment, is_editing, field_segment, expand_options
 from .presentation import project_record
+from .state import Workspace
 
 
 def _age(values: dict[str, Any]) -> str:
@@ -35,14 +35,13 @@ def lines(
     ) -> Segment:
         return field_segment(state, catalog, "students", values, key, text, style)
 
-    age = (_age(values), screen._TEXT_PRIMARY, "") if is_complete_birth_date(values.get("birth_date")) else field("age", _age(values))
     year = values.get("enrollment_year")
     lines: list[Line] = [
         [field("name", style=screen._BOLD + screen._TEXT_PRIMARY)],
         [label("学号  "), field("student_no")],
         [label("物种  "), field("family"), (" · ", screen._TEXT_SECONDARY, ""), field("branch")],
         [label("性别  "), field("gender")],
-        [label("年龄  "), age],
+        [label("年龄  "), field("age", _age(values))],
         [label("入学  "), field("enrollment_year", f"{safe(year)}级")],
         [label("学院  "), (safe(row.get("department_name")), screen._TEXT_PRIMARY, "")],
         [label("班级  "), field("class_code")],

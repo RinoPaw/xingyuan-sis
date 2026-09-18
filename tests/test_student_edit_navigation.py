@@ -1,5 +1,3 @@
-from xingyuan_sis.tui.workspace import events as workspace_events
-from xingyuan_sis.tui.workspace import forms as workspace_forms
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import os
@@ -9,7 +7,8 @@ from unittest.mock import patch
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import keys, screen, workspace
-from xingyuan_sis.tui.workspace import student_inspector, view as workspace_view
+from xingyuan_sis.tui.workspace import events as workspace_events
+from xingyuan_sis.tui.workspace import forms as workspace_forms
 from xingyuan_sis.tui.workspace.data import Catalog
 
 
@@ -30,79 +29,96 @@ class StudentEditNavigationTests(unittest.TestCase):
     def _actions(self):
         return [action for _, action in self._targets()]
 
-    @staticmethod
-    def _moved_action(actions, current, direction):
-        selected = actions.index(current)
-        moved = workspace_view.directional_target("students", actions, selected, direction)
-        return None if moved is None else actions[moved]
-
-    def test_species_composite_row_uses_spatial_navigation(self):
+    def _move(self, current: str, direction: str):
         actions = self._actions()
-        self.assertEqual(
-            self._moved_action(actions, "edit-field:student_no", "down"),
-            "edit-field:branch",
-        )
-        self.assertEqual(
-            self._moved_action(actions, "edit-field:gender", "up"),
-            "edit-field:branch",
-        )
-        self.assertEqual(
-            self._moved_action(actions, "edit-field:branch", "left"),
-            "edit-field:family",
-        )
-        self.assertEqual(
-            self._moved_action(actions, "edit-field:family", "right"),
-            "edit-field:branch",
-        )
-        self.assertIsNone(
-            self._moved_action(actions, "edit-field:family", "left")
-        )
-
-    def test_element_composite_row_uses_the_same_spatial_navigation(self):
-        actions = self._actions()
-        self.assertEqual(
-            self._moved_action(actions, "edit-field:status", "down"),
-            "edit-field:primary_affinity",
-        )
-        self.assertEqual(
-            self._moved_action(actions, "edit-field:primary_affinity", "left"),
-            "edit-field:primary_element",
-        )
-        self.assertEqual(
-            self._moved_action(actions, "edit-field:primary_element", "right"),
-            "edit-field:primary_affinity",
-        )
-        self.assertIsNone(
-            self._moved_action(actions, "edit-field:primary_element", "left")
-        )
-        affinity = actions.index("edit-field:primary_affinity")
-        next_main = actions[affinity + 1]
-        self.assertEqual(
-            self._moved_action(actions, next_main, "up"),
-            "edit-field:primary_affinity",
-        )
-
-    def test_left_from_species_primary_returns_to_student_roster(self):
-        actions = self._actions()
-        self.state.detail_selected = actions.index("edit-field:family")
-        with patch.object(keys, "_read_key", side_effect=["left", "back", "back"]), \
+        self.state.details = True
+        self.state.detail_selected = actions.index(current)
+        with patch.object(keys, "_read_key", side_effect=[direction, "refresh"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
-            workspace_events.interact(self.state, self.catalog)
-        self.assertFalse(self.state.details)
-        self.assertEqual(self.state.selected, 0)
+            event = workspace_events.interact(self.state, self.catalog)
+        self.assertEqual(event, ("refresh", 0))
+        if not self.state.details:
+            return None
+        return self._actions()[self.state.detail_selected]
 
-    def test_arrows_move_the_same_detail_selection_before_editing(self):
-        with patch.object(keys, "_read_key", side_effect=["down", "back", "back", "back"]), \
+    def test_enter_from_roster_focuses_name_then_student_number(self):
+        self.state.details = False
+        with patch.object(keys, "_read_key", side_effect=["select", "refresh"]), \
              patch.object(screen, "_paint"), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
-            workspace_events.interact(self.state, self.catalog)
-        self.assertEqual(self.state.detail_selected, 1)
-        self.assertIsNone(self.state.form)
+            event = workspace_events.interact(self.state, self.catalog)
 
-    def test_enter_opens_only_the_selected_field(self):
+        self.assertEqual(event, ("refresh", 0))
+        self.assertTrue(self.state.details)
         actions = self._actions()
-        self.state.detail_selected = actions.index("edit-field:primary_element")
+        self.assertEqual(actions[self.state.detail_selected], "field-target:name")
+        self.assertEqual(
+            self._move("field-target:name", "down"),
+            "field-target:student_no",
+        )
+
+    def test_species_composite_row_uses_real_event_geometry(self):
+        self.assertEqual(
+            self._move("field-target:student_no", "down"),
+            "field-target:branch",
+        )
+        self.assertEqual(
+            self._move("field-target:gender", "up"),
+            "field-target:branch",
+        )
+        self.assertEqual(
+            self._move("field-target:branch", "up"),
+            "field-target:student_no",
+        )
+        self.assertEqual(
+            self._move("field-target:branch", "left"),
+            "field-target:family",
+        )
+        self.assertEqual(
+            self._move("field-target:family", "right"),
+            "field-target:branch",
+        )
+        self.assertIsNone(self._move("field-target:family", "left"))
+
+    def test_element_composite_row_uses_the_same_real_event_geometry(self):
+        self.assertEqual(
+            self._move("field-target:status", "down"),
+            "field-target:primary_affinity",
+        )
+        self.assertEqual(
+            self._move("field-target:primary_affinity", "up"),
+            "field-target:status",
+        )
+        self.assertEqual(
+            self._move("field-target:primary_affinity", "left"),
+            "field-target:primary_element",
+        )
+        self.assertEqual(
+            self._move("field-target:primary_element", "right"),
+            "field-target:primary_affinity",
+        )
+        self.assertIsNone(self._move("field-target:primary_element", "left"))
+
+    def test_read_only_identity_fields_are_focusable_but_not_editable(self):
+        actions = self._actions()
+        for action in ("field-target:name", "field-target:student_no"):
+            with self.subTest(action=action):
+                self.state.details = True
+                self.state.form = None
+                self.state.detail_selected = actions.index(action)
+                with patch.object(keys, "_read_key", side_effect=["select", "refresh"]), \
+                     patch.object(screen, "_paint"), \
+                     patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+                    event = workspace_events.interact(self.state, self.catalog)
+                self.assertEqual(event, ("refresh", 0))
+                self.assertIsNone(self.state.form)
+                self.assertEqual(self._actions()[self.state.detail_selected], action)
+                self.assertIn("只读", self.state.notice)
+
+    def test_enter_opens_only_the_selected_editable_field(self):
+        actions = self._actions()
+        self.state.detail_selected = actions.index("field-target:primary_element")
 
         with patch.object(keys, "_read_key", side_effect=["select"]), \
              patch.object(screen, "_paint"), \
@@ -112,25 +128,14 @@ class StudentEditNavigationTests(unittest.TestCase):
         self.assertEqual(event, ("field", 0))
         self.assertEqual([field.key for field in self.state.form.fields], ["primary_element"])
 
-    def test_render_groups_element_with_affinity_not_status(self):
+    def test_complete_birth_date_keeps_derived_age_focusable_but_not_directly_editable(self):
         row = self.state.current(self.catalog)
-        lines = student_inspector.lines(row, self.catalog)
-        actions = [[action for _, _, action in line if action.startswith("edit-field:")] for line in lines]
-
-        element_line = next(line for line in actions if "edit-field:primary_element" in line)
-        self.assertIn("edit-field:primary_affinity", element_line)
-        self.assertNotIn("edit-field:status", element_line)
-
-    def test_only_active_field_changes_visual_state(self):
-        row = self.state.current(self.catalog)
-        workspace_forms.open_field(self.state, self.catalog, "student_no")
-        lines = student_inspector.lines(row, self.catalog, self.state)
-        self.assertEqual(lines[0][0][1], screen._BOLD + screen._TEXT_PRIMARY)
-
-        self.state.form = None
-        workspace_forms.open_field(self.state, self.catalog, "name")
-        lines = student_inspector.lines(row, self.catalog, self.state)
-        self.assertEqual(lines[0][0][1], screen._BOLD + screen._TEXT_ACCENT)
+        self.catalog.service.update_student_by_no(row["student_no"], birth_date="2000-01-01", age=99)
+        self.catalog.refresh()
+        actions = self._actions()
+        self.assertIn("field-target:age", actions)
+        with self.assertRaisesRegex(ValueError, "自动计算年龄"):
+            workspace_forms.open_field(self.state, self.catalog, "age")
 
 
 if __name__ == "__main__":

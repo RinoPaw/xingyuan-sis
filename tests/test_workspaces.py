@@ -1,4 +1,3 @@
-from xingyuan_sis.tui.workspace import events as workspace_events
 from contextlib import nullcontext, redirect_stdout
 from io import StringIO
 import os
@@ -10,6 +9,7 @@ from unittest.mock import patch
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import ENROLLMENTS, STUDENTS, seed_demo
 from xingyuan_sis.tui import app, keys, screen, workspace
+from xingyuan_sis.tui.workspace import events as workspace_events
 from xingyuan_sis.tui.workspace import forms as workspace_forms, view as workspace_view
 from xingyuan_sis.tui.workspace.data import COLLECTIONS, Catalog
 
@@ -43,7 +43,10 @@ class WorkspaceTests(unittest.TestCase):
                         self.assertLessEqual(region.x + region.width, size[0])
                         self.assertLessEqual(region.y, size[1])
                         if region.action != "focus-details":
-                            self.assertEqual(screen._hit_action(keys.MouseClick(region.x, region.y), frame.regions), region.action)
+                            self.assertEqual(
+                                screen._hit_action(keys.MouseClick(region.x, region.y), frame.regions),
+                                region.action,
+                            )
 
     def test_student_workspace_header_has_no_ghost_rows(self):
         frame = self.render(workspace.Workspace("students"))
@@ -61,7 +64,8 @@ class WorkspaceTests(unittest.TestCase):
         detail_region = next(region for region in frame.regions if region.action == "focus-details")
         right_wheel = keys.MouseScroll(detail_region.x, min(detail_region.y, 12), "down")
         with patch.object(keys, "_read_key", side_effect=[right_wheel, "back", "back"]), \
-             patch.object(screen, "_paint") as paint, patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
+             patch.object(screen, "_paint") as paint, \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
             workspace_events.interact(state, self.catalog)
         self.assertEqual(state.selected, 0)
         self.assertIn("2–", "".join(paint.call_args_list[1].args[0]))
@@ -74,7 +78,8 @@ class WorkspaceTests(unittest.TestCase):
         expected = self.catalog.records["students"][1]
         second_row = next(r for r in first.regions if r.action == "row:1")
         with patch.object(keys, "_read_key", side_effect=[keys.MouseClick(second_row.x, second_row.y), "back", "back"]), \
-             patch.object(screen, "_paint") as paint, patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+             patch.object(screen, "_paint") as paint, \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             workspace_events.interact(state, self.catalog)
         self.assertEqual(state.current(self.catalog)["name"], expected["name"])
         last_frame = paint.call_args_list[-1].args[0]
@@ -99,7 +104,8 @@ class WorkspaceTests(unittest.TestCase):
         self.assertTrue(all(row["score"] is None for row in state.rows(self.catalog)))
         state.switch("students")
         expected = STUDENTS[0]
-        with patch("builtins.input", return_value=str(expected[1])), patch.object(screen, "_paint"), redirect_stdout(StringIO()):
+        with patch("builtins.input", return_value=str(expected[1])), \
+             patch.object(screen, "_paint"), redirect_stdout(StringIO()):
             workspace_forms.read_value(state, self.catalog, ("search", 0))
         self.assertEqual(
             [row["student_no"] for row in state.rows(self.catalog)],
@@ -109,25 +115,26 @@ class WorkspaceTests(unittest.TestCase):
     def test_field_edit_saves_on_enter_without_record_edit_mode(self):
         state = workspace.Workspace("students", details=True)
         original = state.current(self.catalog).copy()
-        workspace_forms.open_field(state, self.catalog, "name")
+        workspace_forms.open_field(state, self.catalog, "contact")
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
              patch.object(screen, "_paint"), \
-             patch.object(workspace_forms, "read_inline_input", return_value="即时新名字"):
+             patch.object(workspace_forms, "read_inline_input", return_value="即时新联系方式"):
             workspace_forms.read_value(state, self.catalog, ("field", 0))
         self.assertIsNone(state.form)
-        self.assertEqual(self.catalog.service.student_by_no(original["student_no"])["name"], "即时新名字")
+        self.assertEqual(
+            self.catalog.service.student_by_no(original["student_no"])["contact"],
+            "即时新联系方式",
+        )
 
-    def test_edit_selected_student_can_change_identifier_and_keeps_relationships(self):
-        state = workspace.Workspace("students", selected=9)
-        original = state.current(self.catalog).copy()
-        workspace_forms.open_field(state, self.catalog, "student_no")
-        state.form.values["student_no"] = "20990001"
-        workspace_forms.apply_form(state, self.catalog)
-        self.assertIsNone(self.catalog.service.student_by_no(original["student_no"]))
-        changed = self.catalog.service.student_by_no("20990001")
-        self.assertEqual(changed["id"], original["id"])
-        self.assertEqual(state.current(self.catalog)["id"], original["id"])
-        self.assertTrue(any(row["student_no"] == "20990001" for row in self.catalog.records["grades"]))
+    def test_student_identity_fields_are_focusable_but_reject_direct_edit(self):
+        state = workspace.Workspace("students", details=True)
+        frame = self.render(state)
+        actions = {region.action for region in frame.regions}
+        self.assertIn("field-target:name", actions)
+        self.assertIn("field-target:student_no", actions)
+        for field in ("name", "student_no"):
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "不能直接修改"):
+                workspace_forms.open_field(state, self.catalog, field)
 
     def test_course_edit_renames_code_without_changing_enrollments(self):
         row = self.catalog.records["courses"][0]
@@ -149,7 +156,9 @@ class WorkspaceTests(unittest.TestCase):
         values = self.catalog.defaults("grades", row)
         values["score"] = None
         self.catalog.save("grades", values, row)
-        self.assertIsNone(next(r for r in self.catalog.records["grades"] if r["id"] == row["id"])["score"])
+        self.assertIsNone(
+            next(r for r in self.catalog.records["grades"] if r["id"] == row["id"])["score"]
+        )
 
     def test_invalid_form_values_do_not_write(self):
         row = self.catalog.records["grades"][0]
@@ -159,7 +168,12 @@ class WorkspaceTests(unittest.TestCase):
                 values["score"] = score
                 with self.assertRaises(ValueError):
                     self.catalog.save("grades", values, row)
-                self.assertEqual(self.catalog.service.enrollment(row["student_no"], row["course_code"], row["semester"])["score"], row["score"])
+                self.assertEqual(
+                    self.catalog.service.enrollment(
+                        row["student_no"], row["course_code"], row["semester"]
+                    )["score"],
+                    row["score"],
+                )
 
     def test_foreign_key_picker_saves_selected_value_on_enter(self):
         state = workspace.Workspace("students", selected=9, details=True)
@@ -199,7 +213,8 @@ class WorkspaceTests(unittest.TestCase):
     def test_short_workspace_keeps_every_record_accessible(self):
         state = workspace.Workspace("students")
         expected_name = self.catalog.records["students"][-1]["name"]
-        with patch.object(keys, "_read_key", side_effect=["end", "back", "back"]), patch.object(screen, "_paint") as paint, \
+        with patch.object(keys, "_read_key", side_effect=["end", "back", "back"]), \
+             patch.object(screen, "_paint") as paint, \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((30, 12))):
             workspace_events.interact(state, self.catalog)
         self.assertEqual(state.selected, len(self.catalog.records["students"]) - 1)
@@ -211,7 +226,8 @@ class WorkspaceTests(unittest.TestCase):
         with redirect_stdout(StringIO()), patch.object(keys, "_read_key", side_effect=events), \
              patch.object(app, "read_session", return_value=identity), \
              patch.object(screen, "_paint") as paint, patch.object(screen, "_clear"), \
-             patch.object(keys, "_mouse_tracking", nullcontext), patch.object(screen, "_terminal_session", nullcontext), \
+             patch.object(keys, "_mouse_tracking", nullcontext), \
+             patch.object(screen, "_terminal_session", nullcontext), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 24))), \
              patch("sys.stdin.isatty", return_value=True), patch("sys.stdout.isatty", return_value=True):
             app.run(self.db)
@@ -240,7 +256,8 @@ class WorkspaceTests(unittest.TestCase):
     def test_compact_inspector_can_scroll_to_last_fields(self):
         state = workspace.Workspace("students")
         with patch.object(keys, "_read_key", side_effect=["focus", "end", "back", "back", "back"]), \
-             patch.object(screen, "_paint") as paint, patch.object(screen, "_terminal_size", return_value=os.terminal_size((30, 12))):
+             patch.object(screen, "_paint") as paint, \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size((30, 12))):
             workspace_events.interact(state, self.catalog)
         self.assertTrue(any("备注" in "".join(call.args[0]) for call in paint.call_args_list))
         self.assertEqual(state.selected, 0)
