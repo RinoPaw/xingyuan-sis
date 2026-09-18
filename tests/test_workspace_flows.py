@@ -11,7 +11,7 @@ from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import keys, screen
 from xingyuan_sis.tui.workspace import events, field_session, forms, view
 from xingyuan_sis.tui.workspace.data import Catalog
-from xingyuan_sis.tui.workspace.state import Workspace
+from xingyuan_sis.tui.workspace.state import ContentPanel, FocusArea, Workspace
 
 
 class WorkspaceFlowTests(unittest.TestCase):
@@ -32,11 +32,20 @@ class WorkspaceFlowTests(unittest.TestCase):
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
             return view.render(state, catalog or self.catalog)
 
+    @staticmethod
+    def inspector_state(key: str, **kwargs):
+        return Workspace(
+            key,
+            focus=FocusArea.INSPECTOR,
+            content_panel=ContentPanel.INSPECTOR,
+            **kwargs,
+        )
+
     def test_delete_selected_student_through_toolbar_without_mouse(self):
         state = Workspace("students", selected=17)
         original = state.current(self.catalog).copy()
         self.assertEqual(
-            self.interact(state, ["focus_prev", "right", "right", "select", "select"], (120, 35)),
+            self.interact(state, ["focus", "focus", "right", "right", "select", "select"], (120, 35)),
             ("save", 0),
         )
         self.assertEqual(state.form.mode, "delete")
@@ -44,18 +53,18 @@ class WorkspaceFlowTests(unittest.TestCase):
         forms.apply_form(state, self.catalog)
         self.assertIsNone(self.catalog.service.student_by_no(original["student_no"]))
 
-    def test_focus_cycle_preserves_record_and_roster_scroll(self):
+    def test_tab_cycles_roster_inspector_toolbar_and_preserves_record_scroll(self):
         state = Workspace("students", selected=40, roster_scroll=30)
         self.render(state)
         original = (state.selected, state.roster_scroll)
-        for sequence, expected in (
-            (["focus", "refresh"], (True, False)),
-            (["focus", "refresh"], (False, True)),
-            (["focus", "refresh"], (False, False)),
-            (["focus_prev", "refresh"], (False, True)),
+        for expected in (
+            FocusArea.INSPECTOR,
+            FocusArea.TOOLBAR,
+            FocusArea.ROSTER,
+            FocusArea.INSPECTOR,
         ):
-            self.interact(state, sequence)
-            self.assertEqual((state.details, state.action_focus), expected)
+            self.interact(state, ["focus", "refresh"])
+            self.assertEqual(state.focus, expected)
             self.assertEqual((state.selected, state.roster_scroll), original)
 
     def test_cancel_delete_preserves_student_and_returns_to_current_record(self):
@@ -70,7 +79,7 @@ class WorkspaceFlowTests(unittest.TestCase):
             editable_key = self.catalog.fields(key, True)[0].key
             for size in ((140, 45), (80, 24), (30, 12)):
                 with self.subTest(key=key, size=size):
-                    state = Workspace(key, details=True)
+                    state = self.inspector_state(key)
                     before = self.render(state, size)
                     old = next(r for r in before.regions if r.action == f"field:{editable_key}")
                     field_session.start(state, self.catalog, editable_key)
@@ -85,7 +94,7 @@ class WorkspaceFlowTests(unittest.TestCase):
             for field in self.catalog.fields(key, True):
                 for size in ((120, 35), (40, 20), (24, 10)):
                     with self.subTest(key=key, field=field.key, size=size):
-                        state = Workspace(key, details=True)
+                        state = self.inspector_state(key)
                         try:
                             field_session.start(state, self.catalog, field.key)
                         except ValueError as exc:
@@ -137,14 +146,14 @@ class WorkspaceFlowTests(unittest.TestCase):
     def test_read_only_student_can_scroll_past_links_to_personal_information(self):
         row = self.catalog.records["students"][0]
         catalog = Catalog(self.db, Identity(row["student_no"], "student", row["student_no"]))
-        state = Workspace("students", details=True)
+        state = self.inspector_state("students")
         self.interact(state, ["end", "refresh"], size=(30, 12), catalog=catalog)
         text = "".join(self.render(state, (30, 12), catalog).lines)
         self.assertIn("备注", text)
         self.assertIn("出生日期", text)
 
     def test_family_change_waits_for_branch_then_commits_atomically(self):
-        state = Workspace("students", details=True)
+        state = self.inspector_state("students")
         original = state.current(self.catalog).copy()
         field_session.start(state, self.catalog, "family")
         field_session.edit_current(state, self.catalog)
@@ -178,13 +187,14 @@ class WorkspaceFlowTests(unittest.TestCase):
     def test_related_return_restores_focus_from_any_source(self):
         for key in ("students", "departments", "majors", "classes", "courses", "grades"):
             with self.subTest(key=key):
-                state = Workspace(key, details=True)
+                state = self.inspector_state(key)
                 original = state.current(self.catalog)
                 target, rows = self.catalog.related(key, original)
                 self.interact(state, [f"related:{target}:{rows[0]['id']}", "back", "refresh"])
                 self.assertEqual(state.key, key)
                 self.assertEqual(state.current(self.catalog)["id"], original["id"])
-                self.assertTrue(state.details)
+                self.assertEqual(state.focus, FocusArea.INSPECTOR)
+                self.assertEqual(state.content_panel, ContentPanel.INSPECTOR)
 
 
 if __name__ == "__main__":
