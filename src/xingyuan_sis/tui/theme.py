@@ -108,14 +108,14 @@ def footer(
     *,
     switch_focus: bool = False,
     command_hints: Sequence[str] = (),
-    enter: str = "打开",
+    enter: str | None = "打开",
     escape: str = "返回",
 ) -> str:
-    """Render navigation plus shortcuts derived from commands active here."""
+    """Render the single visible interaction contract for the current context."""
     required = [
-        *( ["[ Tab 切换区域 ]"] if switch_focus else []),
+        *(["[ Tab 切换区域 ]"] if switch_focus else []),
         "[ 方向键 移动 ]",
-        f"[ Enter {enter} ]",
+        *([f"[ Enter {enter} ]"] if enter is not None else []),
         f"[ Esc {escape} ]",
     ]
     optional = [f"[ {hint} ]" for hint in command_hints]
@@ -136,10 +136,11 @@ def footer(
             parts.append(bar_space(gaps[index + 1]))
         return "".join(parts)
 
-    compact = (
-        ("Tab · " if switch_focus else "")
-        + f"↑↓←→ · Enter {enter} · Esc {escape}"
-    )
+    compact_parts = [*( ["Tab"] if switch_focus else []), "↑↓←→"]
+    if enter is not None:
+        compact_parts.append(f"Enter {enter}")
+    compact_parts.append(f"Esc {escape}")
+    compact = " · ".join(compact_parts)
     for hint in command_hints:
         candidate = compact + f" · {hint}"
         if screen._display_width(candidate) > width:

@@ -91,21 +91,29 @@ def _footer(state: Workspace, catalog: Catalog, width: int) -> str:
         return theme.footer(width, enter=enter, escape="取消")
     if state.form is not None:
         form = state.form
-        enter = "选择" if form.options is not None else "确认" if form.focus_save or not form.fields else "编辑"
-        hints = (FORM_SAVE.hint,) if form.fields and form.options is None else ()
-        return theme.footer(
-            width,
-            switch_focus=bool(form.fields),
-            command_hints=hints,
-            enter=enter,
-            escape="取消",
-        )
+        if form.options is not None:
+            return theme.footer(width, enter="选择", escape="取消")
+        if form.fields:
+            return theme.footer(
+                width,
+                command_hints=("Tab 下一项", FORM_SAVE.hint),
+                enter=None,
+                escape="取消",
+            )
+        return theme.footer(width, enter="确认", escape="取消")
     hints = tuple(
         command.hint
         for command in toolbar_commands(catalog, state.key)
         if command.shortcut
     )
     return theme.footer(width, switch_focus=True, command_hints=hints)
+
+
+def _split_divider(board: Board, state: Workspace, layout: WorkspaceLayout) -> None:
+    split = layout.split_x
+    panel_heading_row = layout.panel_heading_row(state.key)
+    for y in range(panel_heading_row, board.height - 2):
+        board.put(split, y, "│", screen._BORDER_SUBTLE)
 
 
 def _render_record_body(
@@ -118,9 +126,7 @@ def _render_record_body(
     if layout.split:
         split = layout.split_x
         _roster(board, state, catalog, split - 1)
-        panel_heading_row = layout.panel_heading_row(state.key)
-        for y in range(panel_heading_row, board.height - 2):
-            board.put(split, y, "│", screen._BORDER_SUBTLE)
+        _split_divider(board, state, layout)
         _inspector(board, state, catalog, layout.panel_x, layout.panel_width)
         return
 
@@ -128,6 +134,23 @@ def _render_record_body(
         _inspector(board, state, catalog, layout.panel_x, layout.panel_width)
     else:
         _roster(board, state, catalog, width - (0 if layout.compact else 1))
+
+
+def _render_form_body(
+    board: Board,
+    state: Workspace,
+    catalog: Catalog,
+    layout: WorkspaceLayout,
+    width: int,
+) -> None:
+    """Keep the record workspace intact while a transaction owns the inspector panel."""
+    if state.key != "data" and layout.split:
+        split = layout.split_x
+        _roster(board, state, catalog, split - 1)
+        _split_divider(board, state, layout)
+        render_editor(board, state, catalog, layout.panel_x, layout.panel_width)
+        return
+    render_editor(board, state, catalog, layout.panel_x, layout.panel_width)
 
 
 def render(state: Workspace, catalog: Catalog):
@@ -150,7 +173,7 @@ def render(state: Workspace, catalog: Catalog):
         action_row = layout.action_row
         _render_actions(board, state, catalog, 0, action_row, width)
         if state.form:
-            render_editor(board, state, catalog, layout.panel_x, layout.panel_width)
+            _render_form_body(board, state, catalog, layout, width)
         elif state.key == "data":
             render_dashboard(board, state, catalog)
         else:
@@ -209,7 +232,7 @@ def render(state: Workspace, catalog: Catalog):
         if state.key == "data" and not state.form:
             render_dashboard(board, state, catalog)
         elif state.form:
-            render_editor(board, state, catalog, layout.panel_x, layout.panel_width)
+            _render_form_body(board, state, catalog, layout, width)
         else:
             _render_record_body(board, state, catalog, layout, width)
 

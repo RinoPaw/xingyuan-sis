@@ -105,14 +105,38 @@ class WorkspaceFlowTests(unittest.TestCase):
                         self.assertTrue(any(r.action == f"field:{state.field_session.active_key}" for r in frame.regions))
                         self.assertFalse(any(r.action == "save" for r in frame.regions))
 
-    def test_create_form_keeps_explicit_save_target(self):
-        state = Workspace("courses")
-        forms.open_form(state, self.catalog, "create")
-        event = self.interact(state, ["focus"] * len(state.form.fields) + ["select"])
-        self.assertEqual(event, ("save", 0))
-        self.assertTrue(state.form.focus_save)
+    def test_create_opens_first_field_without_enter_and_save_stays_a_command(self):
+        state = Workspace("students")
+        self.assertEqual(self.interact(state, ["create"], (120, 35)), ("field", 0))
+        self.assertIsNotNone(state.form)
+        self.assertEqual(state.form.position, 0)
+        self.assertFalse(hasattr(state.form, "focus_save"))
 
-    def test_short_create_and_confirmation_keep_controls_above_status(self):
+        self.assertEqual(self.interact(state, ["down"], (120, 35)), ("field", 1))
+        self.assertEqual(state.form.position, 1)
+        self.assertEqual(self.interact(state, ["save"], (120, 35)), ("save", 0))
+
+    def test_create_keeps_workspace_visible_and_has_one_interaction_contract(self):
+        state = Workspace("students", selected=17)
+        forms.open_form(state, self.catalog, "create")
+        frame = self.render(state, (120, 35))
+        plain = [screen._ANSI_RE.sub("", line) for line in frame.lines]
+        body = "\n".join(plain[:-1])
+        footer = plain[-1]
+
+        self.assertIn("名册", body)
+        self.assertIn("档案", body)
+        self.assertNotIn("新建 · 学生档案", body)
+        self.assertNotIn("* 必填", body)
+        self.assertNotIn("更改暂存", body)
+        self.assertTrue(any(region.action.startswith("row:") for region in frame.regions))
+        self.assertTrue(any(region.action.startswith("field:") for region in frame.regions))
+        self.assertFalse(any(region.action == "save" for region in frame.regions))
+        self.assertNotIn("Enter 编辑", footer)
+        self.assertEqual(footer.count("S 保存"), 1)
+        self.assertEqual(footer.count("Esc 取消"), 1)
+
+    def test_short_forms_keep_fields_above_the_single_status_and_footer_rows(self):
         for size in ((24, 8), (30, 10), (40, 20)):
             state = Workspace("students", selected=17)
             forms.open_form(state, self.catalog, "create")
@@ -120,12 +144,7 @@ class WorkspaceFlowTests(unittest.TestCase):
                 state.form.position = index
                 frame = self.render(state, size)
                 field = next(r for r in frame.regions if r.action == f"field:{index}")
-                save = next(r for r in frame.regions if r.action == "save")
-                self.assertLess(field.y, save.y)
-                self.assertLess(save.y, size[1] - 1)
-            forms.open_form(state, self.catalog, "delete")
-            save = next(r for r in self.render(state, size).regions if r.action == "save")
-            self.assertLess(save.y, size[1] - 1)
+                self.assertLess(field.y, size[1] - 1)
 
     def test_read_only_queries_and_related_pages_never_expose_write_actions(self):
         row = self.catalog.records["students"][0]

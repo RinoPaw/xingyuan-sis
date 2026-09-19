@@ -309,18 +309,22 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 elif key == "select" or (isinstance(key, str) and key.startswith("option:")):
                     if form.options:
                         index = int(key.split(":")[1]) if key.startswith("option:") else form.option_index
-                        accept_form_option(state, index)
+                        next_index = accept_form_option(state, catalog, index)
+                        if next_index is not None:
+                            return "field", next_index
                 continue
-            if key == "save" or (key == "select" and (form.focus_save or not form.fields)):
+            if key == "save" or (key == "select" and not form.fields):
                 return "save", 0
             if key == "select" and form.fields:
                 return "field", form.position
             if isinstance(key, str) and key.startswith("field:"):
                 form.position = int(key.split(":")[1])
-                form.focus_save = False
                 return "field", form.position
-            if key in {"up", "down", "left", "right", "home", "end", "focus"}:
+            if key in {"up", "down", "home", "end", "focus"}:
+                previous_position = form.position
                 move_form_position(state, key)
+                if form.position != previous_position:
+                    return "field", form.position
             continue
 
         if isinstance(key, str) and key.startswith(("collection:", "related:")) \
@@ -466,3 +470,5 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 continue
             state.focus_content()
             open_form(state, catalog, key)
+            if state.form is not None and state.form.fields:
+                return "field", state.form.position

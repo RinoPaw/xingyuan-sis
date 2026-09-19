@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ...database import DB_PATH
 from ...student_query import parse_student_query
 from ...terminal_input import input_style, read_inline_input, read_input
 from .. import screen
@@ -25,7 +26,7 @@ def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
     else:
         state.form = Form(mode, original=row)
     state.field_session = None
-    state.notice = "更改尚未保存。Esc 取消。"
+    state.notice = ""
     state.detail_scroll = 0
 
 
@@ -33,39 +34,38 @@ def move_form_position(state: Workspace, direction: str) -> None:
     form = state.form
     if form is None or not form.fields:
         return
-    order = list(range(len(form.fields)))
     if direction == "focus":
-        current = len(order) if form.focus_save else order.index(form.position)
-        target = (current + 1) % (len(order) + 1)
-        form.focus_save = target == len(order)
-        if not form.focus_save:
-            form.position = order[target]
-        return
-    if direction in {"home", "end"}:
-        form.focus_save = False
-        form.position = order[0] if direction == "home" else order[-1]
-        return
-    if form.focus_save:
-        if direction == "up":
-            form.focus_save = False
-            form.position = order[-1]
-        return
-    if direction in {"up", "down"}:
-        position = form.position + (-1 if direction == "up" else 1)
-        if position == len(form.fields):
-            form.focus_save = True
-        elif position >= 0:
-            form.position = position
+        form.position = (form.position + 1) % len(form.fields)
+    elif direction == "home":
+        form.position = 0
+    elif direction == "end":
+        form.position = len(form.fields) - 1
+    elif direction == "up":
+        form.position = max(0, form.position - 1)
+    elif direction == "down":
+        form.position = min(len(form.fields) - 1, form.position + 1)
 
 
-def accept_option(state: Workspace, index: int) -> None:
+def accept_option(state: Workspace, catalog: Catalog, index: int) -> int | None:
+    """Accept one form option and return a dependent field that should open next."""
     form = state.form
     if form is None or form.options is None or not form.options:
-        return
+        return None
     field = form.fields[form.position]
     form.values[field.key] = form.options[index][0]
     form.options = None
-    state.notice = "已选择，尚未保存。"
+    state.notice = ""
+
+    group = catalog.field_group(state.key, field.key)
+    if len(group) < 2 or group[0].key != field.key:
+        return None
+    next_field = group[1]
+    catalog.normalize_option_value(state.key, next_field.key, form.values)
+    next_index = next((i for i, candidate in enumerate(form.fields) if candidate.key == next_field.key), None)
+    if next_index is None:
+        return None
+    form.position = next_index
+    return next_index
 
 
 def apply_form(state: Workspace, catalog: Catalog) -> None:
@@ -182,23 +182,18 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
         return
     field_ = form.fields[index]
     form.position = index
-    form.focus_save = False
-    options = catalog.options(state.key, field_.key, form.values)
+    options = catalog.normalize_option_value(state.key, field_.key, form.values)
     if options is not None:
         form.options = options
         form.option_index = next(
             (i for i, (value, _) in enumerate(options) if value == form.values.get(field_.key)),
             0,
         )
-        state.notice = "↑↓ 选择，Enter 暂存。Esc 取消。"
+        state.notice = ""
         return
 
     current = form.values.get(field_.key)
-    state.notice = (
-        "直接在当前字段修改 · Enter 暂存"
-        + (" · 清空后 Enter 可置空" if not field_.required else "")
-        + " · Esc 取消"
-    )
+    state.notice = ""
     frame = render(state, catalog)
     screen._paint(frame.lines)
     row, column, width = _form_field_geometry(frame, index)
@@ -212,4 +207,4 @@ def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> No
         ).strip()
 
     form.values[field_.key] = field_.parse(raw if raw else None)
-    state.notice = "字段已暂存。Esc 取消。"
+    state.notice = ""

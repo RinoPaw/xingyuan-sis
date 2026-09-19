@@ -34,7 +34,8 @@ class Form:
 
     Existing-record field editing does not use this type. Forms are reserved for
     create/import/export/delete/reset/seed style transactions that genuinely own
-    their own page and focus cycle.
+    their own transaction state. Field-bearing forms keep one active field; save
+    remains a command instead of a second focus target.
     """
 
     mode: str
@@ -44,7 +45,6 @@ class Form:
     position: int = 0
     options: list[tuple[Any, str]] | None = None
     option_index: int = 0
-    focus_save: bool = False
 
 
 @dataclass

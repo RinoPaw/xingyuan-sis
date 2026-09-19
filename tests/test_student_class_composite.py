@@ -4,7 +4,7 @@ import unittest
 
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
-from xingyuan_sis.tui.workspace import forms, student_inspector
+from xingyuan_sis.tui.workspace import field_session, forms, student_inspector
 from xingyuan_sis.tui.workspace.data import Catalog
 from xingyuan_sis.tui.workspace.state import Workspace
 
@@ -18,31 +18,78 @@ class StudentClassCompositeTests(unittest.TestCase):
         seed_demo(self.db)
         self.catalog = Catalog(self.db)
 
-    def test_class_has_the_same_two_target_shape_as_species_and_element(self):
+    def test_species_class_and_element_share_the_same_two_target_shape(self):
         field_keys = [field.key for field in self.catalog.fields("students")]
         self.assertNotIn("class_code", field_keys)
-        self.assertEqual(
-            field_keys[field_keys.index("family"):field_keys.index("family") + 2],
-            ["family", "branch"],
-        )
-        self.assertEqual(
-            field_keys[field_keys.index("major_code"):field_keys.index("major_code") + 2],
-            ["major_code", "class_number"],
-        )
-        self.assertEqual(
-            field_keys[field_keys.index("primary_element"):field_keys.index("primary_element") + 2],
-            ["primary_element", "primary_affinity"],
-        )
+        for first, second in (
+            ("family", "branch"),
+            ("major_code", "class_number"),
+            ("primary_element", "primary_affinity"),
+        ):
+            with self.subTest(group=(first, second)):
+                index = field_keys.index(first)
+                self.assertEqual(field_keys[index:index + 2], [first, second])
+                self.assertEqual(
+                    [field.key for field in self.catalog.field_group("students", first)],
+                    [first, second],
+                )
+                self.assertEqual(
+                    [field.key for field in self.catalog.edit_group("students", first)],
+                    [first, second],
+                )
 
         row = self.catalog.rows("students")[0]
-        class_line = next(
-            line for line in student_inspector.lines(row, self.catalog)
-            if line and line[0][0].startswith("班级")
-        )
-        self.assertEqual(
-            [action for _, _, action in class_line if action],
-            ["field:major_code", "field:class_number"],
-        )
+        lines = student_inspector.lines(row, self.catalog)
+        expected = {
+            "物种": ["field:family", "field:branch"],
+            "班级": ["field:major_code", "field:class_number"],
+            "元素": ["field:primary_element", "field:primary_affinity"],
+        }
+        for label, actions in expected.items():
+            with self.subTest(label=label):
+                line = next(line for line in lines if line and line[0][0].startswith(label))
+                self.assertEqual([action for _, _, action in line if action], actions)
+
+    def test_create_form_uses_the_same_composite_progression(self):
+        for first, second in (
+            ("family", "branch"),
+            ("major_code", "class_number"),
+            ("primary_element", "primary_affinity"),
+        ):
+            with self.subTest(group=(first, second)):
+                state = Workspace("students")
+                forms.open_form(state, self.catalog, "create")
+                form = state.form
+                form.position = next(i for i, field in enumerate(form.fields) if field.key == first)
+                form.options = self.catalog.options("students", first, form.values)
+                option_index = next(
+                    i for i, (value, _) in enumerate(form.options)
+                    if value is not None
+                )
+                next_index = forms.accept_option(state, self.catalog, option_index)
+                self.assertIsNotNone(next_index)
+                self.assertEqual(form.fields[next_index].key, second)
+                self.assertEqual(form.position, next_index)
+
+    def test_existing_record_composites_progress_through_the_same_pairs(self):
+        for first, second in (
+            ("family", "branch"),
+            ("major_code", "class_number"),
+            ("primary_element", "primary_affinity"),
+        ):
+            with self.subTest(group=(first, second)):
+                state = Workspace("students")
+                field_session.start(state, self.catalog, first)
+                field_session.edit_current(state, self.catalog)
+                self.assertEqual(state.field_session.active_key, first)
+                self.assertIsNotNone(state.field_session.options)
+                option_index = next(
+                    i for i, (value, _) in enumerate(state.field_session.options)
+                    if value is not None
+                )
+                field_session.accept_option(state, self.catalog, option_index)
+                self.assertEqual(state.field_session.active_key, second)
+                self.assertIsNotNone(state.field_session.options)
 
     def test_create_form_persists_major_and_class_number_as_canonical_class(self):
         state = Workspace("students")

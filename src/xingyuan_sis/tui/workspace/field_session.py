@@ -33,7 +33,7 @@ def start(state: Workspace, catalog: Catalog, field_key: str) -> None:
     )
     state.form = None
     state.set_focus(FocusArea.INSPECTOR)
-    state.notice = "Enter 确认并保存 · Esc 取消。"
+    state.notice = ""
 
 
 def cancel(state: Workspace, message: str = "已取消本次字段修改。") -> None:
@@ -53,18 +53,20 @@ def _open_options(state: Workspace, catalog: Catalog) -> bool:
     session = state.field_session
     if session is None:
         return False
-    options = catalog.options(state.key, session.active_key, projected_values(state, catalog))
+    values = projected_values(state, catalog)
+    options = catalog.normalize_option_value(state.key, session.active_key, values)
     if options is None:
         session.options = None
         return False
+    if session.active_key in session.values:
+        session.values[session.active_key] = values.get(session.active_key)
     session.options = options
     session.option_index = next(
         (i for i, (value, _) in enumerate(options)
          if value == session.values.get(session.active_key)),
         0,
     )
-    suffix = "继续" if session.active + 1 < len(session.fields) else "保存"
-    state.notice = f"↑↓ 选择，Enter {suffix} · Esc 取消。"
+    state.notice = ""
     return True
 
 
@@ -85,11 +87,7 @@ def edit_current(state: Workspace, catalog: Catalog) -> None:
 
     field = session.field
     current = session.values.get(field.key)
-    state.notice = (
-        "直接在当前字段修改 · Enter 保存"
-        + (" · 清空后 Enter 可置空" if not field.required else "")
-        + " · Esc 取消"
-    )
+    state.notice = ""
     frame = render(state, catalog)
     screen._paint(frame.lines)
     row, column, width = _field_geometry(frame, field.key)
@@ -118,14 +116,9 @@ def accept_option(state: Workspace, catalog: Catalog, index: int) -> None:
 
     if session.active + 1 < len(session.fields):
         next_field = session.fields[session.active + 1]
-        next_options = catalog.options(state.key, next_field.key, projected_values(state, catalog))
-        if next_options is not None and not any(
-            value == session.values.get(next_field.key) for value, _ in next_options
-        ):
-            session.values[next_field.key] = None
+        catalog.normalize_option_value(state.key, next_field.key, session.values)
         session.active += 1
-        if not _open_options(state, catalog):
-            state.notice = "Enter 确认并保存 · Esc 取消。"
+        _open_options(state, catalog)
         return
 
     commit(state, catalog)

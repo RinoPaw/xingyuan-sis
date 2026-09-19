@@ -66,6 +66,7 @@ _STUDENT_CLASS_FIELDS = (
 _FIELD_GROUPS = {
     ("students", "family"): ("family", "branch"),
     ("students", "major_code"): ("major_code", "class_number"),
+    ("students", "primary_element"): ("primary_element", "primary_affinity"),
 }
 
 
@@ -234,13 +235,28 @@ class Catalog:
             return ()
         return tuple(field for field in fields if field.editable)
 
-    def edit_group(self, key: str, field_key: str) -> tuple[Field, ...]:
-        """Return one semantic field group shared by forms and field sessions."""
-        editable = {field.key: field for field in self.fields(key, True)}
+    def field_group(self, key: str, field_key: str, *, editing: bool = False) -> tuple[Field, ...]:
+        """Return the semantic field group shared by create and in-place editing."""
+        available = {field.key: field for field in self.fields(key, editing)}
         keys = _FIELD_GROUPS.get((key, field_key), (field_key,))
-        if any(name not in editable for name in keys):
+        if any(name not in available for name in keys):
             return ()
-        return tuple(editable[name] for name in keys)
+        return tuple(available[name] for name in keys)
+
+    def edit_group(self, key: str, field_key: str) -> tuple[Field, ...]:
+        return self.field_group(key, field_key, editing=True)
+
+    def normalize_option_value(
+        self,
+        key: str,
+        field_key: str,
+        values: dict[str, Any],
+    ) -> list[tuple[Any, str]] | None:
+        """Keep a dependent option value valid under the current projected values."""
+        options = self.options(key, field_key, values)
+        if options is not None and not any(value == values.get(field_key) for value, _ in options):
+            values[field_key] = None
+        return options
 
     def _field(self, key: str, field_key: str) -> Field | None:
         fields = COLLECTIONS[key].fields + (_STUDENT_CLASS_FIELDS if key == "students" else ())
