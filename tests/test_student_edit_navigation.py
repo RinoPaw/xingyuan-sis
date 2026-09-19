@@ -103,7 +103,7 @@ class StudentEditNavigationTests(unittest.TestCase):
         self.assertEqual(self._move("field:department_name", "down"), "field:class_number")
         self.assertEqual(self._move("field:class_number", "up"), "field:department_name")
 
-    def test_enter_opens_only_selected_editable_field_session(self):
+    def test_enter_opens_selected_semantic_field_group(self):
         actions = self._actions()
         self.state.detail_selected = actions.index("field:primary_element")
 
@@ -113,18 +113,32 @@ class StudentEditNavigationTests(unittest.TestCase):
             event = workspace_events.interact(self.state, self.catalog)
 
         self.assertEqual(event, ("field-edit", 0))
-        self.assertEqual([field.key for field in self.state.field_session.fields], ["primary_element"])
-        self.assertIsNone(self.state.form)
-
-    def test_class_major_edit_owns_class_number_like_species_family_owns_branch(self):
-        workspace_field.start(self.state, self.catalog, "major_code")
         self.assertEqual(
             [field.key for field in self.state.field_session.fields],
-            ["major_code", "class_number"],
+            ["primary_element", "primary_affinity"],
         )
-        workspace_field.cancel(self.state)
-        workspace_field.start(self.state, self.catalog, "class_number")
-        self.assertEqual([field.key for field in self.state.field_session.fields], ["class_number"])
+        self.assertIsNone(self.state.form)
+
+    def test_species_class_and_element_share_parent_child_session_semantics(self):
+        pairs = (
+            ("family", "branch"),
+            ("major_code", "class_number"),
+            ("primary_element", "primary_affinity"),
+        )
+        for parent, child in pairs:
+            with self.subTest(parent=parent, child=child):
+                workspace_field.start(self.state, self.catalog, parent)
+                self.assertEqual(
+                    [field.key for field in self.state.field_session.fields],
+                    [parent, child],
+                )
+                workspace_field.cancel(self.state)
+                workspace_field.start(self.state, self.catalog, child)
+                self.assertEqual(
+                    [field.key for field in self.state.field_session.fields],
+                    [child],
+                )
+                workspace_field.cancel(self.state)
 
     def test_complete_birth_date_keeps_derived_age_focusable_but_not_directly_editable(self):
         row = self.state.current(self.catalog)
