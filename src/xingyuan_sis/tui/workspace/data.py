@@ -58,18 +58,23 @@ _STUDENT_ENUMS: dict[str, tuple[str, ...]] = {
     "gender": ("男", "女"),
     "primary_element": ("风", "水", "火", "雷", "岩", "光"),
     "primary_affinity": ("A", "B", "C"),
-    # Dormitory choices are discovered from current records instead of
-    # hard-coding thousands of possible campus/building/room combinations.
+    # Kept for CLI/legacy callers; the TUI exposes the address as three fields.
     "dormitory": (),
 }
 _STUDENT_CLASS_FIELDS = (
     Field("major_code", "专业"),
     Field("class_number", "班号"),
 )
+_STUDENT_DORM_FIELDS = (
+    Field("dorm_area", "区"),
+    Field("dorm_building", "楼"),
+    Field("dorm_room", "房间"),
+)
 _FIELD_GROUPS = {
     ("students", "family"): ("family", "branch"),
     ("students", "major_code"): ("major_code", "class_number"),
     ("students", "primary_element"): ("primary_element", "primary_affinity"),
+    ("students", "dorm_area"): ("dorm_area", "dorm_building", "dorm_room"),
 }
 
 
@@ -93,6 +98,29 @@ def _class_label(major_name: object | None, class_number: object | None) -> str 
     if class_number in {None, ""}:
         return str(major_name)
     return f"{major_name} · {class_number}"
+
+
+def _dorm_parts(value: object | None) -> tuple[str | None, str | None, str | None]:
+    """Split the canonical ``区 楼-房间`` value for TUI editing."""
+    text = "" if value is None else str(value).strip()
+    if not text:
+        return None, None, None
+    area, separator, rest = text.partition(" ")
+    if not separator:
+        return text, None, None
+    building, separator, room = rest.partition("-")
+    if not separator:
+        return area or None, rest or None, None
+    return area or None, building or None, room or None
+
+
+def _dormitory(area: object | None, building: object | None, room: object | None) -> str | None:
+    parts = tuple(None if value in {None, ""} else str(value).strip() for value in (area, building, room))
+    if parts == (None, None, None):
+        return None
+    if any(value is None for value in parts):
+        raise ValueError("请选择完整宿舍：区 · 楼 · 房间")
+    return f"{parts[0]} {parts[1]}-{parts[2]}"
 
 
 class Catalog:
@@ -147,6 +175,8 @@ class Catalog:
 
         for row in self.records["students"]:
             row["class_code"] = classes.get(row["class_id"], {}).get("code")
+            area, building, room = _dorm_parts(row.get("dormitory"))
+            row.update(dorm_area=area, dorm_building=building, dorm_room=room)
         for row in self.records["courses"] + self.records["majors"]:
             row["department_code"] = departments.get(row["department_id"], {}).get("code")
         for row in self.records["courses"]:
@@ -230,6 +260,8 @@ class Catalog:
         for field in COLLECTIONS[key].fields:
             if key == "students" and field.key == "class_code":
                 fields.extend(_STUDENT_CLASS_FIELDS)
+            elif key == "students" and field.key == "dormitory":
+                fields.extend(_STUDENT_DORM_FIELDS)
             else:
                 fields.append(field)
         if not editing:
@@ -262,7 +294,8 @@ class Catalog:
         return options
 
     def _field(self, key: str, field_key: str) -> Field | None:
-        fields = COLLECTIONS[key].fields + (_STUDENT_CLASS_FIELDS if key == "students" else ())
+        extra = (_STUDENT_CLASS_FIELDS + _STUDENT_DORM_FIELDS) if key == "students" else ()
+        fields = COLLECTIONS[key].fields + extra
         return next((field for field in fields if field.key == field_key), None)
 
     def options(
@@ -310,6 +343,37 @@ class Catalog:
             rows = [row for row in self.records["classes"] if row.get("major_code") == major_code]
             return [(self.class_numbers[row["id"]], self.class_numbers[row["id"]]) for row in rows]
 
+        if key == "students" and field_key == "dorm_area":
+            areas = dict.fromkeys(
+                row["dorm_area"] for row in self.records["students"] if row.get("dorm_area")
+            )
+            return [(None, "未指定")] + [(area, area) for area in areas]
+
+        if key == "students" and field_key == "dorm_building":
+            area = (values or {}).get("dorm_area")
+            if not area:
+                return [(None, "未指定")]
+            buildings = dict.fromkeys(
+                row["dorm_building"]
+                for row in self.records["students"]
+                if row.get("dorm_area") == area and row.get("dorm_building")
+            )
+            return [(None, "未指定")] + [(building, building) for building in buildings]
+
+        if key == "students" and field_key == "dorm_room":
+            area = (values or {}).get("dorm_area")
+            building = (values or {}).get("dorm_building")
+            if not area or not building:
+                return [(None, "未指定")]
+            rooms = dict.fromkeys(
+                row["dorm_room"]
+                for row in self.records["students"]
+                if row.get("dorm_area") == area
+                and row.get("dorm_building") == building
+                and row.get("dorm_room")
+            )
+            return [(None, "未指定")] + [(room, room) for room in rooms]
+
         target = {("students", "class_code"): ("classes", "code", "name"),
                   ("announcements", "class_code"): ("classes", "code", "name"),
                   ("courses", "department_code"): ("departments", "code", "name"),
@@ -354,12 +418,29 @@ class Catalog:
         changes["class_code"] = match["code"]
         return changes
 
+    def _student_dorm_changes(
+        self,
+        values: dict[str, Any],
+        original: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        keys = {field.key for field in _STUDENT_DORM_FIELDS}
+        if not (keys & values.keys()):
+            return values
+        changes = dict(values)
+        original_parts = _dorm_parts(original.get("dormitory") if original else None)
+        area = changes.pop("dorm_area", original_parts[0])
+        building = changes.pop("dorm_building", original_parts[1])
+        room = changes.pop("dorm_room", original_parts[2])
+        changes["dormitory"] = _dormitory(area, building, room)
+        return changes
+
     def save(self, key: str, values: dict[str, Any], original: dict[str, Any] | None = None) -> int:
         self.require_write()
         self.initial_password = None
         values = dict(values)
         if key == "students":
             values = self._student_class_changes(values, original)
+            values = self._student_dorm_changes(values, original)
         changes = validate_values(key, values, partial=original is not None)
         values = self.defaults(key, original) | changes if original is not None else changes
         service = self.service
