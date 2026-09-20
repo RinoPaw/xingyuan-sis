@@ -325,7 +325,8 @@ def _position_birth_cursor(
     action = f"field:{session.active_key}"
     row, column, region_width = _field_geometry(frame, action)
     width = min(region_width, _BIRTH_SLOT_WIDTHS[session.active_key])
-    offset = min(buffers[session.active_key].cursor, max(0, width - 1))
+    # Caret positions are boundaries between characters; width is a valid end offset.
+    offset = min(buffers[session.active_key].cursor, width)
     sys.stdout.write(f"\x1b[{row};{column + offset}H")
     sys.stdout.flush()
 
