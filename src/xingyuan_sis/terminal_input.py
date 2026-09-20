@@ -11,6 +11,7 @@ import getpass
 import os
 import shutil
 import sys
+import time
 
 from .tui.text_edit import TextBuffer, display_width, input_mode, read_event
 from .tui.tokens import (
@@ -25,7 +26,7 @@ from .tui.tokens import (
 _ACTIVE = ContextVar("menu_input_style", default=False)
 _PAGE_STYLE = _SURFACE_DEFAULT + _TEXT_PRIMARY
 _FIELD_STYLE = _SURFACE_SELECTED + _TEXT_ON_SELECTED
-_CURSOR_BLINK_SECONDS = 0.45
+EDITOR_CURSOR_BLINK_SECONDS = 0.45
 
 
 @contextmanager
@@ -37,7 +38,8 @@ def input_style(enabled: bool):
         _ACTIVE.reset(token)
 
 
-def _set_cursor_visible(visible: bool) -> None:
+def set_editing_cursor_visible(visible: bool) -> None:
+    """Show or hide the shared TUI insertion caret."""
     if sys.stdout.isatty():
         sys.stdout.write("\x1b[?25h" if visible else "\x1b[?25l")
         sys.stdout.flush()
@@ -45,7 +47,7 @@ def _set_cursor_visible(visible: bool) -> None:
 
 @contextmanager
 def editing_cursor():
-    """Expose a blinking insertion caret and keep it visible on exit."""
+    """Use the shared blinking vertical insertion caret for one editing loop."""
     enabled = sys.stdout.isatty()
     if enabled:
         # DECSCUSR 5 requests a blinking vertical bar instead of a block cursor.
@@ -125,19 +127,20 @@ def _redraw_inline(
     sys.stdout.flush()
 
 
-def _refresh_idle(on_idle: Callable[[str], None], value: str, redraw: Callable[[], None]) -> None:
-    """Refresh an animated surface without exposing intermediate cursor moves."""
-    hide_cursor = sys.stdout.isatty()
-    if hide_cursor:
-        sys.stdout.write("\x1b[?25l")
-        sys.stdout.flush()
+def _refresh_idle(
+    on_idle: Callable[[str], None],
+    value: str,
+    redraw: Callable[[], None],
+    *,
+    cursor_visible: bool = True,
+) -> None:
+    """Refresh an animated surface without changing the shared caret state."""
+    set_editing_cursor_visible(False)
     try:
         on_idle(value)
         redraw()
     finally:
-        if hide_cursor:
-            sys.stdout.write("\x1b[?25h")
-            sys.stdout.flush()
+        set_editing_cursor_visible(cursor_visible)
 
 
 def _read_interactive_line(
@@ -162,14 +165,34 @@ def _read_interactive_line(
         )
 
     redraw()
-    with input_mode():
+    cursor_visible = True
+    last_blink = time.monotonic()
+    with input_mode(), editing_cursor():
         while True:
-            event = read_event(max(0.01, idle_interval) if on_idle is not None else None)
+            timeout = EDITOR_CURSOR_BLINK_SECONDS
+            if on_idle is not None:
+                timeout = min(timeout, max(0.01, idle_interval))
+            event = read_event(timeout)
+            now = time.monotonic()
+            if now - last_blink >= EDITOR_CURSOR_BLINK_SECONDS:
+                cursor_visible = not cursor_visible
+                set_editing_cursor_visible(cursor_visible)
+                last_blink = now
+
             if event is None:
                 if on_idle is not None:
-                    _refresh_idle(on_idle, buffer.value, redraw)
+                    _refresh_idle(
+                        on_idle,
+                        buffer.value,
+                        redraw,
+                        cursor_visible=cursor_visible,
+                    )
                 continue
 
+            if not cursor_visible:
+                cursor_visible = True
+                set_editing_cursor_visible(True)
+            last_blink = now
             before = (buffer.value, buffer.cursor)
             action = buffer.apply(event)
             if action == "submit":
@@ -205,14 +228,14 @@ def _read_interactive_inline(
     cursor_visible = True
     with input_mode(), editing_cursor():
         while True:
-            event = read_event(_CURSOR_BLINK_SECONDS)
+            event = read_event(EDITOR_CURSOR_BLINK_SECONDS)
             if event is None:
                 cursor_visible = not cursor_visible
-                _set_cursor_visible(cursor_visible)
+                set_editing_cursor_visible(cursor_visible)
                 continue
             if not cursor_visible:
                 cursor_visible = True
-                _set_cursor_visible(True)
+                set_editing_cursor_visible(True)
             before = (buffer.value, buffer.cursor)
             action = buffer.apply(event)
             if action == "submit":
