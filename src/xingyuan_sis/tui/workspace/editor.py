@@ -43,7 +43,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         if form.mode == "delete":
             title, identifier = identity(state.key, form.original)
             messages = [
-                (f"确认删除 {title}？", screen._TEXT_PRIMARY),
+                (f"确认删除 {title}？", screen._BOLD + screen._TEXT_PRIMARY),
                 (identifier, screen._TEXT_SECONDARY),
                 ("! 删除后无法撤销。", screen._BOLD + screen._TEXT_DANGER),
             ]
