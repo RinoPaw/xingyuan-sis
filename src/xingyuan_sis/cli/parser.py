@@ -15,6 +15,7 @@ def build_parser() -> argparse.ArgumentParser:
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--tui", action="store_true", help="强制启动即时键盘界面")
     modes.add_argument("--basic", action="store_true", help="启动基础菜单界面")
+    modes.add_argument("--gui", action="store_true", help="启动 Tkinter 图形界面")
 
     groups = parser.add_subparsers(dest="group")
 

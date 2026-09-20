@@ -34,6 +34,19 @@ class CliSchemaTests(unittest.TestCase):
         self.assertEqual(args.format, "csv")
         self.assertEqual(args.output.name, "students.csv")
 
+    def test_gui_is_an_explicit_interface_mode(self):
+        args = build_parser().parse_args(["--gui"])
+        self.assertIsNone(args.group)
+        self.assertTrue(args.gui)
+        self.assertFalse(args.tui)
+        self.assertFalse(args.basic)
+
+    def test_interface_modes_are_mutually_exclusive(self):
+        parser = build_parser()
+        with self.assertRaises(SystemExit) as error:
+            parser.parse_args(["--gui", "--tui"])
+        self.assertEqual(error.exception.code, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -26,6 +26,14 @@ def _run_menu(db_path: Path | None, *, mode: str) -> int:
     return 0
 
 
+def _run_gui(db_path: Path | None) -> int:
+    initialize_database(db_path)
+    from .gui.app import run
+
+    run(db_path)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
     parser = build_parser()
@@ -33,6 +41,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         if args.group is None:
+            if args.gui:
+                return _run_gui(args.db)
             mode = "tui" if args.tui else "basic" if args.basic else "auto"
             return _run_menu(args.db, mode=mode)
 
