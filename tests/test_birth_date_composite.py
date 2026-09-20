@@ -111,6 +111,23 @@ class BirthDateCompositeTests(unittest.TestCase):
         self.assertEqual(session.active_key, "birth_day")
         self.assertEqual(buffers["birth_day"].cursor, 0)
 
+    def test_birth_caret_can_render_after_the_last_character(self):
+        state = Workspace("students")
+        field_session.start(state, self.catalog, "birth_date")
+        session = state.field_session
+        session.values.update(birth_year=2005, birth_month=12, birth_day=22)
+        session.active = 1
+        buffers = field_session._birth_buffers(session)
+        buffers["birth_month"].cursor = 2
+        frame = type("Frame", (), {
+            "regions": [screen.HitRegion(20, 8, 2, "field:birth_month")]
+        })()
+
+        with patch("sys.stdout.write") as write, patch("sys.stdout.flush"):
+            field_session._position_birth_cursor(frame, session, buffers)
+
+        self.assertEqual(write.call_args_list[-1].args[0], "\x1b[8;22H")
+
     def test_backspace_changes_only_the_active_date_slot(self):
         state = Workspace("students")
         field_session.start(state, self.catalog, "birth_date")
