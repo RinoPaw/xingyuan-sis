@@ -73,7 +73,7 @@ def _field_label(field, width: int) -> str:
     text = screen._pad_cells(screen._clip_cells(field.label, label_width), label_width)
     return (
         screen._ansi(text, screen._TEXT_SECONDARY)
-        + screen._ansi(" *", screen._TEXT_DANGER)
+        + screen._ansi(" *", screen._TEXT_PRIMARY)
     )
 
 
