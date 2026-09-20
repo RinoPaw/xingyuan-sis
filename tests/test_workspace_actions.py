@@ -120,7 +120,6 @@ class WorkspaceActionTests(unittest.TestCase):
             detail_selected=6,
             action_selected=2,
         )
-        state.focus_content()
         workspace_forms.open_form(state, self.catalog, "delete")
 
         self.assertEqual(state.focus, workspace.FocusArea.INSPECTOR)
@@ -129,6 +128,7 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertEqual(state.form.return_to.focus, workspace.FocusArea.TOOLBAR)
         self.assertEqual(state.form.return_to.detail_scroll, 3)
         self.assertEqual(state.form.return_to.detail_selected, 6)
+        self.assertEqual(state.form.return_to.action_selected, 2)
 
         workspace_forms.cancel_form(state)
         self.assertEqual(state.focus, workspace.FocusArea.TOOLBAR)
@@ -147,7 +147,6 @@ class WorkspaceActionTests(unittest.TestCase):
             detail_selected=5,
         )
         original = state.current(self.catalog)
-        state.focus_content()
         workspace_forms.open_form(state, self.catalog, "delete")
         workspace_forms.apply_form(state, self.catalog)
 
@@ -162,7 +161,6 @@ class WorkspaceActionTests(unittest.TestCase):
         rows = state.rows(self.catalog)
         selected = rows[1]
         neighbor = rows[0]
-        state.focus_content()
         workspace_forms.open_form(state, self.catalog, "delete")
 
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
