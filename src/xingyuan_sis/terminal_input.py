@@ -36,6 +36,26 @@ def input_style(enabled: bool):
         _ACTIVE.reset(token)
 
 
+@contextmanager
+def editing_cursor():
+    """Expose a real blinking terminal cursor for in-place editors.
+
+    ``DECSCUSR 1`` requests a blinking block cursor while DEC private mode 12
+    enables cursor blinking on terminals that honor it. Unsupported terminals
+    simply ignore either sequence.
+    """
+    enabled = sys.stdout.isatty()
+    if enabled:
+        sys.stdout.write("\x1b[?25h\x1b[?12h\x1b[1 q")
+        sys.stdout.flush()
+    try:
+        yield
+    finally:
+        if enabled:
+            sys.stdout.write("\x1b[0 q")
+            sys.stdout.flush()
+
+
 def _display_width(text: str) -> int:
     return display_width(text)
 
@@ -97,7 +117,7 @@ def _redraw_inline(
     style = _FIELD_STYLE if colored else ""
     surface = _PAGE_STYLE if colored else ""
     sys.stdout.write(f"\x1b[{max(1, row)};{max(1, column)}H" + style + content + surface)
-    sys.stdout.write(f"\x1b[{max(1, row)};{max(1, column) + cursor_cells}H")
+    sys.stdout.write(f"\x1b[{max(1, row)};{max(1, column) + min(cursor_cells, field_width - 1)}H")
     sys.stdout.flush()
 
 
@@ -178,7 +198,7 @@ def _read_interactive_inline(
         )
 
     redraw()
-    with input_mode():
+    with input_mode(), editing_cursor():
         while True:
             event = read_event(None)
             if event is None:
