@@ -95,8 +95,8 @@ class WorkspaceLayout:
         return self.panel_heading_row(key) + 1
 
     def panel_capacity(self, key: str) -> int:
-        """Rows available to panel content while reserving status and footer."""
-        bottom_reserve = 2 if self.compact else 3
+        """Rows available to panel content while reserving only footer chrome."""
+        bottom_reserve = 1 if self.compact else 2
         return max(1, self.height - self.panel_content_row(key) - bottom_reserve)
 
     def roster_capacity(self, key: str) -> int:
