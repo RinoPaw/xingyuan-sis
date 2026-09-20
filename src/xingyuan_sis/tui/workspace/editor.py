@@ -6,7 +6,12 @@ from .. import screen, theme
 from ..layout import WorkspaceLayout
 from ..view_common import Board, identity, panel_heading, safe
 from .data import COLLECTIONS, Catalog
-from .field_geometry import FIELD_GUTTER, control_text, control_width
+from .field_geometry import (
+    FIELD_GUTTER,
+    control_text,
+    control_width,
+    form_field_geometry,
+)
 from .picker import prepare_candidates
 from .presentation import delete_impacts, display_value, project_record
 from .state import FieldSessionOwner
@@ -62,19 +67,12 @@ def _render_delete_panel(
 
 
 def _field_label(field, width: int) -> str:
-    """Render one field label; the schema's required flag is the only authority."""
-    width = max(1, width)
-    if not field.required or width < 2:
-        return screen._ansi(
-            screen._pad_cells(screen._clip_cells(field.label, width), width),
-            screen._TEXT_SECONDARY,
-        )
-    label_width = max(0, width - 2)
-    text = screen._pad_cells(screen._clip_cells(field.label, label_width), label_width)
-    return (
-        screen._ansi(text, screen._TEXT_SECONDARY)
-        + screen._ansi(" *", screen._TEXT_PRIMARY)
-    )
+    """Render a complete field label; geometry, not clipping, decides its width."""
+    label = screen._ansi(field.label, screen._TEXT_SECONDARY)
+    required = screen._ansi(" *", screen._TEXT_PRIMARY) if field.required else ""
+    used = screen._display_width(field.label) + (2 if field.required else 0)
+    padding = screen._ansi(" " * max(0, width - used), screen._TEXT_SECONDARY)
+    return label + required + padding
 
 
 def _render_form_heading(
@@ -97,12 +95,46 @@ def _render_form_heading(
         board.put(x + width - save_width, y, save, action="save", width=save_width)
 
 
+def _entry_height(kind: str, row_height: int) -> int:
+    return row_height if kind == "field" else 1
+
+
+def _visible_entries(
+    entries: list[tuple[str, int, object]],
+    selected: int,
+    capacity: int,
+    row_height: int,
+) -> list[tuple[tuple[str, int, object], int]]:
+    """Fit semantic entries by their real rendered height, not by entry count."""
+    capacity = max(1, capacity)
+    first = 0
+    while first < selected:
+        needed = sum(
+            _entry_height(kind, row_height)
+            for kind, _, _ in entries[first:selected + 1]
+        )
+        if needed <= capacity:
+            break
+        first += 1
+
+    visible: list[tuple[tuple[str, int, object], int]] = []
+    used = 0
+    for entry in entries[first:]:
+        height = _entry_height(entry[0], row_height)
+        if used + height > capacity:
+            break
+        visible.append((entry, used))
+        used += height
+    return visible
+
+
 def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, width: int) -> None:
     """Render a complete transaction while FieldSession owns any active field edit."""
     form = state.form
     layout = WorkspaceLayout(board.width, board.height)
     heading_row = layout.panel_heading_row(state.key)
-    content_row = layout.panel_content_row(state.key)
+    status_row = heading_row + 1
+    content_row = max(layout.panel_content_row(state.key), status_row + 1)
     bottom = board.height - 1
 
     titles = {
@@ -143,11 +175,11 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
                 board.put(x, y, message, style, width=width)
         return
 
-    if state.notice and heading_row + 1 < bottom:
+    if state.notice and status_row < bottom:
         is_error = state.notice.startswith("未完成：")
         board.put(
             x,
-            heading_row + 1,
+            status_row,
             theme.notice(state.notice, error=is_error),
             width=width,
         )
@@ -178,24 +210,27 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
                     entries.append(("empty", 0, "暂无其他候选项"))
                     selected_entry = len(entries) - 1
 
+    geometry = form_field_geometry(form.fields, width)
+    marker_x = x + geometry.marker_offset
+    field_x = x + geometry.control_offset
+    field_width = geometry.control_available
     capacity = max(1, bottom - content_row)
-    first = min(
-        max(0, selected_entry - capacity + 1),
-        max(0, len(entries) - capacity),
-    )
-    label_width = min(12, max(4, width // 3))
-    value_x = x + label_width + 2
-    value_width = max(1, width - label_width - 2)
-    field_x = value_x + _SELECTION_GUTTER
-    field_width = max(1, value_width - _SELECTION_GUTTER)
+    visible = _visible_entries(entries, selected_entry, capacity, geometry.row_height)
 
-    for visible_index, (kind, index, payload) in enumerate(entries[first:first + capacity]):
-        y = content_row + visible_index
+    for (kind, index, payload), row_offset in visible:
+        y = content_row + row_offset
         if kind == "option":
             selected = session is not None and index == session.option_index
             marker = "> " if selected else "  "
             marker_style = screen._TEXT_ACCENT if selected else screen._TEXT_SECONDARY
-            board.put(value_x, y, marker, marker_style, action=f"option:{index}", width=_SELECTION_GUTTER)
+            board.put(
+                marker_x,
+                y,
+                marker,
+                marker_style,
+                action=f"option:{index}",
+                width=_SELECTION_GUTTER,
+            )
 
             value = safe(payload)
             width_for_option = control_width(value, field_width)
@@ -219,13 +254,20 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
             continue
 
         field = payload
-        board.put(x, y, _field_label(field, label_width), width=label_width)
+        label_y = y
+        control_y = y + 1 if geometry.stacked else y
+        board.put(
+            x,
+            label_y,
+            _field_label(field, geometry.label_width),
+            width=geometry.label_width,
+        )
 
         row_selected = index == form.position and session is None
         if row_selected:
             board.put(
-                value_x,
-                y,
+                marker_x,
+                control_y,
                 theme.selection_prefix(selected=True),
                 screen._TEXT_ACCENT,
                 width=_SELECTION_GUTTER,
@@ -242,7 +284,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
             parts = (("birth_year", 4), ("birth_month", 2), ("birth_day", 2))
             for part_index, (key, slot_width) in enumerate(parts):
                 if part_index:
-                    board.put(cursor, y, "-", screen._TEXT_SECONDARY, width=1)
+                    board.put(cursor, control_y, "-", screen._TEXT_SECONDARY, width=1)
                     cursor += 1
                 if cursor >= right:
                     break
@@ -252,7 +294,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
                 text = screen._pad_cells(screen._clip_cells(text, available), available)
                 selected = session.active_key == key and session.options is None
                 style = theme.selection_style() if selected else screen._TEXT_PRIMARY
-                board.put(cursor, y, text, style, f"field:{key}", available)
+                board.put(cursor, control_y, text, style, f"field:{key}", available)
                 cursor += available
             continue
 
@@ -271,7 +313,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         text = control_text(value, width_for_field)
         board.put(
             field_x,
-            y,
+            control_y,
             text,
             style,
             f"field:{field.key}",
