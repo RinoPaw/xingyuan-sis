@@ -12,12 +12,6 @@ from .state import FieldSession, FocusArea, Workspace
 
 Segment = tuple[str, str, str]
 Line = list[Segment]
-_SELECTION_GUTTER = 2
-
-
-def inspector_content_width(width: int) -> int:
-    """Width left for detail content after the shared selection-marker gutter."""
-    return max(1, width - _SELECTION_GUTTER)
 
 
 def field_segment(
@@ -176,7 +170,7 @@ def render_inspector(
         width=width,
     )
 
-    lines = layout_lines(raw_lines, inspector_content_width(width), layout)
+    lines = layout_lines(raw_lines, width, layout)
     capacity = layout.panel_capacity(state.key)
 
     selected_action = ""
@@ -212,23 +206,25 @@ def render_inspector(
     visible = lines[state.detail_scroll:state.detail_scroll + capacity]
     for offset_in_view, segments in enumerate(visible):
         y = top + offset_in_view
-        line_actions = {action for _, _, action in segments if action}
-        strong = bool(selected_action and selected_action in line_actions and (focused or session is not None))
-        weak = bool(selected_action and selected_action in line_actions and not strong)
-        marker = theme.selection_prefix(selected=strong, current=weak)
-        if marker.strip():
-            marker_style = theme.selection_style() if strong else screen._TEXT_SECONDARY
-            board.put(x, y, marker, marker_style, width=min(_SELECTION_GUTTER, width))
-
-        cursor = x + _SELECTION_GUTTER
+        cursor = x
         content_right = x + width
         for segment_index, (text, style, action) in enumerate(segments):
+            strong = bool(action and action == selected_action and (focused or session is not None))
+            weak = bool(action and action == selected_action and not strong)
+            if strong or weak:
+                marker = theme.selection_prefix(selected=strong, current=weak)
+                marker_width = min(screen._display_width(marker), max(0, content_right - cursor))
+                if marker_width:
+                    marker_style = theme.selection_style() if strong else screen._TEXT_SECONDARY
+                    board.put(cursor, y, marker, marker_style, action, width=marker_width)
+                    cursor += marker_width
+
             remaining = max(0, content_right - cursor)
             if remaining <= 0:
                 break
             shown = screen._clip_cells(text, remaining)
             display = screen._display_width(shown)
-            selected = bool(action and action == selected_action and (focused or session is not None))
+            selected = strong
             drawn_style = theme.selection_style() if selected else style
 
             if action:
@@ -245,15 +241,6 @@ def render_inspector(
             cursor += display
 
     if session is None:
-        if len(lines) > capacity and not layout.compact:
-            board.put(
-                x,
-                bottom - 1,
-                f"{state.detail_scroll + 1}–{min(len(lines), state.detail_scroll + capacity)} / {len(lines)}",
-                screen._TEXT_SECONDARY,
-                action="focus",
-                width=width,
-            )
         board.regions.extend(
             screen.HitRegion(x + 1, y + 1, width, "focus-details")
             for y in range(top, bottom)
