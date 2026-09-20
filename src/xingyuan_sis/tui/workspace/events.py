@@ -12,7 +12,7 @@ from .field_session import (
     start as start_record_field_session,
     start_form as start_form_field_session,
 )
-from .forms import move_form_position, open_form
+from .forms import cancel_form, move_form_position, open_form
 from .state import FocusArea, Workspace
 
 
@@ -270,8 +270,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             if state.field_session is not None:
                 cancel_field_session(state)
             elif state.form:
-                state.form = None
-                state.notice = "已取消，记录保持原样。"
+                cancel_form(state)
             elif state.focus is FocusArea.INSPECTOR:
                 state.set_focus(FocusArea.ROSTER)
                 state.detail_scroll = 0
