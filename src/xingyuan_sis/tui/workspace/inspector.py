@@ -143,7 +143,7 @@ def render_inspector(
 ) -> None:
     layout = WorkspaceLayout(board.width, board.height)
     top = layout.panel_content_row(state.key)
-    bottom = board.height - 2
+    bottom = board.height - 1
     row = state.current(catalog)
     focused = state.focus is FocusArea.INSPECTOR
     if row is None:
