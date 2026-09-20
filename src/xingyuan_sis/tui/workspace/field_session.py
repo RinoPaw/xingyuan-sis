@@ -220,6 +220,60 @@ def _open_options(state: Workspace, catalog: Catalog) -> bool:
     return True
 
 
+def _sync_form_position(state: Workspace, session: FieldSession) -> None:
+    if session.owner is not FieldSessionOwner.FORM or state.form is None:
+        return
+    state.form.position = next(
+        (i for i, candidate in enumerate(state.form.fields)
+         if candidate.key == session.active_key),
+        state.form.position,
+    )
+
+
+def move_active_field(state: Workspace, direction: str) -> bool:
+    """Move explicitly between subfields; editing never advances here on its own."""
+    session = state.field_session
+    if session is None or len(session.fields) <= 1 or direction not in {"left", "right"}:
+        return False
+    target = session.active + (-1 if direction == "left" else 1)
+    target = min(max(0, target), len(session.fields) - 1)
+    if target == session.active:
+        return False
+    session.active = target
+    session.options = None
+    _sync_form_position(state, session)
+    state.notice = ""
+    return True
+
+
+def _normalize_following_fields(state: Workspace, catalog: Catalog) -> None:
+    """Clear dependent values that are no longer valid after one subfield changes."""
+    session = state.field_session
+    if session is None or _is_birth_session(state, session):
+        return
+    collection = _session_collection(state, session)
+    if collection not in COLLECTIONS:
+        return
+
+    values = projected_values(state, catalog)
+    for field in session.fields[session.active + 1:]:
+        options = catalog.normalize_option_value(collection, field.key, values)
+        if options is not None and field.key in session.values:
+            session.values[field.key] = values.get(field.key)
+
+
+def _finish_current_field(state: Workspace, catalog: Catalog) -> None:
+    """Save one edited subfield when possible, without selecting a sibling automatically."""
+    _normalize_following_fields(state, catalog)
+    try:
+        commit(state, catalog)
+    except ValueError as exc:
+        # A parent change can invalidate a required child (for example族系/支系).
+        # Keep the session on the field the user actually edited; they may move
+        # to the dependent field explicitly with ←/→.
+        state.notice = str(exc)
+
+
 def _field_geometry(frame: screen.ScreenFrame, action: str) -> tuple[int, int, int]:
     """Return the actual field region, not the selection marker sharing its action."""
     regions = [region for region in frame.regions if region.action == action]
@@ -393,7 +447,7 @@ def _edit_birth_date(state: Workspace, catalog: Catalog) -> None:
 
 
 def edit_current(state: Workspace, catalog: Catalog) -> None:
-    """Open the active field in place; Enter confirms the local FieldSession."""
+    """Open the active field in place; one completed subfield never auto-advances."""
     session = state.field_session
     if session is None:
         return
@@ -421,22 +475,11 @@ def edit_current(state: Workspace, catalog: Catalog) -> None:
         ).strip()
 
     session.values[field.key] = field.parse(raw if raw else None)
-    if session.active + 1 < len(session.fields):
-        session.active += 1
-        if session.owner is FieldSessionOwner.FORM and state.form is not None:
-            state.form.position = next(
-                (i for i, candidate in enumerate(state.form.fields)
-                 if candidate.key == session.active_key),
-                state.form.position,
-            )
-        if not _open_options(state, catalog):
-            edit_current(state, catalog)
-        return
-    commit(state, catalog)
+    _finish_current_field(state, catalog)
 
 
 def accept_option(state: Workspace, catalog: Catalog, index: int) -> bool:
-    """Confirm one option; return True only when the next group field needs text input."""
+    """Confirm one option without automatically moving to a sibling subfield."""
     session = state.field_session
     if session is None or session.options is None or not session.options:
         return False
@@ -447,20 +490,8 @@ def accept_option(state: Workspace, catalog: Catalog, index: int) -> bool:
 
     if _is_birth_session(state, session) and field.key == "birth_month" and session.values[field.key] is None:
         session.values["birth_day"] = None
-        commit(state, catalog)
-        return False
 
-    if session.active + 1 < len(session.fields):
-        session.active += 1
-        if session.owner is FieldSessionOwner.FORM and state.form is not None:
-            state.form.position = next(
-                (i for i, candidate in enumerate(state.form.fields)
-                 if candidate.key == session.active_key),
-                state.form.position,
-            )
-        return not _open_options(state, catalog)
-
-    commit(state, catalog)
+    _finish_current_field(state, catalog)
     return False
 
 
