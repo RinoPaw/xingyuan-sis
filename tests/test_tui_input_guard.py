@@ -134,7 +134,7 @@ class TuiInputGuardTests(unittest.TestCase):
         self.assertEqual(write.call_args_list[0].args[0], "\x1b[?25l")
         self.assertEqual(write.call_args_list[-1].args[0], "\x1b[?25h")
 
-    def test_inline_editor_requests_a_visible_blinking_cursor(self):
+    def test_inline_editor_requests_a_visible_blinking_insertion_caret(self):
         with patch("sys.stdout.isatty", return_value=True), \
              patch("sys.stdout.write") as write, patch("sys.stdout.flush"):
             with terminal_input.editing_cursor():
@@ -143,8 +143,22 @@ class TuiInputGuardTests(unittest.TestCase):
         output = "".join(call.args[0] for call in write.call_args_list)
         self.assertIn("\x1b[?25h", output)
         self.assertIn("\x1b[?12h", output)
-        self.assertIn("\x1b[1 q", output)
-        self.assertTrue(output.endswith("\x1b[0 q"))
+        self.assertIn("\x1b[5 q", output)
+        self.assertNotIn("\x1b[1 q", output)
+        self.assertTrue(output.endswith("\x1b[?25h\x1b[0 q"))
+
+    def test_inline_caret_can_sit_after_the_last_character(self):
+        buffer = TextBuffer.from_value("12")
+        with patch("sys.stdout.write") as write, patch("sys.stdout.flush"):
+            terminal_input._redraw_inline(
+                row=4,
+                column=10,
+                width=2,
+                buffer=buffer,
+                colored=False,
+            )
+
+        self.assertEqual(write.call_args_list[-1].args[0], "\x1b[4;12H")
 
 
 if __name__ == "__main__":
