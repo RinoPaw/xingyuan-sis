@@ -179,7 +179,11 @@ def render_inspector(
         selected_action = (
             f"option:{session.option_index}"
             if session.options
-            else f"field:{session.active_key}"
+            else (
+                f"field:{session.anchor_key}"
+                if session.anchor_key.startswith("related:")
+                else f"field:{session.active_key}"
+            )
         )
     else:
         targets = action_targets(lines)
@@ -230,7 +234,7 @@ def render_inspector(
                 hit_width = max(1, display)
                 if (
                     session is not None
-                    and action == f"field:{session.active_key}"
+                    and action == selected_action
                     and session.options is None
                     and segment_index == len(segments) - 1
                 ):
