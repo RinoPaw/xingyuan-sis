@@ -7,7 +7,6 @@ from . import screen
 
 
 _BUTTON = screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
-_BUTTON_CURRENT = screen._SURFACE_INTERACTIVE + screen._TEXT_ACCENT
 _BAR_SURFACE = screen._SURFACE_FOOTER + screen._TEXT_PRIMARY
 _TOPBAR = screen._SURFACE_TOPBAR + screen._TEXT_ACCENT + screen._BOLD
 _SECONDARY = screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
@@ -46,6 +45,24 @@ def _style_selected_marker(
     )
 
 
+def _style_current_marker(
+    text: str,
+    marker: str = "·",
+    original_style: str = screen._TEXT_PRIMARY,
+    surface: str = "",
+) -> str:
+    """Render weak context without borrowing the foreground or surface of real focus."""
+    index = text.find(marker)
+    item_style = surface + original_style
+    if index < 0:
+        return screen._ansi(text, item_style)
+    return (
+        screen._ansi(text[:index], item_style)
+        + screen._ansi(marker, surface + screen._TEXT_SECONDARY)
+        + screen._ansi(text[index + len(marker):], item_style)
+    )
+
+
 def bar_space(count: int) -> str:
     return screen._ansi(" " * max(0, count), _BAR_SURFACE)
 
@@ -65,7 +82,11 @@ def button(
     if selected:
         return _style_selected_marker(shown, original_style=screen._TEXT_PRIMARY)
     if current:
-        return screen._ansi(shown, _BUTTON_CURRENT)
+        return _style_current_marker(
+            shown,
+            original_style=screen._TEXT_PRIMARY,
+            surface=screen._SURFACE_INTERACTIVE,
+        )
     return screen._ansi(shown, _BUTTON)
 
 
@@ -88,14 +109,14 @@ def nav_item(
     current: bool = False,
     width: int | None = None,
 ) -> str:
-    """Render navigation with strong actionable focus and weak current context."""
+    """Render navigation with strong actionable focus and visually subordinate context."""
     shown = selection_prefix(selected=selected, current=current) + label
     if width is not None:
         shown = screen._pad_cells(screen._clip_cells(shown, width), width)
     if selected:
         return _style_selected_marker(shown, original_style=screen._TEXT_PRIMARY)
     if current:
-        return screen._ansi(shown, screen._TEXT_ACCENT)
+        return _style_current_marker(shown, original_style=screen._TEXT_PRIMARY)
     return screen._ansi(shown, screen._TEXT_PRIMARY)
 
 
@@ -168,7 +189,7 @@ def footer(
             parts.append(bar_space(gaps[index + 1]))
         return "".join(parts)
 
-    compact_parts = [*( ["Tab"] if switch_focus else []), "↑↓←→"]
+    compact_parts = [*(["Tab"] if switch_focus else []), "↑↓←→"]
     if enter is not None:
         compact_parts.append(f"Enter {enter}")
     compact_parts.append(f"Esc {escape}")
