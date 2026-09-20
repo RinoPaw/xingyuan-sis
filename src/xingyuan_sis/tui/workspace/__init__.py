@@ -51,16 +51,6 @@ def run(
                     state.notice = "已取消输入。"
             elif event[0] == "save":
                 apply_form(state, catalog)
-                if state.credentials:
-                    from ..viewer import show
-
-                    text = "首次登录必须修改密码。请将初始密码交给对应学生。\n\n" + "\n".join(
-                        f"学号  {no}\n初始密码  {password}\n" for no, password in state.credentials
-                    )
-                    try:
-                        show(text, "学生 / 初始密码")
-                    finally:
-                        state.credentials.clear()
             elif event[0] == "refresh":
                 row = state.current(catalog)
                 catalog.refresh()
