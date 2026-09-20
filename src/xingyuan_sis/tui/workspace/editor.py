@@ -85,7 +85,7 @@ def _render_form_heading(
     width: int,
     heading: str,
 ) -> None:
-    """Keep task identity, required legend and mouse save action in one row."""
+    """Keep task identity and mouse save action in one row."""
     board.put(x, y, panel_heading(heading, True), width=width)
     form = state.form
     if form is None or not form.fields:
@@ -95,13 +95,6 @@ def _render_form_heading(
     save_width = screen._display_width(save)
     if save_width <= width:
         board.put(x + width - save_width, y, save, action="save", width=save_width)
-
-    legend = screen._ansi("* 必填", screen._TEXT_DANGER)
-    legend_width = screen._display_width(legend)
-    legend_x = x + width - save_width - legend_width - 2
-    heading_width = screen._display_width(heading) + 2
-    if legend_x >= x + heading_width:
-        board.put(legend_x, y, legend, width=legend_width)
 
 
 def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, width: int) -> None:
@@ -150,10 +143,14 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
                 board.put(x, y, message, style, width=width)
         return
 
-    if state.notice:
+    if state.notice and heading_row + 1 < bottom:
         is_error = state.notice.startswith("未完成：")
-        board.put(x, content_row, theme.notice(state.notice, error=is_error), width=width)
-        content_row += 2
+        board.put(
+            x,
+            heading_row + 1,
+            theme.notice(state.notice, error=is_error),
+            width=width,
+        )
 
     session = state.field_session
     if session is not None and session.owner is not FieldSessionOwner.FORM:
