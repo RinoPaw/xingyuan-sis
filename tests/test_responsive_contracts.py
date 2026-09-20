@@ -70,7 +70,7 @@ class ResponsiveContractTests(unittest.TestCase):
         self.assertIsNone(state.form)
         focused = next(line for line in paint.call_args_list[-1].args[0] if "备注" in screen._ANSI_RE.sub("", line))
         self.assertIn(screen._SURFACE_SELECTED, focused)
-        self.assertNotIn("›", screen._ANSI_RE.sub("", focused))
+        self.assertIn("> ", screen._ANSI_RE.sub("", focused))
 
     def test_narrow_workspace_keeps_every_filter_clickable(self):
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((30, 24))):
@@ -84,7 +84,7 @@ class ResponsiveContractTests(unittest.TestCase):
             frame = workspace_view.render(workspace.Workspace("students", selected=1), self.catalog)
         selected = next(r for r in frame.regions if r.action == "row:1")
         self.assertIn(self.catalog.records["students"][1]["name"], frame.lines[selected.y - 1])
-        self.assertIn("▌", frame.lines[selected.y - 1])
+        self.assertIn("> ", frame.lines[selected.y - 1])
         self.assertNotIn("\x1b", "".join(frame.lines))
 
     def test_related_return_restores_identity_and_inspector_context_after_reordering(self):
