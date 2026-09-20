@@ -5,6 +5,7 @@ from typing import Any
 from ...schema import age_from_birth_date
 from .. import screen
 from ..view_common import safe
+from .birth_date_editor import projected as projected_birth_date
 from .data import Catalog
 from .inspector import Line, Segment, expand_options, field_segment
 from .presentation import project_record
@@ -25,6 +26,9 @@ def lines(
     """Describe the student archive once; editing never changes its target graph."""
     session = state.field_session if state else None
     values = catalog.project("students", project_record(row, session))
+    birth_editing = session is not None and session.anchor_key == "birth_date"
+    if birth_editing:
+        values["birth_date"] = projected_birth_date(session.values)
 
     def label(text: str) -> Segment:
         return text, screen._TEXT_SECONDARY, ""
@@ -69,7 +73,19 @@ def lines(
     result.extend((
         [],
         [("个人信息", screen._BOLD + screen._TEXT_PRIMARY, "")],
-        [label("出生日期  "), field("birth_date")],
+    ))
+    if birth_editing:
+        result.append([
+            label("出生日期  "),
+            field("birth_year", " " if values.get("birth_year") is None else str(values["birth_year"])),
+            ("-", screen._TEXT_SECONDARY, ""),
+            field("birth_month", " " if values.get("birth_month") is None else str(values["birth_month"])),
+            ("-", screen._TEXT_SECONDARY, ""),
+            field("birth_day", " " if values.get("birth_day") is None else str(values["birth_day"])),
+        ])
+    else:
+        result.append([label("出生日期  "), field("birth_date")])
+    result.extend((
         [label("联系方式  "), field("contact")],
         [label("宿舍      "), field("dormitory")],
         [label("备注      "), field("notes")],
