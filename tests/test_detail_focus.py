@@ -7,8 +7,10 @@ from unittest.mock import patch
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import keys, screen, workspace
+from xingyuan_sis.tui.board import Board
 from xingyuan_sis.tui.workspace import student_inspector, view as workspace_view
 from xingyuan_sis.tui.workspace.data import Catalog
+from xingyuan_sis.tui.workspace.inspector import render_inspector
 
 from xingyuan_sis.tui.workspace import events as workspace_events
 
@@ -64,6 +66,30 @@ class DetailFocusTests(unittest.TestCase):
         )
         self.assertIn("> ", line)
         self.assertLess(line.index("物种"), line.index("> "))
+
+    def test_selected_inspector_item_keeps_its_original_color_and_emphasis(self):
+        state = workspace.Workspace(
+            "students",
+            focus=workspace.FocusArea.INSPECTOR,
+            content_panel=workspace.ContentPanel.INSPECTOR,
+        )
+        board = Board(40, 16)
+        original_style = screen._TEXT_ACCENT + "\x1b[4m"
+        with patch("sys.stdout.isatty", return_value=True), patch.dict(os.environ) as environment:
+            environment.pop("NO_COLOR", None)
+            render_inspector(
+                board,
+                state,
+                self.catalog,
+                0,
+                30,
+                [[("关联项目", original_style, "field:name")]],
+            )
+            raw = "\n".join(board.frame().lines)
+        self.assertIn(screen._SURFACE_SELECTED, raw)
+        self.assertIn(screen._TEXT_ACCENT, raw)
+        self.assertIn("\x1b[4m", raw)
+        self.assertIn("> 关联项目", screen._ANSI_RE.sub("", raw))
 
     def test_student_inspector_uses_current_archive_hierarchy(self):
         state = workspace.Workspace("students")
