@@ -17,6 +17,11 @@ from ..auth import (
     initialize_admin,
     write_session,
 )
+from ..terminal_input import (
+    EDITOR_CURSOR_BLINK_SECONDS,
+    editing_cursor,
+    set_editing_cursor_visible,
+)
 from . import animation, keys, screen, theme
 from .board import Board
 from .text_edit import TextBuffer, input_mode, read_event
@@ -241,9 +246,11 @@ def _run_form(
     }
     active_index = 0
     previous_lines: list[str] = []
+    cursor_visible = True
+    last_blink = time.monotonic()
 
     try:
-        with input_mode():
+        with input_mode(), editing_cursor():
             while True:
                 active = editable[active_index]
                 buffer = buffers[active.key]
@@ -263,12 +270,27 @@ def _run_form(
                     rendered.lines,
                     previous_lines,
                     _cursor_position(mode, active, buffer),
+                    cursor_visible=cursor_visible,
                 )
                 previous_lines = rendered.lines
 
-                event = read_event(animation._SPARKLE_FRAME)
+                remaining = max(
+                    0.01,
+                    EDITOR_CURSOR_BLINK_SECONDS - (time.monotonic() - last_blink),
+                )
+                event = read_event(min(animation._SPARKLE_FRAME, remaining))
+                now = time.monotonic()
+                if now - last_blink >= EDITOR_CURSOR_BLINK_SECONDS:
+                    cursor_visible = not cursor_visible
+                    set_editing_cursor_visible(cursor_visible)
+                    last_blink = now
+
                 if event is None:
                     continue
+                if not cursor_visible:
+                    cursor_visible = True
+                    set_editing_cursor_visible(True)
+                last_blink = now
 
                 if event.kind == "cancel":
                     return None
@@ -314,22 +336,22 @@ def _paint_form(
     lines: list[str],
     previous: list[str],
     cursor: tuple[int, int],
+    *,
+    cursor_visible: bool = True,
 ) -> None:
     tty = sys.stdout.isatty()
     if tty:
-        sys.stdout.write("\x1b[?25l")
-        sys.stdout.flush()
+        set_editing_cursor_visible(False)
     screen._paint(lines, previous)
     if tty:
         x, y = cursor
-        sys.stdout.write(f"\x1b[{y + 1};{x + 1}H\x1b[?25h")
+        sys.stdout.write(f"\x1b[{y + 1};{x + 1}H")
         sys.stdout.flush()
+        set_editing_cursor_visible(cursor_visible)
 
 
 def _hide_cursor() -> None:
-    if sys.stdout.isatty():
-        sys.stdout.write("\x1b[?25l")
-        sys.stdout.flush()
+    set_editing_cursor_visible(False)
 
 
 def _wait_message(
