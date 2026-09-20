@@ -17,6 +17,59 @@ if TYPE_CHECKING:
 _SELECTION_GUTTER = PICKER_GUTTER
 
 
+def _render_delete_panel(
+    board: Board,
+    state: Workspace,
+    catalog: Catalog,
+    x: int,
+    y: int,
+    width: int,
+    bottom: int,
+) -> None:
+    """Render destructive context as one aligned inspector-side task."""
+    form = state.form
+    title, identifier = identity(state.key, form.original)
+    rows: list[tuple[str, str, str]] = [
+        ("记录", title, screen._TEXT_PRIMARY),
+        ("标识", identifier, screen._TEXT_SECONDARY),
+    ]
+
+    if state.key in {"students", "courses"}:
+        _, related = catalog.related(state.key, form.original)
+        rows.append(("影响", f"{len(related)} 条关联选课将一并移除", screen._TEXT_PRIMARY))
+    elif state.key == "classes":
+        _, students = catalog.related(state.key, form.original)
+        notices = sum(
+            row["class_id"] == form.original["id"]
+            for row in catalog.records["announcements"]
+        )
+        rows.extend((
+            ("影响", f"{len(students)} 名学生将变为未分班", screen._TEXT_PRIMARY),
+            ("同时", f"删除 {notices} 条班级公告", screen._TEXT_PRIMARY),
+        ))
+    rows.append(("风险", "删除后无法撤销", screen._BOLD + screen._TEXT_DANGER))
+
+    board.put(x, y, "确认删除以下记录？", screen._BOLD + screen._TEXT_PRIMARY, width=width)
+    if y + 1 < bottom:
+        board.put(x, y + 1, "─" * width, screen._BORDER_SUBTLE, width=width)
+
+    label_width = 6
+    value_x = x + label_width + 2
+    value_width = max(1, width - label_width - 2)
+    for index, (label, value, style) in enumerate(rows):
+        row_y = y + 3 + index
+        if row_y >= bottom:
+            break
+        board.put(
+            x,
+            row_y,
+            screen._pad_cells(screen._clip_cells(label, label_width), label_width),
+            screen._TEXT_SECONDARY,
+            width=label_width,
+        )
+        board.put(value_x, row_y, value, style, width=value_width)
+
+
 def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, width: int) -> None:
     """Render a complete transaction while FieldSession owns any active field edit."""
     form = state.form
@@ -35,29 +88,16 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
     heading = "档案" if form.mode == "create" and state.key in COLLECTIONS else titles.get(form.mode, "档案")
     board.put(x, heading_row, panel_heading(heading, True), width=width)
 
-    if form.mode in {"delete", "seed", "reset-password"}:
+    if form.mode == "delete":
+        _render_delete_panel(board, state, catalog, x, content_row, width, bottom)
+        return
+
+    if form.mode in {"seed", "reset-password"}:
         messages: list[tuple[str, str]] = [
             ("将写入一组完整的演示数据。", screen._TEXT_PRIMARY),
             ("仅支持空数据库，已有记录会保留。", screen._TEXT_SECONDARY),
         ]
-        if form.mode == "delete":
-            title, identifier = identity(state.key, form.original)
-            messages = [
-                (f"确认删除 {title}？", screen._BOLD + screen._TEXT_PRIMARY),
-                (identifier, screen._TEXT_SECONDARY),
-                ("! 删除后无法撤销。", screen._BOLD + screen._TEXT_DANGER),
-            ]
-            if state.key in {"students", "courses"}:
-                _, related = catalog.related(state.key, form.original)
-                messages.append((f"同时移除 {len(related)} 条关联选课。", screen._TEXT_PRIMARY))
-            elif state.key == "classes":
-                _, students = catalog.related(state.key, form.original)
-                notices = sum(row["class_id"] == form.original["id"] for row in catalog.records["announcements"])
-                messages[2:] = [
-                    (f"! {len(students)} 名学生将变为未分班。", screen._TEXT_DANGER),
-                    (f"删除 {notices} 条班级公告，无法撤销。", screen._TEXT_DANGER),
-                ]
-        elif form.mode == "reset-password":
+        if form.mode == "reset-password":
             title, identifier = identity(state.key, form.original)
             messages = [
                 (f"重置 {title} 的密码？", screen._TEXT_PRIMARY),
