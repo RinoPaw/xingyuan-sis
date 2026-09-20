@@ -52,7 +52,7 @@ class PortalLayoutTests(unittest.TestCase):
         self.assertNotIn("\x1b[4m", entered_raw)
         self.assertIn(screen._SURFACE_INTERACTIVE, preview_raw)
         self.assertIn(screen._SURFACE_SELECTED, entered_raw)
-        self.assertIn(screen._TEXT_ON_SELECTED, entered_raw)
+        self.assertIn(screen._TEXT_ACCENT, entered_raw)
 
     def test_primary_keeps_weak_selection_when_focus_enters_secondary(self) -> None:
         identity = Identity("Administrator", "admin")
@@ -76,7 +76,7 @@ class PortalLayoutTests(unittest.TestCase):
         self.assertIn("[·学生 ]", screen._ANSI_RE.sub("", weak))
         self.assertNotIn(screen._SURFACE_SELECTED, weak)
         self.assertIn(screen._SURFACE_SELECTED, strong)
-        self.assertIn(screen._TEXT_ON_SELECTED, strong)
+        self.assertIn(screen._TEXT_ACCENT, strong)
         self.assertIn("[>学生 ]", screen._ANSI_RE.sub("", strong))
         self.assertNotEqual(weak, strong)
 
