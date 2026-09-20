@@ -224,7 +224,7 @@ def render_inspector(
                 break
             shown = screen._clip_cells(text, remaining)
             display = screen._display_width(shown)
-            drawn_style = theme.selection_style() if strong else style
+            drawn_style = theme.selection_style(style) if strong else style
 
             if action:
                 hit_width = max(1, display)
