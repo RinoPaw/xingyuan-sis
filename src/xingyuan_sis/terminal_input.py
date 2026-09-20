@@ -133,105 +133,6 @@ def _redraw_inline(
     sys.stdout.flush()
 
 
-def _read_windows_console_inline(
-    *,
-    row: int,
-    column: int,
-    width: int,
-    colored: bool,
-    initial_value: str,
-) -> str:
-    """Use Windows' cooked Unicode console editor so IME composition is atomic.
-
-    ``msvcrt.getwch()`` exposes physical key presses one at a time.  That is a
-    poor fit for an IME because Enter may belong to candidate selection rather
-    than to the application.  ``ReadConsoleW`` in line mode lets Windows finish
-    composition first and only returns the completed field value.
-    """
-    import ctypes
-    from ctypes import wintypes
-    import msvcrt
-
-    class ConsoleReadControl(ctypes.Structure):
-        _fields_ = (
-            ("nLength", wintypes.ULONG),
-            ("nInitialChars", wintypes.ULONG),
-            ("dwCtrlWakeupMask", wintypes.ULONG),
-            ("dwControlKeyState", wintypes.ULONG),
-        )
-
-    handle_value = msvcrt.get_osfhandle(sys.stdin.fileno())
-    if handle_value == -1:
-        raise OSError("标准输入不是 Windows 控制台")
-    handle = wintypes.HANDLE(handle_value)
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel32.GetConsoleMode.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
-    kernel32.GetConsoleMode.restype = wintypes.BOOL
-    kernel32.SetConsoleMode.argtypes = (wintypes.HANDLE, wintypes.DWORD)
-    kernel32.SetConsoleMode.restype = wintypes.BOOL
-    kernel32.ReadConsoleW.argtypes = (
-        wintypes.HANDLE,
-        wintypes.LPVOID,
-        wintypes.DWORD,
-        ctypes.POINTER(wintypes.DWORD),
-        wintypes.LPVOID,
-    )
-    kernel32.ReadConsoleW.restype = wintypes.BOOL
-
-    original_mode = wintypes.DWORD()
-    if not kernel32.GetConsoleMode(handle, ctypes.byref(original_mode)):
-        raise ctypes.WinError(ctypes.get_last_error())
-
-    enable_processed_input = 0x0001
-    enable_line_input = 0x0002
-    enable_echo_input = 0x0004
-    cooked_mode = original_mode.value | enable_processed_input | enable_line_input | enable_echo_input
-
-    capacity = max(256, len(initial_value) + 2)
-    buffer = ctypes.create_unicode_buffer(capacity)
-    buffer.value = initial_value
-    read = wintypes.DWORD()
-    control = ConsoleReadControl(
-        ctypes.sizeof(ConsoleReadControl),
-        len(initial_value),
-        1 << 0x1B,  # Esc cancels the field without being mistaken for Enter.
-        0,
-    )
-
-    _redraw_inline(
-        row,
-        column,
-        width,
-        TextBuffer.from_value(initial_value),
-        colored=colored,
-    )
-    if colored:
-        sys.stdout.write(_FIELD_STYLE)
-        sys.stdout.flush()
-
-    try:
-        if not kernel32.SetConsoleMode(handle, cooked_mode):
-            raise ctypes.WinError(ctypes.get_last_error())
-        if not kernel32.ReadConsoleW(
-            handle,
-            buffer,
-            capacity - 1,
-            ctypes.byref(read),
-            ctypes.byref(control),
-        ):
-            raise ctypes.WinError(ctypes.get_last_error())
-    finally:
-        kernel32.SetConsoleMode(handle, original_mode.value)
-        if colored:
-            sys.stdout.write(_PAGE_STYLE)
-            sys.stdout.flush()
-
-    value = buffer[:read.value]
-    if "\x1b" in value:
-        raise KeyboardInterrupt
-    return value.rstrip("\r\n")
-
-
 def _refresh_idle(
     on_idle: Callable[[str], None],
     value: str,
@@ -317,20 +218,6 @@ def _read_interactive_inline(
     secret: bool = False,
     initial_value: str = "",
 ) -> str:
-    if os.name == "nt" and not secret:
-        try:
-            return _read_windows_console_inline(
-                row=row,
-                column=column,
-                width=width,
-                colored=colored,
-                initial_value=initial_value,
-            )
-        except OSError:
-            # Redirected/non-console stdin cannot use ReadConsoleW; retain the
-            # portable key-by-key editor as the fallback.
-            pass
-
     buffer = TextBuffer.from_value(initial_value)
 
     def redraw() -> None:
