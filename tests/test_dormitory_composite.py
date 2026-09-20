@@ -5,7 +5,7 @@ import unittest
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import workspace
-from xingyuan_sis.tui.workspace import student_inspector
+from xingyuan_sis.tui.workspace import field_session, student_inspector
 from xingyuan_sis.tui.workspace.data import Catalog
 
 
@@ -65,6 +65,23 @@ class DormitoryCompositeTests(unittest.TestCase):
             and student.get("dorm_room")
         ))
         self.assertEqual([value for value, _ in room_options], [None, *expected_rooms])
+
+    def test_unset_area_clears_dormitory_without_advancing_to_building(self):
+        state = workspace.Workspace("students")
+        original = state.current(self.catalog).copy()
+        self.assertIsNotNone(original["dormitory"])
+
+        field_session.start(state, self.catalog, "dorm_area")
+        field_session.edit_current(state, self.catalog)
+        unset = next(
+            i for i, (value, _) in enumerate(state.field_session.options)
+            if value is None
+        )
+        field_session.accept_option(state, self.catalog, unset)
+
+        self.assertIsNone(state.field_session)
+        changed = self.catalog.service.student_by_no(original["student_no"])
+        self.assertIsNone(changed["dormitory"])
 
     def test_three_virtual_fields_save_back_to_one_canonical_value(self):
         state = workspace.Workspace("students")
