@@ -31,6 +31,17 @@ def field_segment(
     return shown if text is None else text, style, f"field:{field_key}"
 
 
+def _target_indent(lines: list[Line], target: str) -> int:
+    """Return the rendered cell offset at which one semantic field begins."""
+    for line in lines:
+        used = 0
+        for text, _, action in line:
+            if action == target:
+                return used
+            used += screen._display_width(text)
+    return 0
+
+
 def expand_options(lines: list[Line], session: FieldSession | None) -> list[Line]:
     if session is None or session.options is None:
         return lines
@@ -39,12 +50,14 @@ def expand_options(lines: list[Line], session: FieldSession | None) -> list[Line
         (i + 1 for i, line in enumerate(lines) if any(action == target for _, _, action in line)),
         len(lines),
     )
-    options = [[(
+    indent = _target_indent(lines, target)
+    prefix: Line = [(" " * indent, screen._TEXT_PRIMARY, "")] if indent else []
+    options = [prefix + [(
         safe(label),
         screen._TEXT_PRIMARY,
         f"option:{i}",
     )] for i, (_, label) in enumerate(session.options)]
-    lines[insert_at:insert_at] = options or [[("暂无可选记录", screen._TEXT_SECONDARY, "")]]
+    lines[insert_at:insert_at] = options or [prefix + [("暂无可选记录", screen._TEXT_SECONDARY, "")]]
     return lines
 
 
