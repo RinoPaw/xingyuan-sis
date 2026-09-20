@@ -11,7 +11,17 @@ _BUTTON_CURRENT = screen._SURFACE_INTERACTIVE + screen._TEXT_ACCENT
 _BAR_SURFACE = screen._SURFACE_FOOTER + screen._TEXT_PRIMARY
 _TOPBAR = screen._SURFACE_TOPBAR + screen._TEXT_ACCENT + screen._BOLD
 _SECONDARY = screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
-_SECONDARY_FOCUS = screen._SURFACE_SELECTED + screen._TEXT_ACCENT + screen._BOLD
+_SELECTED = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
+
+
+def selection_prefix(*, selected: bool = False, current: bool = False) -> str:
+    """One global marker language: ``>`` is actionable focus, ``·`` is weak context."""
+    return "> " if selected else "· " if current else "  "
+
+
+def selection_style() -> str:
+    """Return the one strong style used by every directly selectable item."""
+    return _SELECTED
 
 
 def bar_space(count: int) -> str:
@@ -25,13 +35,13 @@ def button(
     current: bool = False,
     width: int | None = None,
 ) -> str:
-    """Render an action button; color/surface carry focus without chevrons."""
-    marker = "·" if current and not selected else " "
+    """Render an action button with the shared focus/current marker language."""
+    marker = ">" if selected else "·" if current else " "
     shown = f"[{marker}{label} ]"
     if width is not None:
         shown = screen._pad_cells(screen._clip_cells(shown, width), width)
     if selected:
-        style = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
+        style = _SELECTED
     elif current:
         style = _BUTTON_CURRENT
     else:
@@ -40,10 +50,13 @@ def button(
 
 
 def secondary_item(label: str, *, selected: bool = False, width: int = 10) -> str:
-    """Render compact second-level navigation without brackets or arrows."""
+    """Render second-level navigation with the same strong selection language."""
     width = max(1, width)
-    shown = screen._pad_cells(screen._clip_cells(f" {label}", width), width)
-    return screen._ansi(shown, _SECONDARY_FOCUS if selected else _SECONDARY)
+    shown = screen._pad_cells(
+        screen._clip_cells(selection_prefix(selected=selected) + label, width),
+        width,
+    )
+    return screen._ansi(shown, _SELECTED if selected else _SECONDARY)
 
 
 def nav_item(
@@ -53,13 +66,12 @@ def nav_item(
     current: bool = False,
     width: int | None = None,
 ) -> str:
-    """Render navigation with strong focus and weak current-location states."""
-    marker = "▌" if selected else "▏" if current else " "
-    shown = f"{marker} {label}"
+    """Render navigation with strong actionable focus and weak current context."""
+    shown = selection_prefix(selected=selected, current=current) + label
     if width is not None:
         shown = screen._pad_cells(screen._clip_cells(shown, width), width)
     if selected:
-        style = screen._BOLD + screen._TEXT_ACCENT
+        style = _SELECTED
     elif current:
         style = screen._TEXT_ACCENT
     else:
