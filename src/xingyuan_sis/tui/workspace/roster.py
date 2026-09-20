@@ -81,22 +81,24 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
     header = "  " + " ".join(screen._pad_cells(label, size) for _, label, size in columns)
     board.put(1, header_row, header, screen._TEXT_SECONDARY, width=width - 1)
     for index, row in enumerate(rows[first:first + capacity], start=first):
-        text = " ".join(
+        raw = " ".join(
             screen._pad_cells(screen._clip_cells(safe(row.get(key)), size), size)
             for key, _, size in columns
         )
+        body_width = max(1, width - 3)
+        body = screen._pad_cells(screen._clip_cells(raw, body_width), body_width)
         is_current = index == state.selected
-        marker = theme.selection_prefix(selected=is_current and focused, current=is_current and not focused)
-        text = screen._pad_cells(screen._clip_cells(marker + text, width - 1), width - 1)
-        if is_current:
-            selected_style = (
-                theme.selection_style()
-                if focused
-                else screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
+        if is_current and focused:
+            text = (
+                screen._ansi("> ", theme.selection_marker_style())
+                + screen._ansi(body, theme.selection_style())
             )
+        elif is_current:
+            weak_style = screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
+            text = screen._ansi("· " + body, weak_style)
         else:
-            selected_style = screen._TEXT_PRIMARY
-        board.put(1, data_row + index - first, text, selected_style, f"row:{index}", width - 1)
+            text = "  " + screen._ansi(body, screen._TEXT_PRIMARY)
+        board.put(1, data_row + index - first, text, action=f"row:{index}", width=width - 1)
 
     if not rows:
         message_row = data_row + 1
