@@ -6,7 +6,8 @@ from .. import screen, theme
 from ..layout import WorkspaceLayout
 from ..view_common import Board, identity, panel_heading, safe
 from .data import COLLECTIONS, Catalog
-from .picker import PICKER_GUTTER, prepare_candidates
+from .field_geometry import FIELD_GUTTER, control_text, control_width
+from .picker import prepare_candidates
 from .presentation import delete_impacts, display_value, project_record
 from .state import FieldSessionOwner
 
@@ -14,7 +15,7 @@ if TYPE_CHECKING:
     from .state import Workspace
 
 
-_SELECTION_GUTTER = PICKER_GUTTER
+_SELECTION_GUTTER = FIELD_GUTTER
 
 
 def _render_delete_panel(
@@ -144,16 +145,25 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         if kind == "option":
             selected = session is not None and index == session.option_index
             marker = "> " if selected else "  "
-            marker_style = theme.selection_marker_style() if selected else screen._TEXT_SECONDARY
+            marker_style = screen._TEXT_ACCENT if selected else screen._TEXT_SECONDARY
             board.put(value_x, y, marker, marker_style, action=f"option:{index}", width=_SELECTION_GUTTER)
 
-            body = screen._pad_cells(screen._clip_cells(safe(payload), field_width), field_width)
+            value = safe(payload)
+            width_for_option = control_width(value, field_width)
+            body = control_text(value, width_for_option)
             body_style = (
                 theme.selection_style(screen._TEXT_SECONDARY)
                 if selected
                 else screen._TEXT_SECONDARY
             )
-            board.put(field_x, y, body, body_style, action=f"option:{index}", width=field_width)
+            board.put(
+                field_x,
+                y,
+                body,
+                body_style,
+                action=f"option:{index}",
+                width=width_for_option,
+            )
             continue
         if kind == "empty":
             board.put(field_x, y, safe(payload), screen._TEXT_SECONDARY, width=field_width)
@@ -169,7 +179,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
                 value_x,
                 y,
                 theme.selection_prefix(selected=True),
-                theme.selection_marker_style(),
+                screen._TEXT_ACCENT,
                 width=_SELECTION_GUTTER,
             )
 
@@ -203,6 +213,19 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
             if state.key in COLLECTIONS
             else safe(values.get(field.key))
         )
-        style = theme.selection_style() if row_selected else screen._TEXT_PRIMARY
-        text = screen._pad_cells(screen._clip_cells(value, field_width), field_width)
-        board.put(field_x, y, text, style, f"field:{field.key}", field_width)
+        editing = (
+            session is not None
+            and session.options is None
+            and session.active_key == field.key
+        )
+        width_for_field = control_width(value, field_width)
+        style = theme.selection_style() if row_selected or editing else screen._TEXT_PRIMARY
+        text = control_text(value, width_for_field)
+        board.put(
+            field_x,
+            y,
+            text,
+            style,
+            f"field:{field.key}",
+            width_for_field,
+        )
