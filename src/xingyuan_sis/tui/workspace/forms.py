@@ -72,6 +72,15 @@ def move_form_position(state: Workspace, direction: str) -> None:
         form.position = min(len(form.fields) - 1, form.position + 1)
 
 
+def _use_student_number_as_password(catalog: Catalog, student_no: object) -> None:
+    """Apply the TUI's predictable first-login credential policy."""
+    from ...auth import reset_student_password
+
+    no = str(student_no).strip()
+    reset_student_password(catalog.service.db_path, no, no)
+    catalog.initial_password = None
+
+
 def apply_form(state: Workspace, catalog: Catalog) -> None:
     catalog.require_write()
     form = state.form
@@ -82,23 +91,21 @@ def apply_form(state: Workspace, catalog: Catalog) -> None:
     if form.mode == "create":
         values = {field.key: form.values.get(field.key) for field in form.fields}
         record_id = catalog.save(state.key, values)
-        if catalog.initial_password is not None:
-            state.credentials = [(str(form.values["student_no"]), catalog.initial_password)]
-            catalog.initial_password = None
+        if state.key == "students":
+            _use_student_number_as_password(catalog, form.values["student_no"])
         rows = state.rows(catalog)
         state.selected = next((i for i, row in enumerate(rows) if row["id"] == record_id), state.selected)
         state.notice = (
-            "已保存。"
+            "已保存。学生初始密码为学号，首次登录必须修改。"
+            if state.key == "students" and any(row["id"] == record_id for row in rows)
+            else "已保存。"
             if any(row["id"] == record_id for row in rows)
             else "已保存；这条记录不符合当前筛选条件。"
         )
     elif form.mode == "reset-password":
-        from ...auth import reset_student_password
-
         no = form.original["student_no"]
-        password = reset_student_password(catalog.service.db_path, no)
-        state.credentials = [(no, password)]
-        state.notice = "已重置密码；学生下次登录必须修改密码。"
+        _use_student_number_as_password(catalog, no)
+        state.notice = "已重置密码为学号；学生下次登录必须修改密码。"
     elif form.mode == "delete":
         catalog.delete(state.key, form.original)
         state.notice = "记录已删除。"
@@ -119,9 +126,10 @@ def apply_form(state: Workspace, catalog: Catalog) -> None:
             state.notice = f"已导出 {count} 名学生至 {path}"
         else:
             result = catalog.service.import_students(path)
+            for student_no, _ in result.credentials:
+                _use_student_number_as_password(catalog, student_no)
             catalog.refresh()
             state.notice = f"已导入 {result.imported} 名学生；{len(result.errors)} 行未导入。"
-            state.credentials = result.credentials
             state.report = result.errors
             if result.errors:
                 state.switch("data")
