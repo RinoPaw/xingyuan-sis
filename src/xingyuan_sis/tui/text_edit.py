@@ -85,11 +85,13 @@ class TextBuffer:
         return None
 
     def view(self, width: int, *, secret: bool = False) -> tuple[str, int]:
-        """Return the visible viewport and cursor cell inside it."""
+        """Return the visible viewport and insertion-caret cell inside it."""
         width = max(1, width)
         rendered = ["•"] * len(self.chars) if secret else self.chars
         start = 0
-        while start < self.cursor and display_width("".join(rendered[start:self.cursor])) >= width:
+        # The caret lives between cells, so exactly ``width`` cells before it
+        # still fit: the caret may sit on the right boundary of the viewport.
+        while start < self.cursor and display_width("".join(rendered[start:self.cursor])) > width:
             start += 1
 
         shown: list[str] = []
