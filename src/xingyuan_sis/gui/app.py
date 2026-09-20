@@ -6,7 +6,7 @@ import sys
 import tkinter as tk
 from tkinter import ttk
 
-from ..auth import Identity
+from ..auth import Identity, read_session
 from .login import LoginView
 from .main_window import MainWindow
 from .theme import configure_styles
@@ -20,7 +20,12 @@ class Application:
         self.db_path = db_path
         self.current_view: ttk.Frame | None = None
         configure_styles(root)
-        self.show_login()
+
+        identity = read_session(db_path)
+        if identity is None:
+            self.show_login()
+        else:
+            self.show_main(identity)
 
     def show_login(self) -> None:
         self.root.title("星原 SIS · 登录")
