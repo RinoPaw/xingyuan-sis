@@ -13,6 +13,8 @@ from .state import FieldSession, FocusArea, Workspace
 
 Segment = tuple[str, str, str]
 Line = list[Segment]
+NavigationTarget = tuple[str, int]
+NavigationRow = list[NavigationTarget]
 
 
 def field_segment(
@@ -122,55 +124,62 @@ def action_targets(lines: list[Line]) -> list[tuple[int, str]]:
     return [(indexes[0], action) for action, indexes in action_line_map(lines, include_options=True).items()]
 
 
-def _student_grade_column(action: str) -> int | None:
-    """Return the semantic column inside a student's course/score pair."""
-    if action.startswith("field:related:grades:") and action.endswith(":score"):
-        return 1
-    if action.startswith("related:grades:"):
-        return 0
-    return None
+def _navigation_rows(lines: list[Line]) -> list[NavigationRow]:
+    """Project rendered lines into semantic targets with terminal-cell columns."""
+    rows: list[NavigationRow] = []
+    previous_actions: tuple[str, ...] = ()
+    for line in lines:
+        cursor = 0
+        row: NavigationRow = []
+        seen: set[str] = set()
+        for text, _, action in line:
+            if action and not action.startswith("option:") and action not in seen:
+                row.append((action, cursor))
+                seen.add(action)
+            cursor += screen._display_width(text)
 
-
-def _student_grade_row(row: list[str]) -> bool:
-    return len(row) >= 2 and {_student_grade_column(action) for action in row} >= {0, 1}
+        actions = tuple(action for action, _ in row)
+        if row and actions != previous_actions:
+            rows.append(row)
+            previous_actions = actions
+    return rows
 
 
 def directional_target(lines: list[Line], current: str, direction: str) -> str | None:
-    """Navigate directly on the final visible semantic geometry.
+    """Navigate on final terminal geometry without knowing business semantics.
 
-    Consecutive physical lines carrying the same actions are one semantic row,
-    so wrapping or multiline content never creates a second navigation stop.
-    Student course/score rows form a two-column grid: vertical movement keeps
-    the current column, and entering that grid defaults to the course column.
+    Consecutive wrapped lines carrying the same targets are one semantic row.
+    Horizontal movement follows target order in that row. Vertical movement
+    selects the target whose terminal-cell column is closest to the current one.
     """
-    rows: list[list[str]] = []
-    for line in lines:
-        row = list(dict.fromkeys(
-            action for _, _, action in line
-            if action and not action.startswith("option:")
-        ))
-        if row and (not rows or row != rows[-1]):
-            rows.append(row)
-
-    location = next(((i, row.index(current)) for i, row in enumerate(rows) if current in row), None)
+    rows = _navigation_rows(lines)
+    location = next(
+        (
+            (row_index, column_index, x)
+            for row_index, row in enumerate(rows)
+            for column_index, (action, x) in enumerate(row)
+            if action == current
+        ),
+        None,
+    )
     if location is None:
         return None
-    row, column = location
-    if direction == "left":
-        return rows[row][column - 1] if column else None
-    if direction == "right":
-        return rows[row][min(column + 1, len(rows[row]) - 1)]
 
-    target_row = min(max(0, row + (-1 if direction == "up" else 1)), len(rows) - 1)
-    target = rows[target_row]
-    if _student_grade_row(target):
-        current_column = _student_grade_column(current)
-        wanted = 0 if current_column is None else current_column
-        return next(
-            (action for action in target if _student_grade_column(action) == wanted),
-            target[0],
-        )
-    return target[-1]
+    row_index, column_index, current_x = location
+    row = rows[row_index]
+    if direction == "left":
+        return row[column_index - 1][0] if column_index else None
+    if direction == "right":
+        return row[min(column_index + 1, len(row) - 1)][0]
+    if direction not in {"up", "down"}:
+        return None
+
+    target_index = min(
+        max(0, row_index + (-1 if direction == "up" else 1)),
+        len(rows) - 1,
+    )
+    target_row = rows[target_index]
+    return min(target_row, key=lambda target: abs(target[1] - current_x))[0]
 
 
 def render_inspector(
