@@ -41,8 +41,8 @@ UI 不写 SQL；Repository 不依赖 UI；业务校验进入 Service / Schema；
 | 登录后门户 | `tui/app.py` + `tui/portal.py` |
 | 工作台状态 | `tui/workspace/state.py` |
 | 键鼠事件意图 | `tui/workspace/events.py` |
-| 已有记录字段会话 | `tui/workspace/field_session.py` |
-| 完整事务表单 | `tui/workspace/forms.py` + `editor.py` |
+| 局部字段编辑会话 | `tui/workspace/field_session.py` |
+| 完整事务生命周期 | `tui/workspace/forms.py` + `editor.py` |
 | 档案最终几何 / 绘制 / 导航 | `tui/workspace/inspector.py` |
 | 学生档案结构 | `tui/workspace/student_inspector.py` |
 | 其他实体档案结构 | `tui/workspace/detail.py` |
@@ -76,8 +76,8 @@ field:<key>
 - 只读字段仍然属于档案焦点图；
 - Enter 是否可写由权限和字段定义决定；
 - 进入编辑后 target 仍是同一个 `field:<key>`；
-- 禁止使用 `field-target:<key>` / `field:<index>` 两套身份表示同一个已有记录字段；
-- 字段会话是 target 的局部状态，不建立第二套导航坐标。
+- 新建 Form 也以字段 key 标识字段，不用 `field:<index>` 建第二套身份；
+- 字段会话是 field 的局部状态，不建立第二套导航坐标。
 
 ## 5. 已有记录没有编辑页面
 
@@ -103,27 +103,56 @@ FieldSession
 - 不复制整条记录形成长期草稿；
 - 一个字段会话只拥有当前字段；存在真实一致性约束时才允许小型原子字段组。
 
-学生 `family + branch` 是当前明确的原子字段组。
+学生当前的原子字段组统一为：
 
-## 6. Form 只表示完整事务
+```text
+family → branch
+major_code → class_number
+primary_element → primary_affinity
+```
+
+## 6. Form 表示完整事务，FieldSession 表示局部编辑
 
 完整 `Form` 只用于：新建、删除确认、密码重置、导入 / 导出、seed 等真正拥有独立生命周期的事务。
 
-FieldSession 与 Form 不通过 `mode` 区分，而是两个不同类型、两条不同职责。不要为了共享几行代码重新把它们合并成一个“大表单状态”。
+`Form` 拥有整次事务的草稿、字段顺序与最终提交；它不再拥有另一套 `options / option_index / 字段输入` 状态。只要用户进入某个 Form 字段，就创建与已有记录相同的 `FieldSession`：
+
+```text
+Form 选中 field:<key>
+   │ Enter
+   ▼
+FieldSession
+   │ Enter
+   ▼
+写回 Form draft
+   │
+   └─ S 保存 → 提交完整事务
+```
+
+因此：
+
+- 方向键 / Tab 只改变 Form 当前选中字段，不自动进入编辑；
+- Enter 进入字段编辑；
+- 字段编辑中的 Enter 确认当前字段或原子组；
+- 字段编辑中的 Esc 只丢弃这次局部修改；
+- 非字段编辑状态的 Esc 才取消整个 Form；
+- `S` 只负责完整事务提交，不替代字段确认。
+
+FieldSession 与 Form 是两个不同生命周期的类型，但字段编辑机制只有一套。不要为了复用或兼容再给 Form 添加第二套字段编辑状态。
 
 ## 7. 展示只有一条路径
 
 字段文本统一经过：
 
 ```text
-committed row + optional FieldSession overlay
+base values + optional FieldSession overlay
               ↓
-       projected record
+       projected values
               ↓
        display_value(...)
 ```
 
-格式化函数不能读取 Workspace、焦点或“是否编辑”。禁止：
+`base values` 可以是已提交记录，也可以是 Form 草稿。格式化函数不能读取 Workspace、焦点或“是否编辑”。禁止：
 
 ```text
 if editing:
@@ -132,7 +161,7 @@ else:
     浏览态格式
 ```
 
-同一个值在浏览、输入、枚举选择期间必须使用同一套 label / 格式规则。
+同一个值在浏览、新建、输入、枚举选择期间必须使用同一套 label / 格式规则。
 
 ## 8. 几何只有一份
 
@@ -179,6 +208,9 @@ final Line[]
 - 不因旧测试调用私有 helper 而恢复废弃入口；
 - 交互回归优先走真实 `events.interact()`；
 - 已有记录编辑验证 `field:<key> → FieldSession → 保存/取消 → field:<key>`；
+- 新建事务验证“方向键只移动 → Enter 进入 FieldSession → Enter 写回草稿 → S 提交”；
+- 必须验证字段编辑 Esc 与整个 Form Esc 是两层不同撤销；
+- 必须验证 Form 不拥有自己的 options 编辑状态；
 - 必须验证只读字段仍可聚焦；
 - 必须验证已有记录没有保存按钮和 Form edit；
 - 鼠标 / 键盘等价行为比较最终状态；
@@ -196,9 +228,10 @@ final Line[]
 1. 这是不是已有概念？为什么不能扩展权威实现？
 2. 是否产生第二条生产路径？
 3. target 身份是否因“编辑”发生变化？
-4. FieldSession 是否错误扩大成整条记录 Form？
-5. 展示是否出现 browse/edit 两套格式？
-6. 导航是否消费和绘制相同的最终几何？
-7. 是否为了旧测试保留无语义 wrapper？
-8. 是否把演示数据事实写成长期业务限制？
-9. 文档是否描述当前真实实现？
+4. FieldSession 是否仍只拥有一个字段或声明的原子组？
+5. Form 是否偷偷重新拥有了一套字段编辑器？
+6. 展示是否出现 browse/create/edit 多套格式？
+7. 导航是否消费和绘制相同的最终几何？
+8. 是否为了旧测试保留无语义 wrapper？
+9. 是否把演示数据事实写成长期业务限制？
+10. 文档是否描述当前真实实现？

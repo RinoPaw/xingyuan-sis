@@ -112,15 +112,13 @@ key event / printable character
 action
 ```
 
-Command 是按钮、鼠标点击、快捷键和底栏提示的共同来源，不维护平行键位表。`workspace/commands.py` 定义工作台可用命令；门户和 viewer 的局部命令留在自己的上下文中。
+Command 是按钮、鼠标点击、快捷键和底栏提示的共同来源，不维护平行键位表。通用交互语义只有：方向键 / Tab 导航、Enter 激活、Esc 撤销。Space、`q`、`0`、Backspace 不作为第二套确认或返回键。`J / K` 只作为 `↓ / ↑` 的便利物理别名。
 
-通用交互语义只有：方向键 / Tab 导航、Enter 激活、Esc 撤销。Space、`q`、`0`、Backspace 不作为第二套确认或返回键。`J / K` 只作为 `↓ / ↑` 的便利物理别名。
-
-`Shift+Tab` 不再进入工作台语义层；Tab 是唯一的区域焦点循环键。
+`Shift+Tab` 不进入工作台语义层；Tab 是唯一的区域焦点循环键。
 
 ## 5. Workspace 状态与焦点
 
-`Workspace` 不再用 `details + action_focus` 两个布尔量拼接焦点。键盘焦点只有一个枚举：
+键盘焦点只有一个枚举：
 
 ```text
 FocusArea.ROSTER
@@ -135,14 +133,14 @@ FocusArea.DASHBOARD
 ROSTER → INSPECTOR → TOOLBAR → ROSTER
 ```
 
-窄屏当前展示哪一块内容由独立的 `ContentPanel.ROSTER / INSPECTOR` 表示。它和键盘焦点回答不同问题：
+窄屏当前展示哪一块内容由独立的 `ContentPanel.ROSTER / INSPECTOR` 表示：
 
 ```text
 focus         → 键盘现在操作哪里
 content_panel → 单面板布局现在显示哪一面
 ```
 
-因此工具栏获得焦点时，窄屏仍保持进入工具栏前的名册或档案内容；宽屏则始终同时绘制名册和档案。`Location` 保存并恢复这两个明确状态，不再保存布尔组合。
+因此工具栏获得焦点时，窄屏仍保持进入工具栏前的名册或档案内容；宽屏始终同时绘制名册和档案。`Location` 保存并恢复这两个状态。
 
 ## 6. 工作台职责
 
@@ -153,26 +151,33 @@ workspace/__init__.py       controller / 生命周期
    ├─ state.py              Workspace / FocusArea / ContentPanel / FieldSession / Form / Location
    ├─ events.py             键鼠事件与通用交互意图
    ├─ commands.py           当前工作台 Command 集合
-   ├─ field_session.py      已有记录的局部字段会话
-   ├─ forms.py              新建 / 删除 / 导入等完整事务表单
+   ├─ field_session.py      所有局部字段编辑
+   ├─ forms.py              完整事务生命周期 / 提交 / 搜索
    ├─ data.py               Catalog、数据快照、权限、关系与 TUI 语义字段
-   ├─ presentation.py       record projection + display_value
+   ├─ presentation.py       value projection + display_value
    └─ view.py               工作台布局与 inspector 编排
        ├─ roster.py
        ├─ inspector.py      最终几何、绘制、命中区、导航、滚动
        ├─ detail.py         普通实体内容
        ├─ student_inspector.py  学生档案内容
-       ├─ editor.py         完整事务页面
+       ├─ editor.py         完整事务草稿的展示
        └─ dashboard.py
 ```
 
-`FieldSession` 与 `Form` 是两个不同概念：前者附着在现有档案的一个字段或原子字段组上；后者拥有一整个独立事务页面。已有记录编辑不会创建 `Form(mode="edit")`。
+`FieldSession` 与 `Form` 是两个不同概念：
 
-`Catalog` 保存工作台需要的数据快照、权限、关系和语义字段映射，不拥有界面命令表。正常重绘不查询数据库，所有写操作最终通过 Service → Repository。
+- `FieldSession` 只拥有当前字段或声明的原子字段组；
+- `Form` 拥有完整事务草稿、字段顺序和最终提交；
+- Form 字段进入编辑后也使用同一个 FieldSession；
+- `FieldSessionOwner.RECORD` 确认后写业务层，`FieldSessionOwner.FORM` 确认后只写回 Form 草稿；
+- Form 不拥有平行的 `options / option_index / 字段输入` 状态；
+- 已有记录编辑不会创建 `Form(mode="edit")`。
 
-## 7. 一个档案，一套字段身份
+`Catalog` 保存工作台需要的数据快照、权限、关系和语义字段映射，不拥有界面命令表。正常重绘不查询数据库，所有持久化写操作最终通过 Service → Repository。
 
-`student_inspector.py` 和 `detail.py` 都只生成内容结构，字段在整个生命周期中拥有同一个稳定身份：
+## 7. 一套字段身份
+
+记录字段使用语义身份：
 
 ```text
 field:<field_key>
@@ -186,11 +191,13 @@ field:<field_key>
 元素  field:primary_element · field:primary_affinity
 ```
 
-三行都由两个真实 target 构成，而不是把其中一行预先拼成字符串。左右键在行内移动，纵向导航由同一份最终几何自然得出。
+三行都由两个真实 target 构成。左右键在行内移动，纵向导航由同一份最终几何自然得出。
 
-“可以聚焦”和“可以编辑”彼此独立。姓名、学号、学院等只读字段仍属于空间几何；Enter 激活后由权限和字段定义决定是否允许创建 `FieldSession`。
+“可以聚焦”和“可以编辑”彼此独立。姓名、学号、学院等只读字段仍属于空间几何；Enter 激活后由权限和字段定义决定是否允许创建 FieldSession。
 
-进入字段修改不会生成 `field:<index>` 或其他编辑专用 target 图。选项只临时增加：
+已有档案不会生成 `field:<index>` 或编辑专用 target 图；新建 Form 同样使用字段 key 作为用户可见 action。索引只用于 Form 内部顺序。
+
+选项只在 FieldSession 中临时增加：
 
 ```text
 option:0
@@ -198,36 +205,33 @@ option:1
 ...
 ```
 
-确认或取消后，字段身份从未发生变化。已有记录也不存在“编辑”Command；用户直接在档案字段上按 Enter 修改。
-
 ## 8. 唯一展示与关系投影
 
 `presentation.py` 提供唯一字段展示管线：
 
 ```text
-数据库记录
+base values
    +
 当前 FieldSession 拥有的临时值（若有）
    ↓
-projected record
+projected values
    ↓
 display_value(...)
-   ↓
-档案内容
 ```
 
-格式化器不知道“浏览态 / 编辑态”。同一个值只有一种 label 和格式。
+`base values` 可以是数据库记录或 Form 草稿。格式化器不知道“浏览 / 新建 / 编辑”状态，同一个值只有一种 label 和格式。
 
-学生有两组父子一致性约束：
+学生三组复合关系共用同一个字段组机制：
 
 ```text
 family → branch
 major_code → class_number
+primary_element → primary_affinity
 ```
 
-它们由同一个语义字段组机制处理：选择父项后再选择合法子项，已有记录最后原子提交一次。`primary_element` 与 `primary_affinity` 没有父子约束，所以独立提交，但仍使用相同的双 target 行结构。
+进入父项时 FieldSession 同时拥有声明的两项，按相同流程推进到第二项并原子确认；直接进入子项时只拥有子项。数据来源不同不能产生另一套交互。
 
-班级的持久化事实仍是 `class_id / class_code`。TUI 不把内部编码当作第三个可见字段；`Catalog` 负责在交互边界把 `major_code + class_number` 解析成真实班级。这样 Repository / Service 保持规范化数据模型，同时用户只面对一套班级语义。
+班级的持久化事实仍是 `class_id / class_code`。TUI 不把内部编码当作第三个可见字段；`Catalog` 在交互边界把 `major_code + class_number` 解析成真实班级。
 
 ## 9. 最终几何是唯一几何
 
@@ -249,9 +253,7 @@ final Line[]
 
 `events.py` 不知道“物种”“班级”“元素”等页面细节。学生二维复合行和普通实体单列的差异由 `Line` 几何自然表达。
 
-名册也由 `WorkspaceLayout.roster_capacity()` 给出实际可见记录数；列标题占用的行在这里统一扣除。渲染与 PageUp / PageDown 共用该容量，不能再各算一份。
-
-PageUp / PageDown 只改变当前 viewport；翻页后若原焦点离开可见范围，再把焦点收回可见 target。它们不承担“跳过 N 条记录”的第二种选择语义。
+名册由 `WorkspaceLayout.roster_capacity()` 给出实际可见记录数；列标题占用的行统一扣除。渲染与 PageUp / PageDown 共用该容量。
 
 ## 10. 已有记录字段修改
 
@@ -261,7 +263,7 @@ PageUp / PageDown 只改变当前 viewport；翻页后若原焦点离开可见�
 field:<key>
    │ Enter
    ▼
-FieldSession
+FieldSession(owner=RECORD)
    │
    ├─ 自由输入
    └─ option 列表
@@ -276,17 +278,16 @@ field:<key>
 约束：
 
 - 自由文本 / 数字 / 日期确认后立即保存；
-- 枚举 / 关系字段确认选项后立即保存；
+- 枚举 / 关系字段确认后立即保存；
 - Esc 丢弃 FieldSession，不写数据库；
-- 不存在已有记录级“保存”按钮；
-- 不存在已有记录的 `form.position` 导航；
-- 当前字段位置、档案结构与 target 身份不因编辑发生变化；
-- `family + branch` 和 `major_code + class_number` 分别按一个原子 FieldSession 提交；
-- 子字段 `branch`、`class_number` 也可以在当前父项约束下单独修改。
+- 不存在已有记录级保存按钮；
+- 当前字段位置、档案结构与 target 身份不因编辑变化；
+- 三组复合字段都通过声明的原子 FieldSession 推进；
+- 子字段也可以在当前父项约束下单独修改。
 
 ## 11. 完整事务 Form
 
-`Form` 只用于真正需要独立事务页面的操作：
+`Form` 只用于真正需要独立事务生命周期的操作：
 
 - 新建记录；
 - 删除确认；
@@ -294,9 +295,31 @@ field:<key>
 - 导入 / 导出；
 - seed。
 
-这些操作由 `forms.py + editor.py` 负责，可以拥有自己的字段顺序和显式保存 / 确认。它们不是档案的第二种状态。
+带字段的 Form 使用如下状态机：
 
-学生新建 Form 继续复用同一套学生语义字段，因此同样显示：
+```text
+方向键 / Tab 选择 field
+   │ Enter
+   ▼
+FieldSession(owner=FORM)
+   │ Enter
+   ▼
+写回 Form draft
+   │
+   ├─ 继续选字段
+   └─ S 保存完整事务
+```
+
+因此：
+
+- 移动到字段不会自动进入编辑；
+- Enter 是唯一字段进入动作；
+- FieldSession 中 Enter 确认字段或复合组；
+- FieldSession 中 Esc 只取消本字段；
+- Form 空闲时 Esc 取消整个事务；
+- `S` 只提交完整事务。
+
+学生新建 Form 使用与档案相同的语义字段：
 
 ```text
 族系 / 支系
@@ -304,7 +327,7 @@ field:<key>
 主元素 / 亲和等级
 ```
 
-而不是另造一个 `class_code` 选择器。提交时由 `Catalog` 将专业 + 班号转换为规范化的内部班级关联。
+不重新暴露 `class_code`。提交时由 `Catalog` 将专业 + 班号转换为规范化内部班级关联。
 
 ## 12. 数据库与数据
 
@@ -324,20 +347,21 @@ field:<key>
 - `ContentPanel` 只表示窄屏内容，不兼职键盘焦点；
 - Tab 单向循环记录页的名册、档案和操作栏；
 - Shift+Tab 不存在第二条区域导航路径；
-- 所有档案字段使用稳定 `field:<key>`；
+- 用户可见字段使用稳定 `field:<key>`；
 - 物种、班级、元素三类复合行都使用两个独立 target；
-- `family → branch` 与 `major_code → class_number` 共用字段组机制；
+- 三组复合字段共用字段组机制；
 - 学生新建 Form 与档案使用同一套班级语义，不重新暴露 `class_code`；
 - 只读字段可聚焦但不可写；
-- Enter 从当前 field 创建局部 FieldSession，而非 Form；
+- 已有记录 Enter 从 field 创建局部 FieldSession；
+- 新建 Form 中方向键只移动，Enter 才创建 FieldSession；
 - FieldSession 只拥有当前字段或声明的复合组；
-- Enter 即时保存、Esc 取消；
+- Form 不拥有第二套 options 编辑状态；
+- FieldSession Esc 与 Form Esc 分属两层撤销；
+- `S` 只提交完整 Form；
 - 已有记录没有保存按钮或“编辑”Command；
 - `keys.py` 不包含业务快捷键；
 - Command 同时驱动工具栏、快捷键和快捷键提示；
-- Space / `q` / `0` / Backspace 不是全局返回或激活别名；
 - PageUp / PageDown 使用与渲染一致的 viewport 容量；
 - 展示、命中区和方向导航消费同一份最终几何；
 - 滚轮与方向键聚焦档案时进入同一导航路径；
-- 新建 / 删除等完整事务仍通过 Form；
 - 测试保护当前行为，不要求恢复已删除的私有 API。
