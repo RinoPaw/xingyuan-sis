@@ -25,10 +25,11 @@ def lines(
 ) -> list[Line]:
     """Describe the student archive once; editing never changes its target graph."""
     session = state.field_session if state else None
-    values = catalog.project("students", project_record(row, session))
-    birth_editing = session is not None and session.anchor_key == "birth_date"
+    student_session = session if session is not None and not session.anchor_key.startswith("related:") else None
+    values = catalog.project("students", project_record(row, student_session))
+    birth_editing = student_session is not None and student_session.anchor_key == "birth_date"
     if birth_editing:
-        values["birth_date"] = projected_birth_date(session.values)
+        values["birth_date"] = projected_birth_date(student_session.values)
 
     def label(text: str) -> Segment:
         return text, screen._TEXT_SECONDARY, ""
@@ -63,12 +64,20 @@ def lines(
         result.append([("暂无关联记录", screen._TEXT_SECONDARY, "")])
     else:
         for item in related:
-            score = safe(item["score"]) if item["score"] is not None else "待录入"
-            result.append([(
-                f"↗ {safe(item['course_name'])}  ·  {score}",
-                screen._TEXT_ACCENT + "\x1b[4m",
-                f"related:{related_key}:{item['id']}",
-            )])
+            score_value = item["score"]
+            score_action = f"field:related:{related_key}:{item['id']}:score"
+            if session is not None and f"field:{session.anchor_key}" == score_action:
+                score_value = session.values.get("score")
+            score = safe(score_value) if score_value is not None else "待录入"
+            result.append([
+                (
+                    safe(item["course_name"]),
+                    screen._TEXT_ACCENT + "\x1b[4m",
+                    f"related:{related_key}:{item['id']}",
+                ),
+                ("  ·  ", screen._TEXT_SECONDARY, ""),
+                (score, screen._TEXT_PRIMARY, score_action),
+            ])
 
     result.extend((
         [],
@@ -91,4 +100,4 @@ def lines(
         [label("备注      "), field("notes")],
     ))
 
-    return expand_options(result, session)
+    return expand_options(result, student_session)
