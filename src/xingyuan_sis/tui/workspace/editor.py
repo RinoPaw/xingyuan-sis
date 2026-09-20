@@ -130,7 +130,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         label = screen._pad_cells(screen._clip_cells(field.label, label_width), label_width)
         board.put(x, y, label, screen._TEXT_SECONDARY, width=label_width)
 
-        row_selected = index == form.position and (session is None or session.options is None)
+        row_selected = index == form.position and session is None
         if row_selected:
             board.put(
                 value_x,
