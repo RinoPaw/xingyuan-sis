@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .. import screen
+from .. import screen, theme
 from ..layout import WorkspaceLayout, visible_start
 from ..view_common import Board, identity, panel_heading, safe
 from .data import Catalog
@@ -12,6 +12,12 @@ from .state import FieldSession, FocusArea, Workspace
 
 Segment = tuple[str, str, str]
 Line = list[Segment]
+_SELECTION_GUTTER = 2
+
+
+def inspector_content_width(width: int) -> int:
+    """Width left for detail content after the shared selection-marker gutter."""
+    return max(1, width - _SELECTION_GUTTER)
 
 
 def field_segment(
@@ -40,11 +46,11 @@ def expand_options(lines: list[Line], session: FieldSession | None) -> list[Line
         len(lines),
     )
     options = [[(
-        "  " + safe(label),
-        screen._BOLD + screen._TEXT_ACCENT if i == session.option_index else screen._TEXT_PRIMARY,
+        safe(label),
+        screen._TEXT_PRIMARY,
         f"option:{i}",
     )] for i, (_, label) in enumerate(session.options)]
-    lines[insert_at:insert_at] = options or [[("  暂无可选记录", screen._TEXT_SECONDARY, "")]]
+    lines[insert_at:insert_at] = options or [[("暂无可选记录", screen._TEXT_SECONDARY, "")]]
     return lines
 
 
@@ -170,7 +176,7 @@ def render_inspector(
         width=width,
     )
 
-    lines = layout_lines(raw_lines, width, layout)
+    lines = layout_lines(raw_lines, inspector_content_width(width), layout)
     capacity = layout.panel_capacity(state.key)
 
     selected_action = ""
@@ -206,15 +212,24 @@ def render_inspector(
     visible = lines[state.detail_scroll:state.detail_scroll + capacity]
     for offset_in_view, segments in enumerate(visible):
         y = top + offset_in_view
-        cursor = x
+        line_actions = {action for _, _, action in segments if action}
+        strong = bool(selected_action and selected_action in line_actions and (focused or session is not None))
+        weak = bool(selected_action and selected_action in line_actions and not strong)
+        marker = theme.selection_prefix(selected=strong, current=weak)
+        if marker.strip():
+            marker_style = theme.selection_style() if strong else screen._TEXT_SECONDARY
+            board.put(x, y, marker, marker_style, selected_action, width=min(_SELECTION_GUTTER, width))
+
+        cursor = x + _SELECTION_GUTTER
+        content_right = x + width
         for segment_index, (text, style, action) in enumerate(segments):
-            remaining = max(0, x + width - cursor)
+            remaining = max(0, content_right - cursor)
             if remaining <= 0:
                 break
             shown = screen._clip_cells(text, remaining)
             display = screen._display_width(shown)
             selected = bool(action and action == selected_action and (focused or session is not None))
-            drawn_style = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED if selected else style
+            drawn_style = theme.selection_style() if selected else style
 
             if action:
                 hit_width = max(1, display)
