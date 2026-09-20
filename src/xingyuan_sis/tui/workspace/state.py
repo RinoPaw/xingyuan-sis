@@ -116,7 +116,6 @@ class Workspace:
     form: Form | None = None
     field_session: FieldSession | None = None
     report: list[str] = field(default_factory=list)
-    credentials: list[tuple[str, str]] = field(default_factory=list)
     history: list[Location] = field(default_factory=list)
 
     def __post_init__(self) -> None:
