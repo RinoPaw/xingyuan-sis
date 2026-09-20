@@ -11,7 +11,8 @@ _BUTTON_CURRENT = screen._SURFACE_INTERACTIVE + screen._TEXT_ACCENT
 _BAR_SURFACE = screen._SURFACE_FOOTER + screen._TEXT_PRIMARY
 _TOPBAR = screen._SURFACE_TOPBAR + screen._TEXT_ACCENT + screen._BOLD
 _SECONDARY = screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
-_SELECTED = screen._SURFACE_SELECTED + screen._TEXT_ACCENT
+_SELECTED = screen._SURFACE_SELECTED + screen._TEXT_PRIMARY
+_SELECTED_MARKER = screen._SURFACE_SELECTED + screen._TEXT_ACCENT
 
 
 def selection_prefix(*, selected: bool = False, current: bool = False) -> str:
@@ -20,8 +21,25 @@ def selection_prefix(*, selected: bool = False, current: bool = False) -> str:
 
 
 def selection_style() -> str:
-    """Return the blue strong style used by every directly selectable item."""
+    """Strong selection surface with normal foreground text."""
     return _SELECTED
+
+
+def selection_marker_style() -> str:
+    """Blue marker on the same selected surface as its item."""
+    return _SELECTED_MARKER
+
+
+def _style_selected_marker(text: str, marker: str = ">") -> str:
+    """Style a selected item while keeping only its marker blue."""
+    index = text.find(marker)
+    if index < 0:
+        return screen._ansi(text, _SELECTED)
+    return (
+        screen._ansi(text[:index], _SELECTED)
+        + screen._ansi(marker, _SELECTED_MARKER)
+        + screen._ansi(text[index + len(marker):], _SELECTED)
+    )
 
 
 def bar_space(count: int) -> str:
@@ -41,12 +59,10 @@ def button(
     if width is not None:
         shown = screen._pad_cells(screen._clip_cells(shown, width), width)
     if selected:
-        style = _SELECTED
-    elif current:
-        style = _BUTTON_CURRENT
-    else:
-        style = _BUTTON
-    return screen._ansi(shown, style)
+        return _style_selected_marker(shown)
+    if current:
+        return screen._ansi(shown, _BUTTON_CURRENT)
+    return screen._ansi(shown, _BUTTON)
 
 
 def secondary_item(label: str, *, selected: bool = False, width: int = 10) -> str:
@@ -56,7 +72,7 @@ def secondary_item(label: str, *, selected: bool = False, width: int = 10) -> st
         screen._clip_cells(selection_prefix(selected=selected) + label, width),
         width,
     )
-    return screen._ansi(shown, _SELECTED if selected else _SECONDARY)
+    return _style_selected_marker(shown) if selected else screen._ansi(shown, _SECONDARY)
 
 
 def nav_item(
@@ -71,12 +87,10 @@ def nav_item(
     if width is not None:
         shown = screen._pad_cells(screen._clip_cells(shown, width), width)
     if selected:
-        style = _SELECTED
-    elif current:
-        style = screen._TEXT_ACCENT
-    else:
-        style = screen._TEXT_PRIMARY
-    return screen._ansi(shown, style)
+        return _style_selected_marker(shown)
+    if current:
+        return screen._ansi(shown, screen._TEXT_ACCENT)
+    return screen._ansi(shown, screen._TEXT_PRIMARY)
 
 
 def topbar(width: int, *, database: str | None = None, context: str = "") -> str:
