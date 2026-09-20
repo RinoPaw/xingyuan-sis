@@ -5,10 +5,13 @@ import unittest
 from unittest.mock import patch
 
 from xingyuan_sis.database import initialize_database
+from xingyuan_sis.schema import Field
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import screen, workspace
 from xingyuan_sis.tui.workspace import field_session, student_inspector, view
 from xingyuan_sis.tui.workspace.data import Catalog
+from xingyuan_sis.tui.workspace.picker import prepare_candidates
+from xingyuan_sis.tui.workspace.state import FieldSession
 
 
 class PickerCandidateTests(unittest.TestCase):
@@ -42,6 +45,22 @@ class PickerCandidateTests(unittest.TestCase):
         ]
         self.assertTrue(candidates)
         self.assertTrue(all(style == screen._TEXT_SECONDARY for _, style, _ in candidates))
+
+    def test_dependent_picker_also_excludes_the_value_already_shown_in_field(self):
+        session = FieldSession(
+            fields=(Field("parent", "父项"), Field("child", "子项")),
+            values={"parent": "P2", "child": "B"},
+            original={"parent": "P1", "child": "B"},
+            anchor_key="parent",
+            active=1,
+            options=[("A", "A"), ("B", "B"), ("C", "C")],
+            option_index=1,
+        )
+
+        prepare_candidates(session)
+
+        self.assertEqual(session.options, [("A", "A"), ("C", "C")])
+        self.assertEqual(session.option_index, 0)
 
     def test_picker_marker_uses_left_gutter_without_moving_candidate_text(self):
         state = workspace.Workspace(
