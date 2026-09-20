@@ -105,6 +105,64 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         self.assertEqual(state.field_session.active_key, "contact")
         self.assertIsNone(state.form)
 
+    def test_student_course_and_score_are_independent_targets(self):
+        state = self.inspector_state()
+        row = state.current(self.catalog)
+        related_key, related = self.catalog.related("students", row)
+        item = related[0]
+        course_action = f"related:{related_key}:{item['id']}"
+        score_action = f"field:related:{related_key}:{item['id']}:score"
+
+        lines = student_inspector.lines(row, self.catalog, state)
+        line = next(
+            line for line in lines
+            if any(action == course_action for _, _, action in line)
+        )
+        actions = [action for _, _, action in line if action]
+        self.assertEqual(actions, [course_action, score_action])
+        self.assertNotIn("↗", "".join(text for text, _, _ in line))
+
+        course = next(segment for segment in line if segment[2] == course_action)
+        score = next(segment for segment in line if segment[2] == score_action)
+        self.assertEqual(course[0], item["course_name"])
+        self.assertIn(screen._TEXT_ACCENT, course[1])
+        self.assertIn("\x1b[4m", course[1])
+        self.assertEqual(score[1], screen._TEXT_PRIMARY)
+
+        targets = workspace_events.detail_targets(state, self.catalog)
+        target_actions = [action for _, action in targets]
+        state.detail_selected = target_actions.index(course_action)
+        workspace_events.move_detail_selection(state, self.catalog, "right")
+        self.assertEqual(target_actions[state.detail_selected], score_action)
+
+    def test_related_score_edits_inline_without_leaving_student_archive(self):
+        state = self.inspector_state()
+        student_id = state.current(self.catalog)["id"]
+        related_key, related = self.catalog.related("students", state.current(self.catalog))
+        grade = related[0]
+        pseudo_field = f"related:{related_key}:{grade['id']}:score"
+        score_action = f"field:{pseudo_field}"
+
+        workspace_field.start(state, self.catalog, pseudo_field)
+        self.assertEqual(state.key, "students")
+        self.assertEqual(state.field_session.active_key, "score")
+        self.assertEqual(state.field_session.anchor_key, pseudo_field)
+
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
+             patch.object(screen, "_paint"), \
+             patch.object(workspace_field, "read_inline_input", return_value="88") as inline:
+            workspace_field.edit_current(state, self.catalog)
+
+        self.assertIsNone(state.field_session)
+        self.assertEqual(state.key, "students")
+        self.assertEqual(state.current(self.catalog)["id"], student_id)
+        updated = next(row for row in self.catalog.records["grades"] if row["id"] == grade["id"])
+        self.assertEqual(updated["score"], 88.0)
+        self.assertGreater(inline.call_args.kwargs["row"], 0)
+        self.assertGreater(inline.call_args.kwargs["column"], 0)
+        targets = workspace_events.detail_targets(state, self.catalog)
+        self.assertEqual(targets[state.detail_selected][1], score_action)
+
     def test_enum_picker_expands_inside_inspector_without_replacing_field_target(self):
         state = self.inspector_state()
         workspace_field.start(state, self.catalog, "status")
