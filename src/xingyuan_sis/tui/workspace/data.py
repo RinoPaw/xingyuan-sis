@@ -58,6 +58,9 @@ _STUDENT_ENUMS: dict[str, tuple[str, ...]] = {
     "gender": ("男", "女"),
     "primary_element": ("风", "水", "火", "雷", "岩", "光"),
     "primary_affinity": ("A", "B", "C"),
+    # Dormitory choices are discovered from current records instead of
+    # hard-coding thousands of possible campus/building/room combinations.
+    "dormitory": (),
 }
 _STUDENT_CLASS_FIELDS = (
     Field("major_code", "专业"),
