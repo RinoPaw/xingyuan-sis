@@ -102,19 +102,18 @@ class DocumentRequirementTests(unittest.TestCase):
         self.assertEqual(len(result.errors), len(invalid_numbers))
         self.assertTrue(all("学号只能包含" in error for error in result.errors))
 
-    def test_tui_create_delivers_credentials_only_after_successful_save(self):
+    def test_tui_create_uses_student_number_password_and_stays_in_workspace(self):
         catalog = Catalog(self.db)
         state = Workspace("students")
         forms.open_form(state, catalog, "create")
         state.form.values.update(self.student_values())
-        self.assertFalse(state.credentials)
         forms.apply_form(state, catalog)
-        self.assertEqual(len(state.credentials), 1)
-        no, password = state.credentials[0]
-        self.assertEqual(no, "00990001")
-        self.assertTrue(authenticate(self.db, no, password).must_change_password)
+        identity = authenticate(self.db, "00990001", "00990001")
+        self.assertIsNotNone(identity)
+        self.assertTrue(identity.must_change_password)
         self.assertEqual(state.focus, FocusArea.INSPECTOR)
         self.assertEqual(state.content_panel, ContentPanel.INSPECTOR)
+        self.assertEqual(state.current(catalog)["student_no"], "00990001")
 
     def test_csv_registration_uses_same_validation_and_reports_successful_credentials(self):
         path = self.root / "new.csv"
