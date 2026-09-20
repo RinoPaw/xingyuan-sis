@@ -67,12 +67,15 @@ def _render_delete_panel(
 
 
 def _field_label(field, width: int) -> str:
-    """Render a complete field label; geometry, not clipping, decides its width."""
-    label = screen._ansi(field.label, screen._TEXT_SECONDARY)
-    required = screen._ansi(" *", screen._TEXT_PRIMARY) if field.required else ""
-    used = screen._display_width(field.label) + (2 if field.required else 0)
-    padding = screen._ansi(" " * max(0, width - used), screen._TEXT_SECONDARY)
-    return label + required + padding
+    """Render a complete field label with required markers in one aligned column."""
+    if field.required:
+        label_width = max(0, width - 2)
+        label = screen._pad_cells(field.label, label_width)
+        return (
+            screen._ansi(label, screen._TEXT_SECONDARY)
+            + screen._ansi(" *", screen._TEXT_PRIMARY)
+        )
+    return screen._ansi(screen._pad_cells(field.label, width), screen._TEXT_SECONDARY)
 
 
 def _render_form_heading(
