@@ -40,27 +40,27 @@ class FieldControlGeometryTests(unittest.TestCase):
         self.assertEqual(editing_region.width, selected_region.width)
         self.assertLessEqual(editing_region.width, 28)
 
-    def test_form_enter_keeps_the_typed_value_in_the_draft(self):
+    def test_form_enter_keeps_unicode_name_in_the_draft(self):
         state = workspace.Workspace("students")
         forms.open_form(state, self.catalog, "create")
         state.form.position = next(
-            i for i, field in enumerate(state.form.fields) if field.key == "student_no"
+            i for i, field in enumerate(state.form.fields) if field.key == "name"
         )
         field_session.start_form(state, self.catalog)
 
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
              patch.object(screen, "_paint"), \
-             patch.object(field_session, "read_inline_input", return_value="20990001") as inline:
+             patch.object(field_session, "read_inline_input", return_value="林岚") as inline:
             field_session.edit_current(state, self.catalog)
 
         self.assertIsNone(state.field_session)
-        self.assertEqual(state.form.values["student_no"], "20990001")
+        self.assertEqual(state.form.values["name"], "林岚")
         self.assertLessEqual(inline.call_args.kwargs["width"], 28)
 
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             frame = view.render(state, self.catalog)
         plain = "\n".join(screen._ANSI_RE.sub("", line) for line in frame.lines)
-        self.assertIn("20990001", plain)
+        self.assertIn("林岚", plain)
 
 
 if __name__ == "__main__":
