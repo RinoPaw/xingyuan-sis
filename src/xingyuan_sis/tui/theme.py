@@ -11,6 +11,8 @@ _BAR_SURFACE = screen._SURFACE_FOOTER + screen._TEXT_PRIMARY
 _TOPBAR = screen._SURFACE_TOPBAR + screen._TEXT_ACCENT + screen._BOLD
 _SECONDARY = screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
 _SELECTED_MARKER = screen._SURFACE_SELECTED + screen._TEXT_ACCENT
+_APP_IDENTITY = "✦ 星原 SIS"
+_TOPBAR_SEPARATOR = "   "
 
 
 def selection_prefix(*, selected: bool = False, current: bool = False) -> str:
@@ -61,6 +63,25 @@ def _style_current_marker(
         + screen._ansi(marker, surface + screen._TEXT_SECONDARY)
         + screen._ansi(text[index + len(marker):], item_style)
     )
+
+
+def contextual_item(
+    body: str,
+    *,
+    selected: bool = False,
+    current: bool = False,
+    original_style: str = screen._TEXT_PRIMARY,
+    width: int | None = None,
+) -> str:
+    """Render one item using the global strong/weak context language."""
+    shown = selection_prefix(selected=selected, current=current) + body
+    if width is not None:
+        shown = screen._pad_cells(screen._clip_cells(shown, width), width)
+    if selected:
+        return _style_selected_marker(shown, original_style=original_style)
+    if current:
+        return _style_current_marker(shown, original_style=original_style)
+    return screen._ansi(shown, original_style)
 
 
 def bar_space(count: int) -> str:
@@ -118,24 +139,33 @@ def nav_item(
     width: int | None = None,
 ) -> str:
     """Render navigation with strong actionable focus and visually subordinate context."""
-    shown = selection_prefix(selected=selected, current=current) + label
-    if width is not None:
-        shown = screen._pad_cells(screen._clip_cells(shown, width), width)
-    if selected:
-        return _style_selected_marker(shown, original_style=screen._TEXT_PRIMARY)
-    if current:
-        return _style_current_marker(shown, original_style=screen._TEXT_PRIMARY)
-    return screen._ansi(shown, screen._TEXT_PRIMARY)
+    return contextual_item(label, selected=selected, current=current, width=width)
 
 
-def topbar(width: int, *, database: str | None = None, context: str = "") -> str:
-    """One application identity; account and storage are secondary context."""
-    left = screen._clip_cells("✦ 星原 SIS", width)
+def topbar(
+    width: int,
+    *,
+    database: str | None = None,
+    context: str = "",
+    context_variants: Sequence[str] | None = None,
+) -> str:
+    """Fit application identity, optional context and storage in one place."""
+    left = screen._clip_cells(_APP_IDENTITY, width)
     available = width - screen._display_width(left)
     database_text = f"LOCAL  {database}" if database else ""
-    right = "   ".join(part for part in (context, database_text) if part)
-    if screen._display_width(right) + 2 > available:
-        right = database_text if screen._display_width(database_text) + 2 <= available else ""
+    variants = tuple(context_variants) if context_variants is not None else (context,)
+    if "" not in variants:
+        variants += ("",)
+
+    right = ""
+    for candidate in variants:
+        proposed = _TOPBAR_SEPARATOR.join(
+            part for part in (candidate, database_text) if part
+        )
+        if screen._display_width(proposed) + 2 <= available:
+            right = proposed
+            break
+
     gap = max(0, available - screen._display_width(right))
     return (
         screen._ansi(left, _TOPBAR)
