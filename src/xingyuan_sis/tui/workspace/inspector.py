@@ -45,6 +45,18 @@ def _target_indent(lines: list[Line], target: str) -> int:
 def expand_options(lines: list[Line], session: FieldSession | None) -> list[Line]:
     if session is None or session.options is None:
         return lines
+
+    # The field row already shows the current value.  A directly opened picker
+    # therefore lists only values the user can actually change to.  Dependent
+    # follow-up fields keep their current value available, because retaining it
+    # may be the valid choice after changing the parent field.
+    if session.active_key == session.anchor_key:
+        current = session.values.get(session.active_key)
+        filtered = [option for option in session.options if option[0] != current]
+        if len(filtered) != len(session.options):
+            session.options = filtered
+            session.option_index = 0
+
     target = f"field:{session.active_key}"
     insert_at = next(
         (i + 1 for i, line in enumerate(lines) if any(action == target for _, _, action in line)),
@@ -54,10 +66,10 @@ def expand_options(lines: list[Line], session: FieldSession | None) -> list[Line
     prefix: Line = [(" " * indent, screen._TEXT_PRIMARY, "")] if indent else []
     options = [prefix + [(
         safe(label),
-        screen._TEXT_PRIMARY,
+        screen._TEXT_SECONDARY,
         f"option:{i}",
     )] for i, (_, label) in enumerate(session.options)]
-    lines[insert_at:insert_at] = options or [prefix + [("暂无可选记录", screen._TEXT_SECONDARY, "")]]
+    lines[insert_at:insert_at] = options or [prefix + [("暂无其他候选项", screen._TEXT_SECONDARY, "")]]
     return lines
 
 
@@ -258,8 +270,20 @@ def render_inspector(
                 marker_width = min(screen._display_width(marker), max(0, content_right - cursor))
                 if marker_width:
                     marker_style = theme.selection_marker_style() if strong else screen._TEXT_SECONDARY
-                    board.put(cursor, y, marker, marker_style, action, width=marker_width)
-                    cursor += marker_width
+                    if action.startswith("option:") and cursor - marker_width >= x:
+                        # Picker rows reserve their marker to the left of the
+                        # candidate text.  Selection never moves the text.
+                        board.put(
+                            cursor - marker_width,
+                            y,
+                            marker,
+                            marker_style,
+                            action,
+                            width=marker_width,
+                        )
+                    else:
+                        board.put(cursor, y, marker, marker_style, action, width=marker_width)
+                        cursor += marker_width
 
             remaining = max(0, content_right - cursor)
             if remaining <= 0:
