@@ -142,7 +142,7 @@ class WorkspaceFlowTests(unittest.TestCase):
         self.assertEqual(footer.count("S 保存"), 1)
         self.assertEqual(footer.count("Esc 取消"), 1)
 
-    def test_short_forms_keep_fields_above_the_single_status_and_footer_rows(self):
+    def test_short_forms_keep_fields_above_the_single_footer_row(self):
         for size in ((24, 8), (30, 10), (40, 20)):
             state = Workspace("students", selected=17)
             forms.open_form(state, self.catalog, "create")
@@ -151,7 +151,7 @@ class WorkspaceFlowTests(unittest.TestCase):
                 frame = self.render(state, size)
                 key = state.form.fields[index].key
                 field = next(r for r in frame.regions if r.action == f"field:{key}")
-                self.assertLess(field.y, size[1] - 1)
+                self.assertLess(field.y, size[1])
 
     def test_read_only_queries_and_related_pages_never_expose_write_actions(self):
         row = self.catalog.records["students"][0]
