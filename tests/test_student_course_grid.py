@@ -66,6 +66,18 @@ class StudentCourseGridTests(unittest.TestCase):
             first_course,
         )
 
+    def test_vertical_navigation_is_generic_terminal_geometry(self):
+        style = screen._TEXT_PRIMARY
+        lines = [
+            [("左一", style, "alpha"), ("    ", style, ""), ("右一", style, "omega")],
+            [("左二", style, "beta"), ("    ", style, ""), ("右二", style, "sigma")],
+        ]
+
+        self.assertEqual(directional_target(lines, "alpha", "down"), "beta")
+        self.assertEqual(directional_target(lines, "omega", "down"), "sigma")
+        self.assertEqual(directional_target(lines, "beta", "up"), "alpha")
+        self.assertEqual(directional_target(lines, "sigma", "up"), "omega")
+
     def test_course_rows_share_one_separator_column_and_exact_spacing(self):
         baseline = student_inspector.lines(self.row, self.catalog)
         course_action = next(
