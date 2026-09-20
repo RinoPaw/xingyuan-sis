@@ -7,7 +7,7 @@ from ..layout import WorkspaceLayout
 from ..view_common import Board, identity, panel_heading, safe
 from .data import COLLECTIONS, Catalog
 from .picker import PICKER_GUTTER, prepare_candidates
-from .presentation import display_value, project_record
+from .presentation import delete_impacts, display_value, project_record
 from .state import FieldSessionOwner
 
 if TYPE_CHECKING:
@@ -32,22 +32,12 @@ def _render_delete_panel(
     rows: list[tuple[str, str, str]] = [
         ("记录", title, screen._TEXT_PRIMARY),
         ("标识", identifier, screen._TEXT_SECONDARY),
+        *(
+            (label, value, screen._TEXT_PRIMARY)
+            for label, value in delete_impacts(catalog, state.key, form.original)
+        ),
+        ("风险", "删除后无法撤销", screen._BOLD + screen._TEXT_DANGER),
     ]
-
-    if state.key in {"students", "courses"}:
-        _, related = catalog.related(state.key, form.original)
-        rows.append(("影响", f"{len(related)} 条关联选课将一并移除", screen._TEXT_PRIMARY))
-    elif state.key == "classes":
-        _, students = catalog.related(state.key, form.original)
-        notices = sum(
-            row["class_id"] == form.original["id"]
-            for row in catalog.records["announcements"]
-        )
-        rows.extend((
-            ("影响", f"{len(students)} 名学生将变为未分班", screen._TEXT_PRIMARY),
-            ("同时", f"删除 {notices} 条班级公告", screen._TEXT_PRIMARY),
-        ))
-    rows.append(("风险", "删除后无法撤销", screen._BOLD + screen._TEXT_DANGER))
 
     board.put(x, y, "确认删除以下记录？", screen._BOLD + screen._TEXT_PRIMARY, width=width)
     if y + 1 < bottom:
