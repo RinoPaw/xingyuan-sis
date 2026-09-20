@@ -91,12 +91,20 @@ def button(
 
 
 def secondary_item(label: str, *, selected: bool = False, width: int = 10) -> str:
-    """Render second-level navigation with the same strong selection language."""
+    """Center a second-level label while keeping the focus marker out of its layout."""
     width = max(1, width)
-    shown = screen._pad_cells(
-        screen._clip_cells(selection_prefix(selected=selected) + label, width),
-        width,
-    )
+    if width == 1:
+        shown = ">" if selected else screen._clip_cells(label, 1)
+    else:
+        clipped = screen._clip_cells(label, max(0, width - 2))
+        label_width = screen._display_width(clipped)
+        free = max(0, width - label_width)
+        left = free // 2
+        right = free - left
+        shown = " " * left + clipped + " " * right
+        if selected:
+            marker_index = max(0, left - 2) if left else 0
+            shown = shown[:marker_index] + ">" + shown[marker_index + 1:]
     if selected:
         return _style_selected_marker(shown, original_style=screen._TEXT_PRIMARY)
     return screen._ansi(shown, _SECONDARY)
