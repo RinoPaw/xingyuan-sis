@@ -94,8 +94,10 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
                 + screen._ansi(body, theme.selection_style())
             )
         elif is_current:
-            weak_style = screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
-            text = screen._ansi("· " + body, weak_style)
+            text = (
+                screen._ansi("· ", screen._TEXT_SECONDARY)
+                + screen._ansi(body, screen._TEXT_PRIMARY)
+            )
         else:
             text = "  " + screen._ansi(body, screen._TEXT_PRIMARY)
         board.put(1, data_row + index - first, text, action=f"row:{index}", width=width - 1)
