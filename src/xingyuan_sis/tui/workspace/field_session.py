@@ -10,23 +10,48 @@ from .presentation import project_record
 from .state import FieldSession, FieldSessionOwner, FocusArea, Workspace
 
 
+def _related_anchor(anchor_key: str) -> tuple[str, str, str] | None:
+    """Return collection, record id and real field for an inline related-record target."""
+    if not anchor_key.startswith("related:"):
+        return None
+    parts = anchor_key.split(":", 3)
+    if len(parts) != 4:
+        return None
+    _, collection, identifier, field_key = parts
+    return collection, identifier, field_key
+
+
+def _session_collection(state: Workspace, session: FieldSession) -> str:
+    related = _related_anchor(session.anchor_key)
+    return related[0] if related else state.key
+
+
+def _session_action(session: FieldSession) -> str:
+    """Return the exact rendered target owned by the current field session."""
+    return (
+        f"field:{session.anchor_key}"
+        if _related_anchor(session.anchor_key)
+        else f"field:{session.active_key}"
+    )
+
+
 def _is_birth_session(state: Workspace, session: FieldSession | None = None) -> bool:
     session = state.field_session if session is None else session
     return (
-        state.key == "students"
-        and session is not None
+        session is not None
+        and _session_collection(state, session) == "students"
         and session.anchor_key == "birth_date"
         and tuple(field.key for field in session.fields) == BIRTH_DATE_KEYS
     )
 
 
 def _session_values(
-    state: Workspace,
+    collection: str,
     field_key: str,
     source: dict,
     fields: tuple,
 ) -> dict:
-    if state.key == "students" and field_key == "birth_date":
+    if collection == "students" and field_key == "birth_date":
         return birth_parts(source.get("birth_date"))
     return {field.key: source.get(field.key) for field in fields}
 
@@ -41,6 +66,31 @@ def start(state: Workspace, catalog: Catalog, field_key: str) -> None:
     """Attach a FieldSession to one stable field target in an existing record."""
     if catalog.read_only:
         raise ValueError("当前档案为只读。")
+
+    related = _related_anchor(field_key)
+    if related:
+        collection, identifier, real_field_key = related
+        row = next(
+            (row for row in catalog.records.get(collection, ()) if str(row["id"]) == identifier),
+            None,
+        )
+        if row is None:
+            raise ValueError("关联记录已经不存在。")
+        fields = catalog.edit_group(collection, real_field_key)
+        if not fields:
+            raise ValueError("该字段为只读。")
+        state.field_session = FieldSession(
+            fields=fields,
+            values=_session_values(collection, real_field_key, row, fields),
+            original=dict(row),
+            anchor_key=field_key,
+            owner=FieldSessionOwner.RECORD,
+        )
+        state.form = None
+        state.set_focus(FocusArea.INSPECTOR)
+        state.notice = ""
+        return
+
     row = state.current(catalog)
     if row is None:
         raise ValueError("先选择一条记录。")
@@ -58,7 +108,7 @@ def start(state: Workspace, catalog: Catalog, field_key: str) -> None:
 
     state.field_session = FieldSession(
         fields=fields,
-        values=_session_values(state, field_key, row, fields),
+        values=_session_values(state.key, field_key, row, fields),
         original=dict(row),
         anchor_key=field_key,
         owner=FieldSessionOwner.RECORD,
@@ -88,7 +138,7 @@ def start_form(state: Workspace, catalog: Catalog, index: int | None = None) -> 
 
     state.field_session = FieldSession(
         fields=fields,
-        values=_session_values(state, field.key, form.values, fields),
+        values=_session_values(state.key, field.key, form.values, fields),
         original=dict(form.values),
         anchor_key=field.key,
         owner=FieldSessionOwner.FORM,
@@ -110,8 +160,9 @@ def projected_values(state: Workspace, catalog: Catalog | None = None) -> dict:
     values = project_record(session.original, session)
     if _is_birth_session(state, session):
         values["birth_date"] = projected_birth_date(session.values)
-    if catalog is not None and state.key in COLLECTIONS:
-        return catalog.project(state.key, values)
+    collection = _session_collection(state, session)
+    if catalog is not None and collection in COLLECTIONS:
+        return catalog.project(collection, values)
     return values
 
 
@@ -136,12 +187,13 @@ def _open_options(state: Workspace, catalog: Catalog) -> bool:
             state.notice = ""
             return True
 
-    if state.key not in COLLECTIONS:
+    collection = _session_collection(state, session)
+    if collection not in COLLECTIONS:
         session.options = None
         return False
 
     values = projected_values(state, catalog)
-    options = catalog.normalize_option_value(state.key, session.active_key, values)
+    options = catalog.normalize_option_value(collection, session.active_key, values)
     if options is None:
         session.options = None
         return False
@@ -157,8 +209,8 @@ def _open_options(state: Workspace, catalog: Catalog) -> bool:
     return True
 
 
-def _field_geometry(frame: screen.ScreenFrame, field_key: str) -> tuple[int, int, int]:
-    region = next(region for region in frame.regions if region.action == f"field:{field_key}")
+def _field_geometry(frame: screen.ScreenFrame, action: str) -> tuple[int, int, int]:
+    region = next(region for region in frame.regions if region.action == action)
     return region.y, region.x, max(1, region.width)
 
 
@@ -177,7 +229,7 @@ def edit_current(state: Workspace, catalog: Catalog) -> None:
     state.notice = ""
     frame = render(state, catalog)
     screen._paint(frame.lines)
-    row, column, width = _field_geometry(frame, field.key)
+    row, column, width = _field_geometry(frame, _session_action(session))
     with input_style(True):
         raw = read_inline_input(
             f"{field.label} > ",
@@ -252,8 +304,22 @@ def commit(state: Workspace, catalog: Catalog) -> None:
         state.notice = ""
         return
 
-    record_id = catalog.save(state.key, changes, session.original)
+    collection = _session_collection(state, session)
+    record_id = catalog.save(collection, changes, session.original)
     state.field_session = None
+
+    if collection != state.key:
+        state.notice = "已保存。"
+        state.set_focus(FocusArea.INSPECTOR)
+        from .events import detail_targets
+
+        action = f"field:{session.anchor_key}"
+        state.detail_selected = next(
+            (i for i, (_, target) in enumerate(detail_targets(state, catalog)) if target == action),
+            state.detail_selected,
+        )
+        return
+
     rows = state.rows(catalog)
     state.selected = next((i for i, row in enumerate(rows) if row["id"] == record_id), state.selected)
     state.notice = (
