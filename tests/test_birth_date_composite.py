@@ -1,9 +1,14 @@
+from contextlib import nullcontext
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
+from xingyuan_sis.tui import screen
+from xingyuan_sis.tui.text_edit import TextEvent
 from xingyuan_sis.tui.view_common import Board
 from xingyuan_sis.tui.workspace import editor, field_session, forms, student_inspector
 from xingyuan_sis.tui.workspace.birth_date_editor import display, options, parts
@@ -69,17 +74,50 @@ class BirthDateCompositeTests(unittest.TestCase):
         self.assertIn("9-7", "".join(text for text, _, _ in line))
         self.assertEqual([action for _, _, action in line if action], ["field:birth_date"])
 
-    def test_editing_line_uses_three_transient_targets(self):
+    def test_editing_line_uses_three_independent_fixed_slots(self):
         state = Workspace("students")
         field_session.start(state, self.catalog, "birth_date")
         line = next(
             line for line in student_inspector.lines(state.current(self.catalog), self.catalog, state)
             if line and line[0][0].startswith("出生日期")
         )
+        segments = {action: text for text, _, action in line if action}
         self.assertEqual(
-            [action for _, _, action in line if action],
+            list(segments),
             ["field:birth_year", "field:birth_month", "field:birth_day"],
         )
+        self.assertEqual(screen._display_width(segments["field:birth_year"]), 4)
+        self.assertEqual(screen._display_width(segments["field:birth_month"]), 2)
+        self.assertEqual(screen._display_width(segments["field:birth_day"]), 2)
+
+    def test_masked_editor_moves_between_slots_and_commits_once(self):
+        row = self.catalog.rows("students")[0]
+        student_no = row["student_no"]
+        self.catalog.service.update_student_by_no(student_no, birth_date="2006-09-07")
+        self.catalog.refresh()
+        state = Workspace("students")
+        field_session.start(state, self.catalog, "birth_date")
+
+        events = [
+            TextEvent("right"),
+            TextEvent("insert", "1"),
+            TextEvent("insert", "2"),
+            TextEvent("right"),
+            TextEvent("insert", "3"),
+            TextEvent("insert", "1"),
+            TextEvent("submit"),
+        ]
+        with patch.object(field_session, "input_mode", return_value=nullcontext()), \
+             patch.object(field_session, "editing_cursor", return_value=nullcontext()), \
+             patch.object(field_session, "read_event", side_effect=events), \
+             patch.object(field_session, "_position_birth_cursor"), \
+             patch.object(screen, "_paint"), \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+            field_session.edit_current(state, self.catalog)
+
+        self.assertIsNone(state.field_session)
+        saved = self.catalog.service.student_by_no(student_no)
+        self.assertEqual(saved["birth_date"], "2006-12-31")
 
     def test_create_form_keeps_one_business_field_and_three_edit_slots(self):
         state = Workspace("students")
