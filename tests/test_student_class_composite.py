@@ -50,7 +50,7 @@ class StudentClassCompositeTests(unittest.TestCase):
                 line = next(line for line in lines if line and line[0][0].startswith(label))
                 self.assertEqual([action for _, _, action in line if action], actions)
 
-    def test_create_form_composites_use_the_same_field_session_progression(self):
+    def test_create_form_parent_choice_never_auto_advances_to_child(self):
         for first, second in (
             ("family", "branch"),
             ("major_code", "class_number"),
@@ -61,7 +61,6 @@ class StudentClassCompositeTests(unittest.TestCase):
                 forms.open_form(state, self.catalog, "create")
                 form = state.form
                 form.position = next(i for i, field in enumerate(form.fields) if field.key == first)
-                original = dict(form.values)
 
                 field_session.start_form(state, self.catalog)
                 self.assertIs(state.field_session.owner, FieldSessionOwner.FORM)
@@ -77,40 +76,75 @@ class StudentClassCompositeTests(unittest.TestCase):
                 parent_value = state.field_session.options[parent_index][0]
                 field_session.accept_option(state, self.catalog, parent_index)
 
-                self.assertEqual(state.field_session.active_key, second)
-                self.assertIsNotNone(state.field_session.options)
-                self.assertEqual(form.values.get(first), original.get(first))
-
-                child_index = next(
-                    (i for i, (value, _) in enumerate(state.field_session.options) if value is not None),
-                    0,
-                )
-                child_value = state.field_session.options[child_index][0]
-                field_session.accept_option(state, self.catalog, child_index)
-
                 self.assertIsNone(state.field_session)
                 self.assertEqual(form.values.get(first), parent_value)
-                self.assertEqual(form.values.get(second), child_value)
+                self.assertEqual(form.position, next(i for i, field in enumerate(form.fields) if field.key == first))
 
-    def test_existing_record_composites_progress_through_the_same_pairs(self):
-        for first, second in (
-            ("family", "branch"),
-            ("major_code", "class_number"),
-            ("primary_element", "primary_affinity"),
-        ):
-            with self.subTest(group=(first, second)):
-                state = Workspace("students")
-                field_session.start(state, self.catalog, first)
-                field_session.edit_current(state, self.catalog)
-                self.assertEqual(state.field_session.active_key, first)
-                self.assertIsNotNone(state.field_session.options)
-                option_index = next(
-                    i for i, (value, _) in enumerate(state.field_session.options)
-                    if value is not None
-                )
-                field_session.accept_option(state, self.catalog, option_index)
-                self.assertEqual(state.field_session.active_key, second)
-                self.assertIsNotNone(state.field_session.options)
+                form.position = next(i for i, field in enumerate(form.fields) if field.key == second)
+                field_session.start_form(state, self.catalog)
+                self.assertEqual([field.key for field in state.field_session.fields], [second])
+
+    def test_invalid_dependent_child_waits_for_explicit_right_navigation(self):
+        state = Workspace("students")
+        original = state.current(self.catalog).copy()
+        original_branch = original["branch"]
+        families = self.catalog.options("students", "family", original)
+        target_family = next(
+            family for family, _ in families
+            if family != original["family"] and original_branch not in {
+                row["name"] for row in self.catalog.species_branches
+                if row["family_name"] == family
+            }
+        )
+
+        field_session.start(state, self.catalog, "family")
+        field_session.edit_current(state, self.catalog)
+        family_index = next(
+            i for i, (value, _) in enumerate(state.field_session.options)
+            if value == target_family
+        )
+        field_session.accept_option(state, self.catalog, family_index)
+
+        self.assertIsNotNone(state.field_session)
+        self.assertEqual(state.field_session.active_key, "family")
+        self.assertIsNone(state.field_session.options)
+        self.assertIsNone(state.field_session.values["branch"])
+        self.assertEqual(
+            self.catalog.service.student_by_no(original["student_no"])["family"],
+            original["family"],
+        )
+
+        self.assertTrue(field_session.move_active_field(state, "right"))
+        self.assertEqual(state.field_session.active_key, "branch")
+        field_session.edit_current(state, self.catalog)
+        branch_index = next(
+            i for i, (value, _) in enumerate(state.field_session.options)
+            if value is not None
+        )
+        target_branch = state.field_session.options[branch_index][0]
+        field_session.accept_option(state, self.catalog, branch_index)
+
+        self.assertIsNone(state.field_session)
+        changed = self.catalog.service.student_by_no(original["student_no"])
+        self.assertEqual((changed["family"], changed["branch"]), (target_family, target_branch))
+
+    def test_valid_parent_change_commits_without_visiting_child(self):
+        state = Workspace("students")
+        original = state.current(self.catalog).copy()
+        field_session.start(state, self.catalog, "primary_element")
+        field_session.edit_current(state, self.catalog)
+        option_index = next(
+            i for i, (value, _) in enumerate(state.field_session.options)
+            if value not in {None, original["primary_element"]}
+        )
+        selected = state.field_session.options[option_index][0]
+        field_session.accept_option(state, self.catalog, option_index)
+
+        self.assertIsNone(state.field_session)
+        self.assertEqual(
+            self.catalog.service.student_by_no(original["student_no"])["primary_element"],
+            selected,
+        )
 
     def test_create_form_persists_major_and_class_number_as_canonical_class(self):
         state = Workspace("students")
