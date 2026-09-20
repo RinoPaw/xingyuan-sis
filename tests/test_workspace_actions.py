@@ -182,7 +182,12 @@ class WorkspaceActionTests(unittest.TestCase):
 
         record_line = next(line for line in plain_lines if "记录" in line and selected["name"] in line)
         id_line = next(line for line in plain_lines if "标识" in line and selected["student_no"] in line)
-        self.assertEqual(record_line.index(selected["name"]), id_line.index(selected["student_no"]))
+        record_value = record_line.rfind(selected["name"])
+        id_value = id_line.rfind(selected["student_no"])
+        self.assertEqual(
+            screen._display_width(record_line[:record_value]),
+            screen._display_width(id_line[:id_value]),
+        )
 
     def test_literal_command_shortcuts_open_the_same_transaction_forms(self):
         for key, action in (("a", "create"), ("d", "delete")):
