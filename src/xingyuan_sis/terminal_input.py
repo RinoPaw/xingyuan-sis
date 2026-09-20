@@ -45,10 +45,11 @@ def _set_cursor_visible(visible: bool) -> None:
 
 @contextmanager
 def editing_cursor():
-    """Expose an editor cursor and keep it visible when the editor exits."""
+    """Expose a blinking insertion caret and keep it visible on exit."""
     enabled = sys.stdout.isatty()
     if enabled:
-        sys.stdout.write("\x1b[?25h\x1b[?12h\x1b[1 q")
+        # DECSCUSR 5 requests a blinking vertical bar instead of a block cursor.
+        sys.stdout.write("\x1b[?25h\x1b[?12h\x1b[5 q")
         sys.stdout.flush()
     try:
         yield
@@ -119,7 +120,8 @@ def _redraw_inline(
     style = _FIELD_STYLE if colored else ""
     surface = _PAGE_STYLE if colored else ""
     sys.stdout.write(f"\x1b[{max(1, row)};{max(1, column)}H" + style + content + surface)
-    sys.stdout.write(f"\x1b[{max(1, row)};{max(1, column) + min(cursor_cells, field_width - 1)}H")
+    # A caret is an insertion point between cells, so the end position is valid.
+    sys.stdout.write(f"\x1b[{max(1, row)};{max(1, column) + min(cursor_cells, field_width)}H")
     sys.stdout.flush()
 
 
