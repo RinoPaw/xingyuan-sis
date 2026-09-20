@@ -81,6 +81,7 @@ class TuiInputGuardTests(unittest.TestCase):
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 24))), \
              patch.object(screen, "_paint") as paint, patch("sys.stdout.isatty", return_value=False), \
              patch.object(auth_view, "input_mode", return_value=nullcontext()), \
+             patch.object(auth_view, "editing_cursor", return_value=nullcontext()), \
              patch.object(auth_view, "read_event", side_effect=events):
             result = auth_view._run_form(
                 "login",
@@ -95,6 +96,7 @@ class TuiInputGuardTests(unittest.TestCase):
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 24))), \
              patch.object(screen, "_paint") as paint, patch("sys.stdout.isatty", return_value=False), \
              patch.object(auth_view, "input_mode", return_value=nullcontext()), \
+             patch.object(auth_view, "editing_cursor", return_value=nullcontext()), \
              patch.object(auth_view, "read_event", side_effect=[None, TextEvent("cancel")]):
             result = auth_view._run_form(
                 "login",
@@ -117,8 +119,10 @@ class TuiInputGuardTests(unittest.TestCase):
             auth_view._paint_form(["row"], [], (12, 7))
 
         self.assertEqual(events, ["paint"])
-        self.assertEqual(write.call_args_list[0].args[0], "\x1b[?25l")
-        self.assertEqual(write.call_args_list[-1].args[0], "\x1b[8;13H\x1b[?25h")
+        output = "".join(call.args[0] for call in write.call_args_list)
+        self.assertTrue(output.startswith("\x1b[?25l"))
+        self.assertIn("\x1b[8;13H", output)
+        self.assertTrue(output.endswith("\x1b[?25h"))
 
     def test_idle_refresh_hides_terminal_cursor_until_input_is_redrawn(self):
         events: list[str] = []
@@ -134,7 +138,7 @@ class TuiInputGuardTests(unittest.TestCase):
         self.assertEqual(write.call_args_list[0].args[0], "\x1b[?25l")
         self.assertEqual(write.call_args_list[-1].args[0], "\x1b[?25h")
 
-    def test_inline_editor_requests_a_visible_blinking_insertion_caret(self):
+    def test_every_tui_input_requests_the_same_blinking_insertion_caret(self):
         with patch("sys.stdout.isatty", return_value=True), \
              patch("sys.stdout.write") as write, patch("sys.stdout.flush"):
             with terminal_input.editing_cursor():
@@ -146,6 +150,23 @@ class TuiInputGuardTests(unittest.TestCase):
         self.assertIn("\x1b[5 q", output)
         self.assertNotIn("\x1b[1 q", output)
         self.assertTrue(output.endswith("\x1b[?25h\x1b[0 q"))
+
+    def test_line_editor_uses_shared_editing_cursor(self):
+        with patch.object(terminal_input, "input_mode", return_value=nullcontext()), \
+             patch.object(terminal_input, "editing_cursor", return_value=nullcontext()) as cursor, \
+             patch.object(terminal_input, "read_event", return_value=TextEvent("submit")), \
+             patch.object(terminal_input, "_redraw_line"):
+            terminal_input._read_interactive_line("搜索 > ", colored=True)
+        cursor.assert_called_once_with()
+
+    def test_auth_form_uses_shared_editing_cursor(self):
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 24))), \
+             patch.object(auth_view, "input_mode", return_value=nullcontext()), \
+             patch.object(auth_view, "editing_cursor", return_value=nullcontext()) as cursor, \
+             patch.object(auth_view, "read_event", return_value=TextEvent("cancel")), \
+             patch.object(auth_view, "_paint_form"):
+            auth_view._run_form("login", {"username": "", "password": ""}, database="test.db")
+        cursor.assert_called_once_with()
 
     def test_inline_caret_can_sit_after_the_last_character(self):
         buffer = TextBuffer.from_value("12")
