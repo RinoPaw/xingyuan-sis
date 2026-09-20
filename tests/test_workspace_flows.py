@@ -178,26 +178,38 @@ class WorkspaceFlowTests(unittest.TestCase):
         self.assertIn("备注", text)
         self.assertIn("出生日期", text)
 
-    def test_family_change_waits_for_branch_then_commits_atomically(self):
+    def test_family_change_waits_in_place_until_user_moves_to_branch(self):
         state = self.inspector_state("students")
         original = state.current(self.catalog).copy()
+        original_branch = original["branch"]
         field_session.start(state, self.catalog, "family")
         field_session.edit_current(state, self.catalog)
         family_index = next(
             i for i, (value, _) in enumerate(state.field_session.options)
-            if value != original["family"]
-            and any(row["family_name"] == value for row in self.catalog.species_branches)
+            if value != original["family"] and original_branch not in {
+                row["name"] for row in self.catalog.species_branches
+                if row["family_name"] == value
+            }
         )
         chosen_family = state.field_session.options[family_index][0]
         field_session.accept_option(state, self.catalog, family_index)
-        self.assertEqual(state.field_session.active_key, "branch")
-        self.assertIsNotNone(state.field_session.options)
+
+        self.assertEqual(state.field_session.active_key, "family")
+        self.assertIsNone(state.field_session.options)
         self.assertEqual(
             self.catalog.service.student_by_no(original["student_no"])["family"],
             original["family"],
         )
-        chosen_branch = state.field_session.options[0][0]
-        field_session.accept_option(state, self.catalog, 0)
+
+        field_session.move_active_field(state, "right")
+        self.assertEqual(state.field_session.active_key, "branch")
+        field_session.edit_current(state, self.catalog)
+        branch_index = next(
+            i for i, (value, _) in enumerate(state.field_session.options)
+            if value is not None
+        )
+        chosen_branch = state.field_session.options[branch_index][0]
+        field_session.accept_option(state, self.catalog, branch_index)
         changed = self.catalog.service.student_by_no(original["student_no"])
         self.assertEqual((changed["family"], changed["branch"]), (chosen_family, chosen_branch))
 
