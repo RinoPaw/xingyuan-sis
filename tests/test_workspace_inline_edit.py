@@ -177,6 +177,35 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         self.assertTrue(any(region.action == "field:status" for region in frame.regions))
         self.assertFalse(any(region.action == "save" for region in frame.regions))
 
+    def test_picker_options_align_under_the_active_field(self):
+        state = self.inspector_state()
+        workspace_field.start(state, self.catalog, "major_code")
+        workspace_field.edit_current(state, self.catalog)
+
+        lines = student_inspector.lines(state.current(self.catalog), self.catalog, state)
+        target = "field:major_code"
+        field_index = next(
+            i for i, line in enumerate(lines)
+            if any(action == target for _, _, action in line)
+        )
+        field_line = lines[field_index]
+        option_line = lines[field_index + 1]
+
+        field_indent = 0
+        for text, _, action in field_line:
+            if action == target:
+                break
+            field_indent += screen._display_width(text)
+
+        option_indent = 0
+        for text, _, action in option_line:
+            if action.startswith("option:"):
+                break
+            option_indent += screen._display_width(text)
+
+        self.assertGreater(field_indent, 0)
+        self.assertEqual(option_indent, field_indent)
+
     def test_freeform_enter_saves_immediately(self):
         state = self.inspector_state()
         workspace_field.start(state, self.catalog, "contact")
