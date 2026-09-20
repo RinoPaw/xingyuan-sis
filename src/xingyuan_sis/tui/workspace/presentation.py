@@ -35,3 +35,26 @@ def display_value(
     if options is not None:
         return next((label for option, label in options if option == value), safe(value))
     return safe(value)
+
+
+def delete_impacts(
+    catalog: Catalog,
+    collection: str,
+    row: Mapping[str, Any],
+) -> tuple[tuple[str, str], ...]:
+    """Describe relationship changes caused by deleting one record."""
+    record = dict(row)
+    if collection in {"students", "courses"}:
+        _, related = catalog.related(collection, record)
+        return (("影响", f"{len(related)} 条关联选课将一并移除"),)
+    if collection == "classes":
+        _, students = catalog.related(collection, record)
+        notices = sum(
+            notice["class_id"] == record["id"]
+            for notice in catalog.records["announcements"]
+        )
+        return (
+            ("影响", f"{len(students)} 名学生将变为未分班"),
+            ("同时", f"删除 {notices} 条班级公告"),
+        )
+    return ()
