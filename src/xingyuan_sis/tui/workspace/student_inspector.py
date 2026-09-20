@@ -51,6 +51,11 @@ def lines(
     ) -> Segment:
         return field_segment(catalog, "students", values, key, text, style)
 
+    def birth_slot(key: str, width: int) -> str:
+        raw = values.get(key)
+        text = "" if raw is None else str(raw)
+        return screen._pad_cells(screen._clip_cells(text, width), width)
+
     year = values.get("enrollment_year")
     result: list[Line] = [
         [field("name", style=screen._BOLD + screen._TEXT_PRIMARY)],
@@ -108,11 +113,11 @@ def lines(
     if birth_editing:
         result.append([
             label("出生日期  "),
-            field("birth_year", " " if values.get("birth_year") is None else str(values["birth_year"])),
+            field("birth_year", birth_slot("birth_year", 4)),
             ("-", screen._TEXT_SECONDARY, ""),
-            field("birth_month", " " if values.get("birth_month") is None else str(values["birth_month"])),
+            field("birth_month", birth_slot("birth_month", 2)),
             ("-", screen._TEXT_SECONDARY, ""),
-            field("birth_day", " " if values.get("birth_day") is None else str(values["birth_day"])),
+            field("birth_day", birth_slot("birth_day", 2)),
         ])
     else:
         result.append([label("出生日期  "), field("birth_date")])
