@@ -9,7 +9,7 @@ from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import keys, screen
 from xingyuan_sis.tui.workspace import events, forms, view
 from xingyuan_sis.tui.workspace.data import COLLECTIONS, Catalog
-from xingyuan_sis.tui.workspace.state import Workspace
+from xingyuan_sis.tui.workspace.state import FieldSessionOwner, Workspace
 
 
 class CreateFormConsistencyTests(unittest.TestCase):
@@ -47,7 +47,7 @@ class CreateFormConsistencyTests(unittest.TestCase):
                 self.assertNotIn("更改暂存", body)
                 self.assertTrue(any(region.action.startswith("field:") for region in frame.regions))
                 self.assertFalse(any(region.action == "save" for region in frame.regions))
-                self.assertNotIn("Enter 编辑", footer)
+                self.assertEqual(footer.count("Enter 编辑"), 1)
                 self.assertEqual(footer.count("S 保存"), 1)
                 self.assertEqual(footer.count("Esc 取消"), 1)
 
@@ -56,23 +56,35 @@ class CreateFormConsistencyTests(unittest.TestCase):
                 else:
                     self.assertIn("名册还是空白的", body)
 
-    def test_every_record_create_enters_the_first_field_immediately(self):
+    def test_every_record_create_waits_for_enter_before_field_session(self):
         for key in COLLECTIONS:
             with self.subTest(key=key):
                 state = Workspace(key)
-                event = self.interact(state, ["create"])
-                self.assertEqual(event, ("field", 0))
+                event = self.interact(state, ["create", "refresh"])
+                self.assertEqual(event, ("refresh", 0))
+                self.assertIsNotNone(state.form)
                 self.assertEqual(state.form.position, 0)
+                self.assertIsNone(state.field_session)
 
-    def test_moving_between_create_fields_immediately_opens_the_new_field(self):
+                event = self.interact(state, ["select"])
+                self.assertEqual(event, ("field-edit", 0))
+                self.assertIsNotNone(state.field_session)
+                self.assertIs(state.field_session.owner, FieldSessionOwner.FORM)
+                self.assertEqual(state.field_session.anchor_key, state.form.fields[0].key)
+
+    def test_moving_between_create_fields_does_not_enter_edit_state(self):
         for key in COLLECTIONS:
             state = Workspace(key)
             forms.open_form(state, self.catalog, "create")
             if len(state.form.fields) < 2:
                 continue
             with self.subTest(key=key):
-                self.assertEqual(self.interact(state, ["down"]), ("field", 1))
+                self.assertEqual(self.interact(state, ["down", "refresh"]), ("refresh", 0))
                 self.assertEqual(state.form.position, 1)
+                self.assertIsNone(state.field_session)
+
+                self.assertEqual(self.interact(state, ["select"]), ("field-edit", 0))
+                self.assertEqual(state.field_session.anchor_key, state.form.fields[1].key)
 
 
 if __name__ == "__main__":

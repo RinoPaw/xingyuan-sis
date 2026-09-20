@@ -28,14 +28,20 @@ class ContentPanel(str, Enum):
     INSPECTOR = "inspector"
 
 
+class FieldSessionOwner(str, Enum):
+    """Where a confirmed field session writes its values."""
+
+    RECORD = "record"
+    FORM = "form"
+
+
 @dataclass
 class Form:
-    """A complete transaction form.
+    """A complete transaction draft.
 
-    Existing-record field editing does not use this type. Forms are reserved for
-    create/import/export/delete/reset/seed style transactions that genuinely own
-    their own transaction state. Field-bearing forms keep one active field; save
-    remains a command instead of a second focus target.
+    Forms own transaction-wide values and the currently selected field. They do
+    not own a second field editor: entering any field creates a FieldSession,
+    exactly as it does for an existing record.
     """
 
     mode: str
@@ -43,18 +49,17 @@ class Form:
     values: dict[str, Any] = field(default_factory=dict)
     original: dict[str, Any] | None = None
     position: int = 0
-    options: list[tuple[Any, str]] | None = None
-    option_index: int = 0
 
 
 @dataclass
 class FieldSession:
-    """Local interaction state attached to one stable inspector field target."""
+    """One local field/group edit, independent of its persistence destination."""
 
     fields: tuple[Field, ...]
     values: dict[str, Any]
     original: dict[str, Any]
     anchor_key: str
+    owner: FieldSessionOwner = FieldSessionOwner.RECORD
     active: int = 0
     options: list[tuple[Any, str]] | None = None
     option_index: int = 0

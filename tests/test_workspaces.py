@@ -106,7 +106,7 @@ class WorkspaceTests(unittest.TestCase):
         expected = STUDENTS[0]
         with patch("builtins.input", return_value=str(expected[1])), \
              patch.object(screen, "_paint"), redirect_stdout(StringIO()):
-            workspace_forms.read_value(state, self.catalog, ("search", 0))
+            workspace_forms.read_search(state, self.catalog)
         self.assertEqual([row["student_no"] for row in state.rows(self.catalog)], [str(expected[0])])
 
     def test_field_session_saves_freeform_value_without_record_form(self):

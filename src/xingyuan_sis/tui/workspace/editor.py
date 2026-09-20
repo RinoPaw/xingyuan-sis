@@ -6,13 +6,15 @@ from .. import screen
 from ..layout import WorkspaceLayout
 from ..view_common import Board, identity, panel_heading, safe
 from .data import COLLECTIONS, Catalog
+from .presentation import display_value, project_record
+from .state import FieldSessionOwner
 
 if TYPE_CHECKING:
     from .state import Workspace
 
 
 def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, width: int) -> None:
-    """Render a transaction in the same panel geometry used by the record inspector."""
+    """Render a complete transaction while FieldSession owns any active field edit."""
     form = state.form
     layout = WorkspaceLayout(board.width, board.height)
     heading_row = layout.panel_heading_row(state.key)
@@ -66,17 +68,22 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
                 board.put(x, y, message, style, width=width)
         return
 
+    session = state.field_session
+    if session is not None and session.owner is not FieldSessionOwner.FORM:
+        session = None
+    values = project_record(form.values, session)
+
     entries: list[tuple[str, int, object]] = []
     selected_entry = 0
     for index, field in enumerate(form.fields):
         entries.append(("field", index, field))
         if index == form.position:
             selected_entry = len(entries) - 1
-            if form.options is not None:
-                if form.options:
-                    for option_index, (_, label) in enumerate(form.options):
+            if session is not None and session.active_key == field.key and session.options is not None:
+                if session.options:
+                    for option_index, (_, label) in enumerate(session.options):
                         entries.append(("option", option_index, label))
-                        if option_index == form.option_index:
+                        if option_index == session.option_index:
                             selected_entry = len(entries) - 1
                 else:
                     entries.append(("empty", 0, "暂无可选记录，请先创建。"))
@@ -88,6 +95,8 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         max(0, len(entries) - capacity),
     )
     label_width = min(12, max(4, width // 3))
+    value_x = x + label_width + 2
+    value_width = max(1, width - label_width - 2)
 
     for visible_index, (kind, index, payload) in enumerate(entries[first:first + capacity]):
         y = content_row + visible_index
@@ -95,7 +104,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
             text = screen._pad_cells(screen._clip_cells("  " + safe(payload), width), width)
             style = (
                 screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
-                if index == form.option_index
+                if session is not None and index == session.option_index
                 else screen._TEXT_PRIMARY
             )
             board.put(x, y, text, style, f"option:{index}", width)
@@ -105,16 +114,15 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
             continue
 
         field = payload
-        value = safe(form.values.get(field.key))
-        if form.mode == "create":
-            options = catalog.options(state.key, field.key, form.values)
-            if options is not None:
-                value = next((label for key, label in options if key == form.values.get(field.key)), value)
-        label = screen._pad_cells(
-            screen._clip_cells(field.label + ("*" if field.required else ""), label_width),
-            label_width,
+        value = (
+            display_value(catalog, state.key, values, field.key)
+            if state.key in COLLECTIONS
+            else safe(values.get(field.key))
         )
-        text = screen._pad_cells(screen._clip_cells(f"{label}  {value}", width), width)
-        selected = index == form.position and form.options is None
+        label = screen._pad_cells(screen._clip_cells(field.label, label_width), label_width)
+        board.put(x, y, label, screen._TEXT_SECONDARY, width=label_width)
+
+        selected = index == form.position and (session is None or session.options is None)
         style = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED if selected else screen._TEXT_PRIMARY
-        board.put(x, y, text, style, f"field:{index}", width)
+        text = screen._pad_cells(screen._clip_cells(value, value_width), value_width)
+        board.put(value_x, y, text, style, f"field:{field.key}", value_width)

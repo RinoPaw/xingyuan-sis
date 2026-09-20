@@ -11,7 +11,7 @@ from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import keys, screen
 from xingyuan_sis.tui.workspace import events, field_session, forms, view
 from xingyuan_sis.tui.workspace.data import Catalog
-from xingyuan_sis.tui.workspace.state import ContentPanel, FocusArea, Workspace
+from xingyuan_sis.tui.workspace.state import ContentPanel, FieldSessionOwner, FocusArea, Workspace
 
 
 class WorkspaceFlowTests(unittest.TestCase):
@@ -105,15 +105,21 @@ class WorkspaceFlowTests(unittest.TestCase):
                         self.assertTrue(any(r.action == f"field:{state.field_session.active_key}" for r in frame.regions))
                         self.assertFalse(any(r.action == "save" for r in frame.regions))
 
-    def test_create_opens_first_field_without_enter_and_save_stays_a_command(self):
+    def test_create_requires_enter_to_edit_and_arrows_only_move_selection(self):
         state = Workspace("students")
-        self.assertEqual(self.interact(state, ["create"], (120, 35)), ("field", 0))
+        self.assertEqual(self.interact(state, ["create", "refresh"], (120, 35)), ("refresh", 0))
         self.assertIsNotNone(state.form)
         self.assertEqual(state.form.position, 0)
-        self.assertFalse(hasattr(state.form, "focus_save"))
+        self.assertIsNone(state.field_session)
 
-        self.assertEqual(self.interact(state, ["down"], (120, 35)), ("field", 1))
+        self.assertEqual(self.interact(state, ["down", "refresh"], (120, 35)), ("refresh", 0))
         self.assertEqual(state.form.position, 1)
+        self.assertIsNone(state.field_session)
+
+        self.assertEqual(self.interact(state, ["select"], (120, 35)), ("field-edit", 0))
+        self.assertIs(state.field_session.owner, FieldSessionOwner.FORM)
+        self.assertEqual(state.field_session.anchor_key, state.form.fields[1].key)
+        field_session.cancel(state)
         self.assertEqual(self.interact(state, ["save"], (120, 35)), ("save", 0))
 
     def test_create_keeps_workspace_visible_and_has_one_interaction_contract(self):
@@ -132,7 +138,7 @@ class WorkspaceFlowTests(unittest.TestCase):
         self.assertTrue(any(region.action.startswith("row:") for region in frame.regions))
         self.assertTrue(any(region.action.startswith("field:") for region in frame.regions))
         self.assertFalse(any(region.action == "save" for region in frame.regions))
-        self.assertNotIn("Enter 编辑", footer)
+        self.assertEqual(footer.count("Enter 编辑"), 1)
         self.assertEqual(footer.count("S 保存"), 1)
         self.assertEqual(footer.count("Esc 取消"), 1)
 
@@ -143,7 +149,8 @@ class WorkspaceFlowTests(unittest.TestCase):
             for index in (0, len(state.form.fields) - 1):
                 state.form.position = index
                 frame = self.render(state, size)
-                field = next(r for r in frame.regions if r.action == f"field:{index}")
+                key = state.form.fields[index].key
+                field = next(r for r in frame.regions if r.action == f"field:{key}")
                 self.assertLess(field.y, size[1] - 1)
 
     def test_read_only_queries_and_related_pages_never_expose_write_actions(self):
@@ -197,11 +204,12 @@ class WorkspaceFlowTests(unittest.TestCase):
     def test_empty_transaction_picker_can_be_cancelled_without_losing_form(self):
         state = Workspace("grades")
         forms.open_form(state, self.catalog, "create")
-        state.form.options = []
+        field_session.start_form(state, self.catalog)
+        state.field_session.options = []
         with self.assertRaises(StopIteration):
             self.interact(state, ["select", "back"])
         self.assertIsNotNone(state.form)
-        self.assertIsNone(state.form.options)
+        self.assertIsNone(state.field_session)
 
     def test_related_return_restores_focus_from_any_source(self):
         for key in ("students", "departments", "majors", "classes", "courses", "grades"):

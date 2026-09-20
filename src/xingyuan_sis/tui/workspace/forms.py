@@ -2,16 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...database import DB_PATH
 from ...student_query import parse_student_query
-from ...terminal_input import input_style, read_inline_input, read_input
+from ...terminal_input import input_style, read_input
 from .. import screen
 from .data import Catalog, Field
 from .state import FocusArea, Form, Workspace
 
 
 def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
-    """Open a complete transaction form; existing-record editing lives elsewhere."""
+    """Open a complete transaction; field editing is delegated to FieldSession."""
     catalog.require_write()
     if mode == "edit":
         raise ValueError("已有记录请在档案字段上直接修改。")
@@ -31,6 +30,7 @@ def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
 
 
 def move_form_position(state: Workspace, direction: str) -> None:
+    """Move the selected transaction field without entering edit state."""
     form = state.form
     if form is None or not form.fields:
         return
@@ -44,28 +44,6 @@ def move_form_position(state: Workspace, direction: str) -> None:
         form.position = max(0, form.position - 1)
     elif direction == "down":
         form.position = min(len(form.fields) - 1, form.position + 1)
-
-
-def accept_option(state: Workspace, catalog: Catalog, index: int) -> int | None:
-    """Accept one form option and return a dependent field that should open next."""
-    form = state.form
-    if form is None or form.options is None or not form.options:
-        return None
-    field = form.fields[form.position]
-    form.values[field.key] = form.options[index][0]
-    form.options = None
-    state.notice = ""
-
-    group = catalog.field_group(state.key, field.key)
-    if len(group) < 2 or group[0].key != field.key:
-        return None
-    next_field = group[1]
-    catalog.normalize_option_value(state.key, next_field.key, form.values)
-    next_index = next((i for i, candidate in enumerate(form.fields) if candidate.key == next_field.key), None)
-    if next_index is None:
-        return None
-    form.position = next_index
-    return next_index
 
 
 def apply_form(state: Workspace, catalog: Catalog) -> None:
@@ -123,6 +101,7 @@ def apply_form(state: Workspace, catalog: Catalog) -> None:
                 state.switch("data")
 
     state.form = None
+    state.field_session = None
     if form.mode == "create" and record_id is not None and any(
         row["id"] == record_id for row in state.rows(catalog)
     ):
@@ -133,78 +112,35 @@ def apply_form(state: Workspace, catalog: Catalog) -> None:
         state.detail_scroll, state.detail_selected = 0, 0
 
 
-def _form_field_geometry(frame: screen.ScreenFrame, index: int) -> tuple[int, int, int]:
-    region = next(region for region in frame.regions if region.action == f"field:{index}")
-    label_width = min(12, max(4, region.width // 3))
-    value_column = region.x + label_width + 2
-    value_width = max(1, region.width - label_width - 2)
-    return region.y, value_column, value_width
-
-
-def read_value(state: Workspace, catalog: Catalog, event: tuple[str, int]) -> None:
-    """Read search text or one field belonging to a complete transaction form."""
+def read_search(state: Workspace, catalog: Catalog) -> None:
+    """Read the workspace search query; transaction fields use FieldSession."""
     from .view import render
 
-    kind, index = event
-    if kind == "search":
-        if state.key == "students":
-            label = "搜索（可用 --name、--class、--year 等）"
-            state.notice = "学生搜索与 xy stu ls 使用同一套查询条件。Esc 取消。"
-        else:
-            label = "搜索姓名、编号、班级等"
-            state.notice = "支持多个关键词。Esc 取消。"
-        current = state.query
+    if state.key == "students":
+        label = "搜索（可用 --name、--class、--year 等）"
+        state.notice = "学生搜索与 xy stu ls 使用同一套查询条件。Esc 取消。"
+    else:
+        label = "搜索姓名、编号、班级等"
+        state.notice = "支持多个关键词。Esc 取消。"
+    current = state.query
 
-        frame = render(state, catalog)
-        screen._paint(frame.lines)
-        height = len(frame.lines)
-        screen.sys.stdout.write(f"\x1b[{max(1, height - 1)};1H")
-        screen.sys.stdout.flush()
-        with input_style(True):
-            raw = read_input(
-                screen._clip_cells(label, max(4, screen._terminal_size().columns - 8)) + " > ",
-                initial_value=current,
-            ).strip()
-
-        if state.key == "students":
-            try:
-                parse_student_query(raw)
-            except ValueError as exc:
-                state.notice = f"未完成：{exc}"
-                return
-        state.query, state.selected, state.roster_scroll = raw, 0, 0
-        state.detail_scroll, state.detail_selected = 0, 0
-        state.notice = f"搜索：{raw}" if raw else "已显示全部记录。"
-        return
-
-    form = state.form
-    if form is None:
-        return
-    field_ = form.fields[index]
-    form.position = index
-    options = catalog.normalize_option_value(state.key, field_.key, form.values)
-    if options is not None:
-        form.options = options
-        form.option_index = next(
-            (i for i, (value, _) in enumerate(options) if value == form.values.get(field_.key)),
-            0,
-        )
-        state.notice = ""
-        return
-
-    current = form.values.get(field_.key)
-    state.notice = ""
     frame = render(state, catalog)
     screen._paint(frame.lines)
-    row, column, width = _form_field_geometry(frame, index)
+    height = len(frame.lines)
+    screen.sys.stdout.write(f"\x1b[{max(1, height - 1)};1H")
+    screen.sys.stdout.flush()
     with input_style(True):
-        raw = read_inline_input(
-            f"{field_.label} > ",
-            row=row,
-            column=column,
-            width=width,
-            initial_value="" if current is None else str(current),
+        raw = read_input(
+            screen._clip_cells(label, max(4, screen._terminal_size().columns - 8)) + " > ",
+            initial_value=current,
         ).strip()
 
-    form.values[field_.key] = field_.parse(raw if raw else None)
-    state.notice = ""
+    if state.key == "students":
+        try:
+            parse_student_query(raw)
+        except ValueError as exc:
+            state.notice = f"未完成：{exc}"
+            return
+    state.query, state.selected, state.roster_scroll = raw, 0, 0
+    state.detail_scroll, state.detail_selected = 0, 0
+    state.notice = f"搜索：{raw}" if raw else "已显示全部记录。"

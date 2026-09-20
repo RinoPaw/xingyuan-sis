@@ -5,8 +5,13 @@ from ..commands import resolve_shortcut
 from ..layout import WorkspaceLayout
 from .commands import FORM_SAVE, available as available_commands, toolbar as toolbar_commands
 from .data import ACADEMICS, COLLECTIONS, Catalog
-from .field_session import accept_option as accept_field_option, cancel as cancel_field_session, start as start_field_session
-from .forms import accept_option as accept_form_option, move_form_position, open_form
+from .field_session import (
+    accept_option as accept_field_option,
+    cancel as cancel_field_session,
+    start as start_record_field_session,
+    start_form as start_form_field_session,
+)
+from .forms import move_form_position, open_form
 from .state import FocusArea, Workspace
 
 
@@ -190,7 +195,7 @@ def _activate_detail_action(
     reveal_detail_selection(state, catalog)
 
     try:
-        start_field_session(state, catalog, field_key)
+        start_record_field_session(state, catalog, field_key)
     except ValueError as exc:
         state.notice = str(exc)
         return True, None
@@ -226,7 +231,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
         commands = available_commands(catalog, state.key)
         if state.form is None and state.field_session is None:
             key = resolve_shortcut(key, commands)
-        elif state.form is not None and state.form.fields:
+        elif state.form is not None and state.form.fields and state.field_session is None:
             key = resolve_shortcut(key, (FORM_SAVE,))
 
         if key == "focus" and state.form is None and state.field_session is None:
@@ -263,8 +268,6 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
         if key == "back":
             if state.field_session is not None:
                 cancel_field_session(state)
-            elif state.form and state.form.options is not None:
-                state.form.options = None
             elif state.form:
                 state.form = None
                 state.notice = "已取消，记录保持原样。"
@@ -292,39 +295,31 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 elif key == "select" or (isinstance(key, str) and key.startswith("option:")):
                     if session.options:
                         index = int(key.split(":")[1]) if key.startswith("option:") else session.option_index
-                        accept_field_option(state, catalog, index)
+                        if accept_field_option(state, catalog, index):
+                            return "field-edit", 0
                 continue
             continue
 
         if state.form:
             form = state.form
-            if form.options is not None:
-                if key in {"up", "down", "home", "end"}:
-                    index = form.option_index + (-1 if key == "up" else 1)
-                    if key == "home":
-                        index = 0
-                    elif key == "end":
-                        index = len(form.options) - 1
-                    form.option_index = min(max(0, index), max(0, len(form.options) - 1))
-                elif key == "select" or (isinstance(key, str) and key.startswith("option:")):
-                    if form.options:
-                        index = int(key.split(":")[1]) if key.startswith("option:") else form.option_index
-                        next_index = accept_form_option(state, catalog, index)
-                        if next_index is not None:
-                            return "field", next_index
-                continue
             if key == "save" or (key == "select" and not form.fields):
                 return "save", 0
             if key == "select" and form.fields:
-                return "field", form.position
+                start_form_field_session(state, catalog)
+                return "field-edit", 0
             if isinstance(key, str) and key.startswith("field:"):
-                form.position = int(key.split(":")[1])
-                return "field", form.position
+                field_key = key.removeprefix("field:")
+                index = next(
+                    (i for i, field in enumerate(form.fields) if field.key == field_key),
+                    None,
+                )
+                if index is not None:
+                    form.position = index
+                    start_form_field_session(state, catalog, index)
+                    return "field-edit", 0
+                continue
             if key in {"up", "down", "home", "end", "focus"}:
-                previous_position = form.position
                 move_form_position(state, key)
-                if form.position != previous_position:
-                    return "field", form.position
             continue
 
         if isinstance(key, str) and key.startswith(("collection:", "related:")) \
@@ -470,5 +465,3 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 continue
             state.focus_content()
             open_form(state, catalog, key)
-            if state.form is not None and state.form.fields:
-                return "field", state.form.position

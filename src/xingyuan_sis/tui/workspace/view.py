@@ -90,14 +90,11 @@ def _footer(state: Workspace, catalog: Catalog, width: int) -> str:
         enter = "选择" if state.field_session.options is not None else "确认"
         return theme.footer(width, enter=enter, escape="取消")
     if state.form is not None:
-        form = state.form
-        if form.options is not None:
-            return theme.footer(width, enter="选择", escape="取消")
-        if form.fields:
+        if state.form.fields:
             return theme.footer(
                 width,
                 command_hints=("Tab 下一项", FORM_SAVE.hint),
-                enter=None,
+                enter="编辑",
                 escape="取消",
             )
         return theme.footer(width, enter="确认", escape="取消")

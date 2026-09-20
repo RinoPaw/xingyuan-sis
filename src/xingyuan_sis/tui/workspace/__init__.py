@@ -9,11 +9,13 @@ from ...auth import Identity
 from .data import Catalog
 from .events import interact
 from .field_session import cancel as cancel_field_session, edit_current
-from .forms import apply_form, read_value
-from .state import ContentPanel, FieldSession, FocusArea, Form, Workspace
+from .forms import apply_form, read_search
+from .state import ContentPanel, FieldSession, FieldSessionOwner, FocusArea, Form, Workspace
 
 
-__all__ = ["ContentPanel", "FieldSession", "FocusArea", "Form", "Workspace", "run"]
+__all__ = [
+    "ContentPanel", "FieldSession", "FieldSessionOwner", "FocusArea", "Form", "Workspace", "run"
+]
 
 
 def run(
@@ -42,9 +44,9 @@ def run(
                     edit_current(state, catalog)
                 except KeyboardInterrupt:
                     cancel_field_session(state, "已取消输入。")
-            elif event[0] in {"field", "search"}:
+            elif event[0] == "search":
                 try:
-                    read_value(state, catalog, event)
+                    read_search(state, catalog)
                 except KeyboardInterrupt:
                     state.notice = "已取消输入。"
             elif event[0] == "save":
