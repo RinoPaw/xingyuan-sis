@@ -215,7 +215,7 @@ def render_inspector(
                 marker = theme.selection_prefix(selected=strong, current=weak)
                 marker_width = min(screen._display_width(marker), max(0, content_right - cursor))
                 if marker_width:
-                    marker_style = theme.selection_style() if strong else screen._TEXT_SECONDARY
+                    marker_style = theme.selection_marker_style() if strong else screen._TEXT_SECONDARY
                     board.put(cursor, y, marker, marker_style, action, width=marker_width)
                     cursor += marker_width
 
@@ -224,8 +224,7 @@ def render_inspector(
                 break
             shown = screen._clip_cells(text, remaining)
             display = screen._display_width(shown)
-            selected = strong
-            drawn_style = theme.selection_style() if selected else style
+            drawn_style = theme.selection_style() if strong else style
 
             if action:
                 hit_width = max(1, display)
