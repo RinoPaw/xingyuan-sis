@@ -11,7 +11,7 @@ _BUTTON_CURRENT = screen._SURFACE_INTERACTIVE + screen._TEXT_ACCENT
 _BAR_SURFACE = screen._SURFACE_FOOTER + screen._TEXT_PRIMARY
 _TOPBAR = screen._SURFACE_TOPBAR + screen._TEXT_ACCENT + screen._BOLD
 _SECONDARY = screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
-_SELECTED = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
+_SELECTED = screen._SURFACE_SELECTED + screen._TEXT_ACCENT
 
 
 def selection_prefix(*, selected: bool = False, current: bool = False) -> str:
@@ -20,7 +20,7 @@ def selection_prefix(*, selected: bool = False, current: bool = False) -> str:
 
 
 def selection_style() -> str:
-    """Return the one strong style used by every directly selectable item."""
+    """Return the blue strong style used by every directly selectable item."""
     return _SELECTED
 
 
