@@ -85,7 +85,7 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
             screen._pad_cells(screen._clip_cells(safe(row.get(key)), size), size)
             for key, _, size in columns
         )
-        marker = ("▌ " if focused else "▏ ") if index == state.selected else "  "
+        marker = ("› " if focused else "· ") if index == state.selected else "  "
         text = screen._pad_cells(screen._clip_cells(marker + text, width - 1), width - 1)
         if index == state.selected:
             selected_style = (
