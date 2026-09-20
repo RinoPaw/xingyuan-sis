@@ -36,13 +36,14 @@ class FieldSessionOwner(str, Enum):
 
 
 @dataclass(frozen=True)
-class FormReturn:
-    """Exact workspace context to restore after a temporary transaction."""
+class FocusContext:
+    """Exact interaction context that a temporary task may restore."""
 
     focus: FocusArea
     content_panel: ContentPanel
     detail_scroll: int
     detail_selected: int
+    action_selected: int
 
 
 @dataclass
@@ -59,7 +60,7 @@ class Form:
     values: dict[str, Any] = field(default_factory=dict)
     original: dict[str, Any] | None = None
     position: int = 0
-    return_to: FormReturn | None = None
+    return_to: FocusContext | None = None
 
 
 @dataclass
@@ -117,7 +118,6 @@ class Workspace:
     report: list[str] = field(default_factory=list)
     credentials: list[tuple[str, str]] = field(default_factory=list)
     history: list[Location] = field(default_factory=list)
-    _focus_content_origin: FormReturn | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.key == "data" and self.focus is FocusArea.ROSTER:
@@ -142,13 +142,7 @@ class Workspace:
             self.content_panel = ContentPanel.INSPECTOR
 
     def focus_content(self) -> None:
-        """Return from toolbar focus while remembering the exact entry context."""
-        self._focus_content_origin = FormReturn(
-            self.focus,
-            self.content_panel,
-            self.detail_scroll,
-            self.detail_selected,
-        )
+        """Return from toolbar focus to the content panel it belongs to."""
         if self.key == "data":
             self.focus = FocusArea.DASHBOARD
         else:
@@ -158,24 +152,25 @@ class Workspace:
                 else FocusArea.ROSTER
             )
 
-    def take_focus_content_origin(self) -> FormReturn:
-        """Consume the context captured by the immediately preceding focus_content call."""
-        origin = self._focus_content_origin or FormReturn(
+    def capture_focus_context(self) -> FocusContext:
+        """Snapshot the interaction context before a temporary task takes focus."""
+        return FocusContext(
             self.focus,
             self.content_panel,
             self.detail_scroll,
             self.detail_selected,
+            self.action_selected,
         )
-        self._focus_content_origin = None
-        return origin
 
-    def restore_form_context(self, context: FormReturn | None) -> None:
+    def restore_focus_context(self, context: FocusContext | None) -> None:
+        """Restore a context previously returned by :meth:`capture_focus_context`."""
         if context is None:
             return
         self.focus = context.focus
         self.content_panel = context.content_panel
         self.detail_scroll = context.detail_scroll
         self.detail_selected = context.detail_selected
+        self.action_selected = context.action_selected
 
     def switch(self, key: str) -> None:
         self.key, self.view, self.query, self.selected, self.roster_scroll = key, 0, "", 0, 0
@@ -184,7 +179,6 @@ class Workspace:
         self.detail_scroll, self.detail_selected = 0, 0
         self.form, self.field_session = None, None
         self.action_selected = 0
-        self._focus_content_origin = None
 
     def visit(self, key: str, identifier: str, catalog: Catalog) -> None:
         row = self.current(catalog)
