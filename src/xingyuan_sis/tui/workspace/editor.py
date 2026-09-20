@@ -6,6 +6,7 @@ from .. import screen, theme
 from ..layout import WorkspaceLayout
 from ..view_common import Board, identity, panel_heading, safe
 from .data import COLLECTIONS, Catalog
+from .picker import PICKER_GUTTER, prepare_candidates
 from .presentation import display_value, project_record
 from .state import FieldSessionOwner
 
@@ -13,7 +14,7 @@ if TYPE_CHECKING:
     from .state import Workspace
 
 
-_SELECTION_GUTTER = 2
+_SELECTION_GUTTER = PICKER_GUTTER
 
 
 def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, width: int) -> None:
@@ -42,7 +43,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         if form.mode == "delete":
             title, identifier = identity(state.key, form.original)
             messages = [
-                (f"确认删除 {title}？", screen._BOLD + screen._TEXT_PRIMARY),
+                (f"确认删除 {title}？", screen._TEXT_PRIMARY),
                 (identifier, screen._TEXT_SECONDARY),
                 ("! 删除后无法撤销。", screen._BOLD + screen._TEXT_DANGER),
             ]
@@ -87,12 +88,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
                 or (field.key == "birth_date" and session.anchor_key == "birth_date")
             )
             if session_on_field and session.options is not None:
-                if session.active_key == session.anchor_key:
-                    current = session.values.get(session.active_key)
-                    filtered = [option for option in session.options if option[0] != current]
-                    if len(filtered) != len(session.options):
-                        session.options = filtered
-                        session.option_index = 0
+                prepare_candidates(session)
                 if session.options:
                     for option_index, (_, label) in enumerate(session.options):
                         entries.append(("option", option_index, label))
