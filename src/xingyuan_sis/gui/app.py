@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import ctypes
 from pathlib import Path
+import sys
 import tkinter as tk
 from tkinter import ttk
 
@@ -44,11 +46,63 @@ class Application:
 
 
 def run(db_path: Path | str | None = None) -> None:
+    _enable_windows_dpi_awareness()
     root = tk.Tk()
+    _sync_windows_tk_scaling(root)
     root.minsize(900, 600)
     _center_window(root, 1120, 720)
     Application(root, db_path)
     root.mainloop()
+
+
+def _enable_windows_dpi_awareness() -> None:
+    """Prevent Windows from bitmap-scaling Tk on high-DPI displays."""
+    if sys.platform != "win32":
+        return
+
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        set_context = user32.SetProcessDpiAwarenessContext
+        set_context.argtypes = [ctypes.c_void_p]
+        set_context.restype = ctypes.c_bool
+        # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 == (HANDLE)-4
+        if set_context(ctypes.c_void_p(-4)):
+            return
+    except (AttributeError, OSError):
+        pass
+
+    try:
+        shcore = ctypes.WinDLL("shcore", use_last_error=True)
+        set_awareness = shcore.SetProcessDpiAwareness
+        set_awareness.argtypes = [ctypes.c_int]
+        set_awareness.restype = ctypes.c_long
+        # PROCESS_PER_MONITOR_DPI_AWARE == 2
+        if set_awareness(2) == 0:
+            return
+    except (AttributeError, OSError):
+        pass
+
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except (AttributeError, OSError):
+        pass
+
+
+def _sync_windows_tk_scaling(root: tk.Tk) -> None:
+    """Match Tk point-to-pixel scaling to the DPI of the current monitor."""
+    if sys.platform != "win32":
+        return
+
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        get_dpi = user32.GetDpiForWindow
+        get_dpi.argtypes = [ctypes.c_void_p]
+        get_dpi.restype = ctypes.c_uint
+        dpi = get_dpi(root.winfo_id())
+        if dpi:
+            root.tk.call("tk", "scaling", dpi / 72.0)
+    except (AttributeError, OSError, tk.TclError):
+        pass
 
 
 def _center_window(root: tk.Tk, width: int, height: int) -> None:
