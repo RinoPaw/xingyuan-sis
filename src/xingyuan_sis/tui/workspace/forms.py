@@ -116,6 +116,8 @@ def read_search(state: Workspace, catalog: Catalog) -> None:
     """Read the workspace search query; transaction fields use FieldSession."""
     from .view import render
 
+    # Search filters the roster; its input must not inherit inspector selection.
+    state.set_focus(FocusArea.ROSTER)
     if state.key == "students":
         label = "搜索（可用 --name、--class、--year 等）"
         state.notice = "学生搜索与 xy stu ls 使用同一套查询条件。Esc 取消。"

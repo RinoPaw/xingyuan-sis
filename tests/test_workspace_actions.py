@@ -1,3 +1,5 @@
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import os
@@ -7,7 +9,7 @@ from unittest.mock import patch
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import keys, screen, workspace
-from xingyuan_sis.tui.workspace import events as workspace_events, view as workspace_view
+from xingyuan_sis.tui.workspace import events as workspace_events, forms as workspace_forms, view as workspace_view
 from xingyuan_sis.tui.workspace.data import Catalog
 
 
@@ -77,6 +79,32 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertIn(screen._SURFACE_INTERACTIVE, selected_line)
         self.assertIn(screen._TEXT_PRIMARY, selected_line)
         self.assertNotIn(screen._SURFACE_SELECTED, selected_line)
+
+    def test_search_click_does_not_promote_inspector_to_selected_state(self):
+        state = workspace.Workspace(
+            "students",
+            focus=workspace.FocusArea.INSPECTOR,
+            content_panel=workspace.ContentPanel.INSPECTOR,
+        )
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+            frame = workspace_view.render(state, self.catalog)
+        search = next(region for region in frame.regions if region.action == "search")
+
+        with patch.object(keys, "_read_key", side_effect=[keys.MouseClick(search.x, search.y)]), \
+             patch.object(screen, "_paint"), patch.object(
+                 screen, "_terminal_size", return_value=os.terminal_size((120, 35))
+             ):
+            event = workspace_events.interact(state, self.catalog)
+        self.assertEqual(event, ("search", 0))
+
+        with redirect_stdout(StringIO()), patch.object(workspace_forms, "read_input", return_value=""), \
+             patch.object(screen, "_paint"), patch.object(
+                 screen, "_terminal_size", return_value=os.terminal_size((120, 35))
+             ):
+            workspace_forms.read_search(state, self.catalog)
+
+        self.assertEqual(state.focus, workspace.FocusArea.ROSTER)
+        self.assertEqual(state.content_panel, workspace.ContentPanel.ROSTER)
 
     def test_literal_command_shortcuts_open_the_same_transaction_forms(self):
         for key, action in (("a", "create"), ("d", "delete")):
