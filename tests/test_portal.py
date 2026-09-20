@@ -33,7 +33,7 @@ class PortalLayoutTests(unittest.TestCase):
     def test_wide_academic_menu_caps_at_four_columns(self) -> None:
         self.assertEqual(portal.secondary_columns(99, "secondary", height=24), 4)
 
-    def test_secondary_focus_uses_compact_surface_without_chrome(self) -> None:
+    def test_secondary_focus_uses_shared_selection_language(self) -> None:
         identity = Identity("Administrator", "admin")
         with patch("sys.stdout.isatty", return_value=True), patch.dict(os.environ), \
              patch.object(screen, "_terminal_size", return_value=os.terminal_size((100, 24))):
@@ -45,15 +45,14 @@ class PortalLayoutTests(unittest.TestCase):
         entered_raw = "\n".join(entered.lines)
         preview_text = screen._ANSI_RE.sub("", preview_raw)
         entered_text = screen._ANSI_RE.sub("", entered_raw)
-        self.assertIn(" 学生", preview_text)
-        self.assertIn(" 学生", entered_text)
+        self.assertIn("学生", preview_text)
+        self.assertIn("> 学生", entered_text)
         self.assertNotIn("[ 学生 ]", preview_text)
         self.assertNotIn("[ 学生 ]", entered_text)
-        self.assertNotIn("›", entered_text)
         self.assertNotIn("\x1b[4m", entered_raw)
         self.assertIn(screen._SURFACE_INTERACTIVE, preview_raw)
         self.assertIn(screen._SURFACE_SELECTED, entered_raw)
-        self.assertIn(screen._TEXT_ACCENT, entered_raw)
+        self.assertIn(screen._TEXT_ON_SELECTED, entered_raw)
 
     def test_primary_keeps_weak_selection_when_focus_enters_secondary(self) -> None:
         identity = Identity("Administrator", "admin")
@@ -63,8 +62,8 @@ class PortalLayoutTests(unittest.TestCase):
 
         primary_row = screen._ANSI_RE.sub("", primary.lines[3])
         secondary_row = screen._ANSI_RE.sub("", secondary.lines[3])
-        self.assertTrue(primary_row.startswith("▌ 教务"))
-        self.assertTrue(secondary_row.startswith("▏ 教务"))
+        self.assertTrue(primary_row.startswith("> 教务"))
+        self.assertTrue(secondary_row.startswith("· 教务"))
 
     def test_buttons_distinguish_current_context_from_keyboard_focus(self) -> None:
         with patch("sys.stdout.isatty", return_value=True), patch.dict(os.environ):
@@ -74,10 +73,11 @@ class PortalLayoutTests(unittest.TestCase):
         self.assertEqual(screen._TEXT_ON_SELECTED, screen._TEXT_PRIMARY)
         self.assertIn(screen._SURFACE_INTERACTIVE, weak)
         self.assertIn(screen._TEXT_ACCENT, weak)
+        self.assertIn("[·学生 ]", screen._ANSI_RE.sub("", weak))
         self.assertNotIn(screen._SURFACE_SELECTED, weak)
         self.assertIn(screen._SURFACE_SELECTED, strong)
-        self.assertIn(screen._TEXT_PRIMARY, strong)
-        self.assertNotIn("›", screen._ANSI_RE.sub("", strong))
+        self.assertIn(screen._TEXT_ON_SELECTED, strong)
+        self.assertIn("[>学生 ]", screen._ANSI_RE.sub("", strong))
         self.assertNotEqual(weak, strong)
 
     def test_portal_footer_has_one_core_contract_and_contextual_commands(self) -> None:
