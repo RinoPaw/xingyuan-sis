@@ -3,9 +3,38 @@ from __future__ import annotations
 
 from ...terminal_input import input_style, read_inline_input
 from .. import screen
+from .birth_date_editor import BIRTH_DATE_FIELDS, BIRTH_DATE_KEYS, canonical as birth_canonical
+from .birth_date_editor import options as birth_options, parts as birth_parts, projected as projected_birth_date
 from .data import COLLECTIONS, Catalog
 from .presentation import project_record
 from .state import FieldSession, FieldSessionOwner, FocusArea, Workspace
+
+
+def _is_birth_session(state: Workspace, session: FieldSession | None = None) -> bool:
+    session = state.field_session if session is None else session
+    return (
+        state.key == "students"
+        and session is not None
+        and session.anchor_key == "birth_date"
+        and tuple(field.key for field in session.fields) == BIRTH_DATE_KEYS
+    )
+
+
+def _session_values(
+    state: Workspace,
+    field_key: str,
+    source: dict,
+    fields: tuple,
+) -> dict:
+    if state.key == "students" and field_key == "birth_date":
+        return birth_parts(source.get("birth_date"))
+    return {field.key: source.get(field.key) for field in fields}
+
+
+def _session_changes(state: Workspace, session: FieldSession) -> dict:
+    if _is_birth_session(state, session):
+        return {"birth_date": birth_canonical(session.values)}
+    return {field.key: session.values.get(field.key) for field in session.fields}
 
 
 def start(state: Workspace, catalog: Catalog, field_key: str) -> None:
@@ -16,7 +45,9 @@ def start(state: Workspace, catalog: Catalog, field_key: str) -> None:
     if row is None:
         raise ValueError("先选择一条记录。")
 
-    fields = catalog.edit_group(state.key, field_key)
+    fields = BIRTH_DATE_FIELDS if state.key == "students" and field_key == "birth_date" else catalog.edit_group(
+        state.key, field_key
+    )
     if not fields:
         raise ValueError("该字段为只读。")
     if field_key == "age":
@@ -27,7 +58,7 @@ def start(state: Workspace, catalog: Catalog, field_key: str) -> None:
 
     state.field_session = FieldSession(
         fields=fields,
-        values={field.key: row.get(field.key) for field in fields},
+        values=_session_values(state, field_key, row, fields),
         original=dict(row),
         anchor_key=field_key,
         owner=FieldSessionOwner.RECORD,
@@ -48,12 +79,16 @@ def start_form(state: Workspace, catalog: Catalog, index: int | None = None) -> 
     field = form.fields[form.position]
     group = ()
     if form.mode == "create" and state.key in COLLECTIONS:
-        group = catalog.field_group(state.key, field.key)
+        group = (
+            BIRTH_DATE_FIELDS
+            if state.key == "students" and field.key == "birth_date"
+            else catalog.field_group(state.key, field.key)
+        )
     fields = group or (field,)
 
     state.field_session = FieldSession(
         fields=fields,
-        values={candidate.key: form.values.get(candidate.key) for candidate in fields},
+        values=_session_values(state, field.key, form.values, fields),
         original=dict(form.values),
         anchor_key=field.key,
         owner=FieldSessionOwner.FORM,
@@ -73,6 +108,8 @@ def projected_values(state: Workspace, catalog: Catalog | None = None) -> dict:
     if session is None:
         return {}
     values = project_record(session.original, session)
+    if _is_birth_session(state, session):
+        values["birth_date"] = projected_birth_date(session.values)
     if catalog is not None and state.key in COLLECTIONS:
         return catalog.project(state.key, values)
     return values
@@ -82,6 +119,23 @@ def _open_options(state: Workspace, catalog: Catalog) -> bool:
     session = state.field_session
     if session is None:
         return False
+
+    if _is_birth_session(state, session):
+        values = projected_values(state, catalog)
+        values.update(session.values)
+        options = birth_options(session.active_key, values)
+        if options is not None:
+            if not any(value == session.values.get(session.active_key) for value, _ in options):
+                session.values[session.active_key] = None
+            session.options = options
+            session.option_index = next(
+                (i for i, (value, _) in enumerate(options)
+                 if value == session.values.get(session.active_key)),
+                0,
+            )
+            state.notice = ""
+            return True
+
     if state.key not in COLLECTIONS:
         session.options = None
         return False
@@ -134,6 +188,17 @@ def edit_current(state: Workspace, catalog: Catalog) -> None:
         ).strip()
 
     session.values[field.key] = field.parse(raw if raw else None)
+    if session.active + 1 < len(session.fields):
+        session.active += 1
+        if session.owner is FieldSessionOwner.FORM and state.form is not None:
+            state.form.position = next(
+                (i for i, candidate in enumerate(state.form.fields)
+                 if candidate.key == session.active_key),
+                state.form.position,
+            )
+        if not _open_options(state, catalog):
+            edit_current(state, catalog)
+        return
     commit(state, catalog)
 
 
@@ -146,6 +211,11 @@ def accept_option(state: Workspace, catalog: Catalog, index: int) -> bool:
     field = session.field
     session.values[field.key] = session.options[index][0]
     session.options = None
+
+    if _is_birth_session(state, session) and field.key == "birth_month" and session.values[field.key] is None:
+        session.values["birth_day"] = None
+        commit(state, catalog)
+        return False
 
     if session.active + 1 < len(session.fields):
         session.active += 1
@@ -167,26 +237,22 @@ def commit(state: Workspace, catalog: Catalog) -> None:
     if session is None:
         return
 
-    focus_key = session.active_key
+    focus_key = session.anchor_key if _is_birth_session(state, session) else session.active_key
+    changes = _session_changes(state, session)
     if session.owner is FieldSessionOwner.FORM:
         form = state.form
         if form is None:
             raise ValueError("字段所属事务已经结束。")
-        for field in session.fields:
-            form.values[field.key] = session.values.get(field.key)
+        form.values.update(changes)
         form.position = next(
-            (i for i, field in enumerate(form.fields) if field.key == focus_key),
+            (i for i, field in enumerate(form.fields) if field.key == session.anchor_key),
             form.position,
         )
         state.field_session = None
         state.notice = ""
         return
 
-    record_id = catalog.save(
-        state.key,
-        {field.key: session.values.get(field.key) for field in session.fields},
-        session.original,
-    )
+    record_id = catalog.save(state.key, changes, session.original)
     state.field_session = None
     rows = state.rows(catalog)
     state.selected = next((i for i, row in enumerate(rows) if row["id"] == record_id), state.selected)
