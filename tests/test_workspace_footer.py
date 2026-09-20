@@ -10,7 +10,7 @@ from xingyuan_sis.tui import screen
 from xingyuan_sis.tui.layout import WorkspaceLayout
 from xingyuan_sis.tui.workspace import view
 from xingyuan_sis.tui.workspace.data import Catalog
-from xingyuan_sis.tui.workspace.state import Workspace
+from xingyuan_sis.tui.workspace.state import ContentPanel, FocusArea, Workspace
 
 
 class WorkspaceFooterTests(unittest.TestCase):
@@ -22,17 +22,12 @@ class WorkspaceFooterTests(unittest.TestCase):
         seed_demo(self.db)
         self.catalog = Catalog(self.db)
 
-    def test_layout_reserves_only_footer_and_optional_scroll_row(self):
-        compact = WorkspaceLayout(80, 18)
-        regular = WorkspaceLayout(120, 35)
-        self.assertEqual(
-            compact.panel_capacity("students"),
-            compact.height - compact.panel_content_row("students") - 1,
-        )
-        self.assertEqual(
-            regular.panel_capacity("students"),
-            regular.height - regular.panel_content_row("students") - 2,
-        )
+    def test_layout_reserves_only_the_footer(self):
+        for layout in (WorkspaceLayout(80, 18), WorkspaceLayout(120, 35)):
+            self.assertEqual(
+                layout.panel_capacity("students"),
+                layout.height - layout.panel_content_row("students") - 1,
+            )
 
     def test_notice_state_does_not_render_a_second_footer_row(self):
         state = Workspace("students")
@@ -40,6 +35,19 @@ class WorkspaceFooterTests(unittest.TestCase):
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             frame = view.render(state, self.catalog)
         self.assertFalse(any("THIS NOTICE MUST NOT BE RENDERED" in line for line in frame.lines))
+        self.assertTrue(frame.lines[-1].strip())
+
+    def test_inspector_has_no_scroll_hint_row_above_footer(self):
+        state = Workspace(
+            "students",
+            focus=FocusArea.INSPECTOR,
+            content_panel=ContentPanel.INSPECTOR,
+        )
+        state.detail_selected = 10
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((30, 12))):
+            frame = view.render(state, self.catalog)
+        penultimate = screen._ANSI_RE.sub("", frame.lines[-2]).strip()
+        self.assertNotRegex(penultimate, r"^\d+[–-]\d+\s*/\s*\d+$")
         self.assertTrue(frame.lines[-1].strip())
 
 
