@@ -165,12 +165,6 @@ class MainWindow(ttk.Frame):
                 anchor="w", pady=(6, 0)
             )
 
-        ttk.Label(
-            body,
-            text="Tkinter GUI 已连接现有 Service / Repository / SQLite 主链。",
-            style="Muted.TLabel",
-        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
-
     def _show_placeholder(self, title: str) -> None:
         ttk.Label(self.content, text=title, style="Title.TLabel").grid(
             row=0, column=0, sticky="w"
