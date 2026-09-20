@@ -44,6 +44,27 @@ class DetailFocusTests(unittest.TestCase):
         self.assertNotIn("阅读中", plain)
         self.assertTrue(any(screen._SURFACE_SELECTED in line for line in detail.lines))
 
+    def test_selected_marker_sits_beside_the_specific_inspector_field(self):
+        state = workspace.Workspace(
+            "students",
+            focus=workspace.FocusArea.INSPECTOR,
+            content_panel=workspace.ContentPanel.INSPECTOR,
+        )
+        row = state.current(self.catalog)
+        targets = workspace_view.detail_targets("students", row, self.catalog, 42)
+        state.detail_selected = next(
+            index for index, (_, action) in enumerate(targets)
+            if action == "field:branch"
+        )
+        detail = self.render(state)
+        line = next(
+            screen._ANSI_RE.sub("", raw)
+            for raw in detail.lines
+            if "物种" in screen._ANSI_RE.sub("", raw)
+        )
+        self.assertIn("> ", line)
+        self.assertLess(line.index("物种"), line.index("> "))
+
     def test_student_inspector_uses_current_archive_hierarchy(self):
         state = workspace.Workspace("students")
         row = state.current(self.catalog)
