@@ -14,19 +14,39 @@ def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
     catalog.require_write()
     if mode == "edit":
         raise ValueError("已有记录请在档案字段上直接修改。")
+
+    return_to = state.take_focus_content_origin()
     row = state.current(catalog)
     if mode in {"delete", "reset-password"} and row is None:
+        state.restore_form_context(return_to)
         state.notice = "先选择一条记录。"
         return
     if mode == "create":
         state.form = Form(mode, catalog.fields(state.key), catalog.defaults(state.key))
     elif mode in {"import", "export"}:
         state.form = Form(mode, (Field("path", "CSV 文件路径", True),), {"path": "data/students.csv"})
+    elif mode == "delete":
+        state.form = Form(mode, original=row, return_to=return_to)
     else:
         state.form = Form(mode, original=row)
     state.field_session = None
     state.notice = ""
-    state.detail_scroll = 0
+    if mode == "delete":
+        # Delete is a temporary task that owns the inspector panel.  The
+        # original workspace context remains parked in Form.return_to.
+        state.set_focus(FocusArea.INSPECTOR)
+    else:
+        state.detail_scroll = 0
+
+
+def cancel_form(state: Workspace) -> None:
+    """Close a transaction and restore the context owned by temporary forms."""
+    form = state.form
+    state.form = None
+    state.field_session = None
+    if form is not None and form.mode == "delete":
+        state.restore_form_context(form.return_to)
+    state.notice = "已取消，记录保持原样。"
 
 
 def move_form_position(state: Workspace, direction: str) -> None:
@@ -102,7 +122,11 @@ def apply_form(state: Workspace, catalog: Catalog) -> None:
 
     state.form = None
     state.field_session = None
-    if form.mode == "create" and record_id is not None and any(
+    if form.mode == "delete":
+        if state.key != "data":
+            state.rows(catalog)
+        state.restore_form_context(form.return_to)
+    elif form.mode == "create" and record_id is not None and any(
         row["id"] == record_id for row in state.rows(catalog)
     ):
         state.set_focus(FocusArea.INSPECTOR)
