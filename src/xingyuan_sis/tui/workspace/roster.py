@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .. import screen
+from .. import screen, theme
 from ..layout import WorkspaceLayout, visible_start
 from ..view_common import Board, panel_heading, safe
 from .data import COLLECTIONS, Catalog
@@ -85,11 +85,12 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
             screen._pad_cells(screen._clip_cells(safe(row.get(key)), size), size)
             for key, _, size in columns
         )
-        marker = ("› " if focused else "· ") if index == state.selected else "  "
+        is_current = index == state.selected
+        marker = theme.selection_prefix(selected=is_current and focused, current=is_current and not focused)
         text = screen._pad_cells(screen._clip_cells(marker + text, width - 1), width - 1)
-        if index == state.selected:
+        if is_current:
             selected_style = (
-                screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
+                theme.selection_style()
                 if focused
                 else screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
             )
