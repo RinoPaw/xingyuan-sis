@@ -468,5 +468,4 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
         elif key in {"create", "delete", "reset-password", "import", "export", "seed"}:
             if key not in {command.action for command in commands}:
                 continue
-            state.focus_content()
             open_form(state, catalog, key)
