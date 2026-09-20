@@ -115,15 +115,21 @@ def _redraw_inline(
     colored: bool,
     secret: bool = False,
 ) -> None:
-    """Redraw only an existing field value without clearing its terminal row."""
+    """Redraw one bounded field box without changing its surrounding geometry."""
     field_width = max(1, width)
-    visible, cursor_cells = buffer.view(field_width, secret=secret)
-    content = visible + " " * max(0, field_width - _display_width(visible))
+    padding = 1 if field_width >= 3 else 0
+    inner_width = max(1, field_width - padding * 2)
+    visible, cursor_cells = buffer.view(inner_width, secret=secret)
+    body = visible + " " * max(0, inner_width - _display_width(visible))
+    content = " " * padding + body + " " * padding
     style = _FIELD_STYLE if colored else ""
     surface = _PAGE_STYLE if colored else ""
-    sys.stdout.write(f"\x1b[{max(1, row)};{max(1, column)}H" + style + content + surface)
-    # A caret is an insertion point between cells, so the end position is valid.
-    sys.stdout.write(f"\x1b[{max(1, row)};{max(1, column) + min(cursor_cells, field_width)}H")
+    row = max(1, row)
+    column = max(1, column)
+    sys.stdout.write(f"\x1b[{row};{column}H" + style + content + surface)
+    # The caret is inside the field padding and may sit on the inner right boundary.
+    caret_column = column + padding + min(cursor_cells, inner_width)
+    sys.stdout.write(f"\x1b[{row};{caret_column}H")
     sys.stdout.flush()
 
 
@@ -310,7 +316,7 @@ def read_inline_input(
 
 def heading(title: str) -> None:
     text = f"✦ 星原 / {title}"
-    if _ACTIVE.get() and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None:
+    if _ACTIVE.get() and sys.stdin.isatty() and os.environ.get("NO_COLOR") is None:
         print(f"{_PAGE_STYLE}{text}{_RESET}\n")
     else:
         print(text + "\n")
