@@ -5,7 +5,7 @@ import sys
 
 from ...terminal_input import editing_cursor, input_style, read_inline_input
 from .. import screen
-from ..text_edit import input_mode, read_event
+from ..text_edit import TextBuffer, input_mode, read_event
 from .birth_date_editor import BIRTH_DATE_FIELDS, BIRTH_DATE_KEYS, canonical as birth_canonical
 from .birth_date_editor import options as birth_options, parts as birth_parts, projected as projected_birth_date
 from .data import COLLECTIONS, Catalog
@@ -18,6 +18,7 @@ _BIRTH_SLOT_WIDTHS = {
     "birth_month": 2,
     "birth_day": 2,
 }
+_CURSOR_BLINK_SECONDS = 0.45
 
 
 def _related_anchor(anchor_key: str) -> tuple[str, str, str] | None:
@@ -228,64 +229,148 @@ def _field_geometry(frame: screen.ScreenFrame, action: str) -> tuple[int, int, i
     return region.y, region.x, max(1, region.width)
 
 
-def _birth_raw_values(session: FieldSession) -> dict[str, str]:
-    return {
-        key: "" if session.values.get(key) is None else str(session.values.get(key))
+def _birth_buffers(session: FieldSession) -> dict[str, TextBuffer]:
+    buffers = {
+        key: TextBuffer.from_value("" if session.values.get(key) is None else str(session.values.get(key)))
         for key in BIRTH_DATE_KEYS
     }
+    for buffer in buffers.values():
+        buffer.cursor = 0
+    return buffers
 
 
-def _sync_birth_raw(session: FieldSession, raw: dict[str, str]) -> None:
-    session.values.update({key: value if value else None for key, value in raw.items()})
+def _sync_birth_buffers(session: FieldSession, buffers: dict[str, TextBuffer]) -> None:
+    session.values.update({
+        key: (buffer.value if buffer.value else None)
+        for key, buffer in buffers.items()
+    })
 
 
-def _parsed_birth_values(raw: dict[str, str]) -> dict[str, int | None]:
+def _parsed_birth_buffers(buffers: dict[str, TextBuffer]) -> dict[str, int | None]:
     return {
-        key: (int(value) if value else None)
-        for key, value in raw.items()
+        key: (int(buffer.value) if buffer.value else None)
+        for key, buffer in buffers.items()
     }
 
 
-def _position_birth_cursor(frame: screen.ScreenFrame, session: FieldSession, raw: dict[str, str], replace: bool) -> None:
+def _move_birth_caret(
+    session: FieldSession,
+    buffers: dict[str, TextBuffer],
+    direction: str,
+) -> None:
+    """Move inside the active date slot before crossing into another slot."""
+    buffer = buffers[session.active_key]
+    if direction == "left":
+        if buffer.cursor > 0:
+            buffer.cursor -= 1
+        elif session.active > 0:
+            session.active -= 1
+            previous = buffers[session.active_key]
+            previous.cursor = len(previous.chars)
+        return
+    if direction == "right":
+        if buffer.cursor < len(buffer.chars):
+            buffer.cursor += 1
+        elif session.active + 1 < len(session.fields):
+            session.active += 1
+            buffers[session.active_key].cursor = 0
+        return
+    if direction == "tab":
+        session.active = (session.active + 1) % len(session.fields)
+        buffers[session.active_key].cursor = 0
+        return
+    if direction == "home":
+        buffer.cursor = 0
+        return
+    if direction == "end":
+        buffer.cursor = len(buffer.chars)
+
+
+def _edit_birth_buffer(buffer: TextBuffer, event, width: int) -> bool:
+    """Apply one edit event to one fixed-width date slot only."""
+    before = (buffer.value, buffer.cursor)
+    kind = event.kind
+    if kind == "insert":
+        for digit in (char for char in event.text if char.isdigit()):
+            if len(buffer.chars) < width:
+                buffer.chars.insert(buffer.cursor, digit)
+                buffer.cursor += 1
+            elif buffer.cursor < len(buffer.chars):
+                buffer.chars[buffer.cursor] = digit
+                buffer.cursor += 1
+            else:
+                break
+    elif kind == "backspace":
+        if buffer.cursor > 0:
+            buffer.cursor -= 1
+            del buffer.chars[buffer.cursor]
+    elif kind == "delete":
+        if buffer.cursor < len(buffer.chars):
+            del buffer.chars[buffer.cursor]
+    elif kind == "clear":
+        buffer.chars.clear()
+        buffer.cursor = 0
+    elif kind == "kill-end":
+        del buffer.chars[buffer.cursor:]
+    else:
+        return False
+    return (buffer.value, buffer.cursor) != before
+
+
+def _position_birth_cursor(
+    frame: screen.ScreenFrame,
+    session: FieldSession,
+    buffers: dict[str, TextBuffer],
+) -> None:
     action = f"field:{session.active_key}"
     row, column, region_width = _field_geometry(frame, action)
     width = min(region_width, _BIRTH_SLOT_WIDTHS[session.active_key])
-    text_width = screen._display_width(raw[session.active_key])
-    offset = 0 if replace else min(text_width, max(0, width - 1))
+    offset = min(buffers[session.active_key].cursor, max(0, width - 1))
     sys.stdout.write(f"\x1b[{row};{column + offset}H")
     sys.stdout.flush()
 
 
+def _set_cursor_visible(visible: bool) -> None:
+    if sys.stdout.isatty():
+        sys.stdout.write("\x1b[?25h" if visible else "\x1b[?25l")
+        sys.stdout.flush()
+
+
 def _edit_birth_date(state: Workspace, catalog: Catalog) -> None:
-    """Edit year/month/day as one masked control with three independent slots."""
+    """Edit year/month/day as one masked control with independent text carets."""
     session = state.field_session
     if session is None:
         return
 
     from .view import render
 
-    raw = _birth_raw_values(session)
-    replace = True
+    buffers = _birth_buffers(session)
 
     def redraw() -> None:
-        _sync_birth_raw(session, raw)
+        _sync_birth_buffers(session, buffers)
         frame = render(state, catalog)
         screen._paint(frame.lines)
-        _position_birth_cursor(frame, session, raw, replace)
+        _position_birth_cursor(frame, session, buffers)
 
     state.notice = ""
     redraw()
+    cursor_visible = True
     with input_mode(), editing_cursor():
         while True:
-            event = read_event(None)
+            event = read_event(_CURSOR_BLINK_SECONDS)
             if event is None:
+                cursor_visible = not cursor_visible
+                _set_cursor_visible(cursor_visible)
                 continue
-            kind = event.kind
+            if not cursor_visible:
+                cursor_visible = True
+                _set_cursor_visible(True)
 
+            kind = event.kind
             if kind == "cancel":
                 raise KeyboardInterrupt
             if kind == "submit":
-                parsed = _parsed_birth_values(raw)
+                parsed = _parsed_birth_buffers(buffers)
                 try:
                     birth_canonical(parsed)
                 except (TypeError, ValueError):
@@ -297,40 +382,12 @@ def _edit_birth_date(state: Workspace, catalog: Catalog) -> None:
                 return
 
             if kind in {"left", "right", "home", "end", "tab"}:
-                if kind == "left":
-                    session.active = max(0, session.active - 1)
-                elif kind in {"right", "tab"}:
-                    session.active = min(len(session.fields) - 1, session.active + 1)
-                elif kind == "home":
-                    session.active = 0
-                else:
-                    session.active = len(session.fields) - 1
-                replace = True
+                _move_birth_caret(session, buffers, kind)
                 redraw()
                 continue
 
-            key = session.active_key
-            before = raw[key]
-            if kind == "insert":
-                digits = "".join(char for char in event.text if char.isdigit())
-                if not digits:
-                    continue
-                width = _BIRTH_SLOT_WIDTHS[key]
-                base = "" if replace else raw[key]
-                raw[key] = (base + digits)[:width]
-                replace = False
-            elif kind in {"backspace", "delete", "clear"}:
-                if kind == "backspace" and not replace:
-                    raw[key] = raw[key][:-1]
-                else:
-                    raw[key] = ""
-                replace = False
-            else:
-                continue
-
-            if key == "birth_month" and not raw[key]:
-                raw["birth_day"] = ""
-            if raw[key] != before or key == "birth_month":
+            buffer = buffers[session.active_key]
+            if _edit_birth_buffer(buffer, event, _BIRTH_SLOT_WIDTHS[session.active_key]):
                 redraw()
 
 
