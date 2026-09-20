@@ -58,7 +58,7 @@ def lines(
 
     year = values.get("enrollment_year")
     result: list[Line] = [
-        [field("name", style=screen._BOLD + screen._TEXT_PRIMARY)],
+        [label("姓名  "), field("name")],
         [label("学号  "), field("student_no")],
         [label("物种  "), field("family"), (" · ", screen._TEXT_SECONDARY, ""), field("branch")],
         [label("性别  "), field("gender")],
