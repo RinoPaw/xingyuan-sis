@@ -30,6 +30,18 @@ class FieldControlGeometryTests(unittest.TestCase):
         self.assertEqual([field.key for field in state.form.fields], expected)
         self.assertEqual(expected[:2], ["name", "student_no"])
 
+    def test_create_form_exposes_required_fields_and_mouse_save(self):
+        state = workspace.Workspace("students")
+        forms.open_form(state, self.catalog, "create")
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+            frame = view.render(state, self.catalog)
+
+        plain = "\n".join(screen._ANSI_RE.sub("", line) for line in frame.lines)
+        self.assertIn("* 必填", plain)
+        self.assertIn("姓名", plain)
+        self.assertIn("*", plain)
+        self.assertTrue(any(region.action == "save" for region in frame.regions))
+
     def test_form_selection_and_editing_use_the_same_bounded_box(self):
         state = workspace.Workspace("students")
         forms.open_form(state, self.catalog, "create")
