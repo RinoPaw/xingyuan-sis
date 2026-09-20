@@ -134,6 +134,18 @@ class TuiInputGuardTests(unittest.TestCase):
         self.assertEqual(write.call_args_list[0].args[0], "\x1b[?25l")
         self.assertEqual(write.call_args_list[-1].args[0], "\x1b[?25h")
 
+    def test_inline_editor_requests_a_visible_blinking_cursor(self):
+        with patch("sys.stdout.isatty", return_value=True), \
+             patch("sys.stdout.write") as write, patch("sys.stdout.flush"):
+            with terminal_input.editing_cursor():
+                pass
+
+        output = "".join(call.args[0] for call in write.call_args_list)
+        self.assertIn("\x1b[?25h", output)
+        self.assertIn("\x1b[?12h", output)
+        self.assertIn("\x1b[1 q", output)
+        self.assertTrue(output.endswith("\x1b[0 q"))
+
 
 if __name__ == "__main__":
     unittest.main()
