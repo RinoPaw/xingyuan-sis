@@ -79,7 +79,11 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         entries.append(("field", index, field))
         if index == form.position:
             selected_entry = len(entries) - 1
-            if session is not None and session.active_key == field.key and session.options is not None:
+            session_on_field = session is not None and (
+                session.active_key == field.key
+                or (field.key == "birth_date" and session.anchor_key == "birth_date")
+            )
+            if session_on_field and session.options is not None:
                 if session.options:
                     for option_index, (_, label) in enumerate(session.options):
                         entries.append(("option", option_index, label))
@@ -114,14 +118,38 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
             continue
 
         field = payload
+        label = screen._pad_cells(screen._clip_cells(field.label, label_width), label_width)
+        board.put(x, y, label, screen._TEXT_SECONDARY, width=label_width)
+
+        birth_editing = (
+            field.key == "birth_date"
+            and session is not None
+            and session.anchor_key == "birth_date"
+        )
+        if birth_editing:
+            cursor = value_x
+            parts = (("birth_year", 4), ("birth_month", 2), ("birth_day", 2))
+            for part_index, (key, slot_width) in enumerate(parts):
+                if part_index:
+                    board.put(cursor, y, "-", screen._TEXT_SECONDARY, width=1)
+                    cursor += 1
+                if cursor >= value_x + value_width:
+                    break
+                available = min(slot_width, value_x + value_width - cursor)
+                raw = values.get(key)
+                text = "" if raw is None else str(raw)
+                text = screen._pad_cells(screen._clip_cells(text, available), available)
+                selected = session.active_key == key and session.options is None
+                style = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED if selected else screen._TEXT_PRIMARY
+                board.put(cursor, y, text, style, f"field:{key}", available)
+                cursor += available
+            continue
+
         value = (
             display_value(catalog, state.key, values, field.key)
             if state.key in COLLECTIONS
             else safe(values.get(field.key))
         )
-        label = screen._pad_cells(screen._clip_cells(field.label, label_width), label_width)
-        board.put(x, y, label, screen._TEXT_SECONDARY, width=label_width)
-
         selected = index == form.position and (session is None or session.options is None)
         style = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED if selected else screen._TEXT_PRIMARY
         text = screen._pad_cells(screen._clip_cells(value, value_width), value_width)
