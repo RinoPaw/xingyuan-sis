@@ -2,7 +2,7 @@
 
 一个使用 Python 标准库和 SQLite 实现的本地学生信息系统课程项目。
 
-它提供三种入口：适合日常操作的终端 TUI、低能力终端下的基础数字菜单，以及适合脚本和精确查询的 CLI。三种入口共享同一套 Service / Repository，不维护三份业务逻辑。
+它提供四种入口：Tkinter 图形界面、适合日常操作的终端 TUI、低能力终端下的基础数字菜单，以及适合脚本和精确查询的 CLI。四种入口共享同一套 Service / Repository，不维护四份业务逻辑。
 
 > 当前定位：课程设计 / 学习项目，不是面向真实学校部署的生产级教务系统。
 
@@ -24,6 +24,7 @@
 
 - Python 3.14+
 - SQLite / `sqlite3`
+- Tkinter / `ttk` 图形界面
 - Python 标准库终端交互
 
 没有第三方运行时依赖。
@@ -33,8 +34,28 @@
 ```bash
 git clone https://github.com/RinoPaw/xingyuan-sis.git
 cd xingyuan-sis
-pip install -e .
+python -m venv .venv
+```
+
+Windows PowerShell：
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
+```
+
+Linux / macOS：
+
+```bash
+source .venv/bin/activate
+python -m pip install -e .
+```
+
+然后可以运行：
+
+```bash
 xy
+xy --gui
 ```
 
 首次运行会在当前目录的 `data/` 下创建 SQLite 数据库，并引导设置管理员 `Administrator` 的密码。
@@ -44,6 +65,7 @@ xy
 ```bash
 xy --tui
 xy --basic
+xy --gui
 ```
 
 临时使用其他数据库：
@@ -51,6 +73,34 @@ xy --basic
 ```bash
 xy --db data/demo.db
 ```
+
+## Tkinter GUI
+
+GUI 使用 Python 标准库中的 Tkinter / `ttk`，不需要通过 pip 安装第三方 GUI 包。
+
+先检查当前 Python 是否带有 Tkinter：
+
+```bash
+python -m tkinter
+```
+
+正常情况下会弹出一个 Tk 测试窗口。如果出现 `No module named 'tkinter'`，说明当前 Python 安装没有包含 Tcl/Tk 组件。
+
+Windows 使用官方 Python 安装程序时，重新运行安装程序，选择 **Modify**，并启用 **tcl/tk and IDLE**。Debian / Ubuntu 使用发行版 Python 时通常可以安装：
+
+```bash
+sudo apt install python3-tk
+```
+
+Tkinter 不是 PyPI 包，因此不要运行 `pip install tkinter`。
+
+GUI 启动命令：
+
+```bash
+xy --gui
+```
+
+如果缺少 Tkinter，星原会直接输出对应的安装提示，不再显示 Python traceback。
 
 ## TUI 使用方式
 
@@ -164,7 +214,8 @@ xy data seed --reset
 ```text
                  ┌─ CLI
 entry ───────────┼─ Basic UI
-                 └─ TUI
+                 ├─ TUI
+                 └─ Tkinter GUI
                     │
                     ▼
               Service / Auth
@@ -202,6 +253,7 @@ python -m unittest discover -s tests -v
 xingyuan-sis/
 ├── src/xingyuan_sis/
 │   ├── cli/                 # CLI 命令
+│   ├── gui/                 # Tkinter / ttk 图形界面
 │   ├── tui/                 # 即时键盘终端界面
 │   │   └── workspace/       # 工作台状态、事件、表单和档案
 │   ├── basic_ui.py          # 基础数字菜单
