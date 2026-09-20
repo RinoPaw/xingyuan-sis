@@ -1,4 +1,5 @@
 from contextlib import nullcontext
+from datetime import datetime
 import os
 import unittest
 from unittest.mock import patch
@@ -20,6 +21,28 @@ class PortalLayoutTests(unittest.TestCase):
         self.assertIn("星原学生信息系统", text)
         self.assertIn("公告", text)
         self.assertIn("暂无公告", text)
+
+    def test_portal_topbar_shows_live_date_and_time_without_sacrificing_database(self) -> None:
+        identity = Identity("Administrator", "admin")
+        now = datetime(2026, 9, 20, 14, 32)
+
+        wide = screen._ANSI_RE.sub(
+            "", portal._topbar(80, identity, "Administrator", "xingyuan.db", now)
+        )
+        narrower = screen._ANSI_RE.sub(
+            "", portal._topbar(39, identity, "Administrator", "xingyuan.db", now)
+        )
+        narrowest = screen._ANSI_RE.sub(
+            "", portal._topbar(32, identity, "Administrator", "xingyuan.db", now)
+        )
+
+        self.assertIn("09-20 周日 14:32", wide)
+        self.assertIn("LOCAL  xingyuan.db", wide)
+        self.assertIn("14:32", narrower)
+        self.assertNotIn("周日", narrower)
+        self.assertIn("LOCAL  xingyuan.db", narrower)
+        self.assertNotIn("14:32", narrowest)
+        self.assertIn("LOCAL  xingyuan.db", narrowest)
 
     def test_academic_preview_is_visible_when_width_allows(self) -> None:
         identity = Identity("Administrator", "admin")
