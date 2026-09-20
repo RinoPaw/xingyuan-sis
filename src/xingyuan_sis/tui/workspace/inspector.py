@@ -245,6 +245,7 @@ def render_inspector(
             state.detail_scroll = visible_start(target_line, len(lines), capacity, state.detail_scroll)
 
     visible = lines[state.detail_scroll:state.detail_scroll + capacity]
+    show_selection_marker = session is None or session.options is not None
     for offset_in_view, segments in enumerate(visible):
         y = top + offset_in_view
         cursor = x
@@ -252,7 +253,7 @@ def render_inspector(
         for segment_index, (text, style, action) in enumerate(segments):
             strong = bool(action and action == selected_action and (focused or session is not None))
             weak = bool(action and action == selected_action and not strong)
-            if strong or weak:
+            if (strong or weak) and show_selection_marker:
                 marker = theme.selection_prefix(selected=strong, current=weak)
                 marker_width = min(screen._display_width(marker), max(0, content_right - cursor))
                 if marker_width:
