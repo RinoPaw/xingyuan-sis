@@ -76,7 +76,9 @@ class PortalLayoutTests(unittest.TestCase):
         self.assertIn("[·学生 ]", screen._ANSI_RE.sub("", weak))
         self.assertNotIn(screen._SURFACE_SELECTED, weak)
         self.assertIn(screen._SURFACE_SELECTED, strong)
-        self.assertIn(screen._TEXT_ACCENT, strong)
+        marker = screen._ansi(">", theme.selection_marker_style())
+        self.assertIn(marker, strong)
+        self.assertNotIn(screen._TEXT_ACCENT, strong.replace(marker, ""))
         self.assertIn("[>学生 ]", screen._ANSI_RE.sub("", strong))
         self.assertNotEqual(weak, strong)
 
