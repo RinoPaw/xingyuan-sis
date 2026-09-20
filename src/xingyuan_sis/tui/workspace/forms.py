@@ -9,6 +9,40 @@ from .data import Catalog, Field
 from .state import FocusArea, Form, Workspace
 
 
+_STUDENT_CREATE_FIELD_ORDER = (
+    "name",
+    "student_no",
+    "family",
+    "branch",
+    "gender",
+    "age",
+    "enrollment_year",
+    "major_code",
+    "class_number",
+    "status",
+    "primary_element",
+    "primary_affinity",
+    "birth_date",
+    "contact",
+    "dorm_area",
+    "dorm_building",
+    "dorm_room",
+    "notes",
+)
+
+
+def _create_fields(state: Workspace, catalog: Catalog) -> tuple[Field, ...]:
+    """Return fields in the same user-facing order as the record archive."""
+    fields = catalog.fields(state.key)
+    if state.key != "students":
+        return fields
+
+    by_key = {field.key: field for field in fields}
+    ordered = [by_key[key] for key in _STUDENT_CREATE_FIELD_ORDER if key in by_key]
+    ordered.extend(field for field in fields if field.key not in _STUDENT_CREATE_FIELD_ORDER)
+    return tuple(ordered)
+
+
 def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
     """Open a transaction and make its focus transition explicit."""
     catalog.require_write()
@@ -22,7 +56,7 @@ def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
 
     return_to = state.capture_focus_context() if mode == "delete" else None
     if mode == "create":
-        state.form = Form(mode, catalog.fields(state.key), catalog.defaults(state.key))
+        state.form = Form(mode, _create_fields(state, catalog), catalog.defaults(state.key))
     elif mode in {"import", "export"}:
         state.form = Form(mode, (Field("path", "CSV 文件路径", True),), {"path": "data/students.csv"})
     elif mode == "delete":
