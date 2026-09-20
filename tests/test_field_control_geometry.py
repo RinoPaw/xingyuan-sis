@@ -7,6 +7,7 @@ from unittest.mock import patch
 from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import screen, workspace
+from xingyuan_sis.tui.layout import WorkspaceLayout
 from xingyuan_sis.tui.workspace import field_session, forms, view
 from xingyuan_sis.tui.workspace.data import Catalog
 from xingyuan_sis.tui.workspace.student_layout import STUDENT_FIELD_ORDER
@@ -30,17 +31,34 @@ class FieldControlGeometryTests(unittest.TestCase):
         self.assertEqual([field.key for field in state.form.fields], expected)
         self.assertEqual(expected[:2], ["name", "student_no"])
 
-    def test_create_form_exposes_required_fields_and_mouse_save(self):
+    def test_create_form_marks_required_fields_and_has_mouse_save(self):
         state = workspace.Workspace("students")
         forms.open_form(state, self.catalog, "create")
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             frame = view.render(state, self.catalog)
 
         plain = "\n".join(screen._ANSI_RE.sub("", line) for line in frame.lines)
-        self.assertIn("* 必填", plain)
-        self.assertIn("姓名", plain)
-        self.assertIn("*", plain)
+        self.assertNotIn("* 必填", plain)
+        self.assertRegex(plain, r"姓名\s*\*")
         self.assertTrue(any(region.action == "save" for region in frame.regions))
+
+    def test_form_feedback_uses_reserved_row_without_moving_fields(self):
+        state = workspace.Workspace("students")
+        forms.open_form(state, self.catalog, "create")
+
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+            normal = view.render(state, self.catalog)
+        normal_name = next(r for r in normal.regions if r.action == "field:name")
+
+        state.notice = "未完成：请填写学号"
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+            error = view.render(state, self.catalog)
+        error_name = next(r for r in error.regions if r.action == "field:name")
+        layout = WorkspaceLayout(120, 35)
+        notice_line = screen._ANSI_RE.sub("", error.lines[layout.panel_heading_row("students") + 1])
+
+        self.assertEqual(error_name.y, normal_name.y)
+        self.assertIn("请填写学号", notice_line)
 
     def test_form_selection_and_editing_use_the_same_bounded_box(self):
         state = workspace.Workspace("students")
