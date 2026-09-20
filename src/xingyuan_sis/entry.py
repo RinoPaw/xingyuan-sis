@@ -10,6 +10,13 @@ from .database import initialize_database
 from .terminal_capabilities import detect_terminal
 
 
+_TKINTER_INSTALL_HINT = """无法启动 GUI：当前 Python 未安装 Tkinter/Tcl-Tk。
+Tkinter 不是 PyPI 包，不能通过 `pip install tkinter` 安装。
+Windows：重新运行 Python 安装程序，选择 Modify，并启用 “tcl/tk and IDLE”。
+Linux：安装当前 Python 对应的 Tk 包（Debian/Ubuntu 通常为 python3-tk）。
+检查：python -m tkinter"""
+
+
 def _run_menu(db_path: Path | None, *, mode: str) -> int:
     initialize_database(db_path)
     capabilities = detect_terminal()
@@ -28,10 +35,21 @@ def _run_menu(db_path: Path | None, *, mode: str) -> int:
 
 def _run_gui(db_path: Path | None) -> int:
     initialize_database(db_path)
-    from .gui.app import run
+    try:
+        from .gui.app import run
+    except ImportError as error:
+        if not _is_tkinter_import_error(error):
+            raise
+        print(_TKINTER_INSTALL_HINT, file=sys.stderr)
+        return 1
 
     run(db_path)
     return 0
+
+
+def _is_tkinter_import_error(error: ImportError) -> bool:
+    name = getattr(error, "name", None)
+    return name in {"tkinter", "_tkinter"} or "tkinter" in str(error).lower()
 
 
 def main(argv: Sequence[str] | None = None) -> int:
