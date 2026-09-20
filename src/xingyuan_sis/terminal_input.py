@@ -25,6 +25,7 @@ from .tui.tokens import (
 _ACTIVE = ContextVar("menu_input_style", default=False)
 _PAGE_STYLE = _SURFACE_DEFAULT + _TEXT_PRIMARY
 _FIELD_STYLE = _SURFACE_SELECTED + _TEXT_ON_SELECTED
+_CURSOR_BLINK_SECONDS = 0.45
 
 
 @contextmanager
@@ -36,14 +37,15 @@ def input_style(enabled: bool):
         _ACTIVE.reset(token)
 
 
+def _set_cursor_visible(visible: bool) -> None:
+    if sys.stdout.isatty():
+        sys.stdout.write("\x1b[?25h" if visible else "\x1b[?25l")
+        sys.stdout.flush()
+
+
 @contextmanager
 def editing_cursor():
-    """Expose a real blinking terminal cursor for in-place editors.
-
-    ``DECSCUSR 1`` requests a blinking block cursor while DEC private mode 12
-    enables cursor blinking on terminals that honor it. Unsupported terminals
-    simply ignore either sequence.
-    """
+    """Expose an editor cursor and keep it visible when the editor exits."""
     enabled = sys.stdout.isatty()
     if enabled:
         sys.stdout.write("\x1b[?25h\x1b[?12h\x1b[1 q")
@@ -52,7 +54,7 @@ def editing_cursor():
         yield
     finally:
         if enabled:
-            sys.stdout.write("\x1b[0 q")
+            sys.stdout.write("\x1b[?25h\x1b[0 q")
             sys.stdout.flush()
 
 
@@ -198,11 +200,17 @@ def _read_interactive_inline(
         )
 
     redraw()
+    cursor_visible = True
     with input_mode(), editing_cursor():
         while True:
-            event = read_event(None)
+            event = read_event(_CURSOR_BLINK_SECONDS)
             if event is None:
+                cursor_visible = not cursor_visible
+                _set_cursor_visible(cursor_visible)
                 continue
+            if not cursor_visible:
+                cursor_visible = True
+                _set_cursor_visible(True)
             before = (buffer.value, buffer.cursor)
             action = buffer.apply(event)
             if action == "submit":
