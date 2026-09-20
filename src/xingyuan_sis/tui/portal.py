@@ -158,28 +158,20 @@ def _topbar(
 ) -> str:
     now = now or datetime.now()
     role = "管理员" if identity.is_admin else "学生"
-    database_text = f"LOCAL  {database}" if database else ""
-    left_width = screen._display_width("✦ 星原 SIS")
-    available = max(0, width - left_width)
-
     clock_variants = (
         f"{now:%m-%d} {_WEEKDAYS[now.weekday()]} {now:%H:%M}",
         f"{now:%m-%d %H:%M}",
         f"{now:%H:%M}",
     )
     identity_text = f"{display_name} · {role}"
-    context_candidates = (
-        *(f"{identity_text}   {clock}" for clock in clock_variants),
-        *clock_variants,
-        "",
+    return theme.topbar(
+        width,
+        database=database,
+        context_variants=(
+            *(f"{identity_text}   {clock}" for clock in clock_variants),
+            *clock_variants,
+        ),
     )
-    context = ""
-    for candidate in context_candidates:
-        right = "   ".join(part for part in (candidate, database_text) if part)
-        if screen._display_width(right) + 2 <= available:
-            context = candidate
-            break
-    return theme.topbar(width, database=database, context=context)
 
 
 def _compact_body(
