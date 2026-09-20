@@ -19,17 +19,19 @@ class DormitoryCompositeTests(unittest.TestCase):
         self.catalog = Catalog(self.db)
 
     def test_canonical_dormitory_is_projected_as_three_fields(self):
-        row = self.catalog.records["students"][0]
-        area, rest = row["dormitory"].split(" ", 1)
+        raw = self.catalog.records["students"][0]
+        row = self.catalog.rows("students")[0]
+        area, rest = raw["dormitory"].split(" ", 1)
         building, room = rest.split("-", 1)
 
+        self.assertNotIn("dorm_area", raw)
         self.assertEqual(
             (row["dorm_area"], row["dorm_building"], row["dorm_room"]),
             (area, building, room),
         )
 
         line = next(
-            line for line in student_inspector.lines(row, self.catalog)
+            line for line in student_inspector.lines(raw, self.catalog)
             if line and line[0][0].startswith("宿舍")
         )
         self.assertEqual(
@@ -39,7 +41,8 @@ class DormitoryCompositeTests(unittest.TestCase):
         self.assertEqual("".join(text for text, _, _ in line), f"宿舍      {area} · {building} · {room}")
 
     def test_dormitory_options_follow_area_then_building(self):
-        row = self.catalog.records["students"][0]
+        rows = self.catalog.rows("students")
+        row = rows[0]
         values = dict(row)
 
         area_options = self.catalog.options("students", "dorm_area", values)
@@ -48,7 +51,7 @@ class DormitoryCompositeTests(unittest.TestCase):
         building_options = self.catalog.options("students", "dorm_building", values)
         expected_buildings = list(dict.fromkeys(
             student["dorm_building"]
-            for student in self.catalog.records["students"]
+            for student in rows
             if student.get("dorm_area") == row["dorm_area"] and student.get("dorm_building")
         ))
         self.assertEqual([value for value, _ in building_options], [None, *expected_buildings])
@@ -56,7 +59,7 @@ class DormitoryCompositeTests(unittest.TestCase):
         room_options = self.catalog.options("students", "dorm_room", values)
         expected_rooms = list(dict.fromkeys(
             student["dorm_room"]
-            for student in self.catalog.records["students"]
+            for student in rows
             if student.get("dorm_area") == row["dorm_area"]
             and student.get("dorm_building") == row["dorm_building"]
             and student.get("dorm_room")
@@ -74,8 +77,9 @@ class DormitoryCompositeTests(unittest.TestCase):
             original,
         )
 
-        updated = next(row for row in self.catalog.records["students"] if row["id"] == record_id)
-        self.assertEqual(updated["dormitory"], "西区 5-152")
+        raw = next(row for row in self.catalog.records["students"] if row["id"] == record_id)
+        updated = next(row for row in self.catalog.rows("students") if row["id"] == record_id)
+        self.assertEqual(raw["dormitory"], "西区 5-152")
         self.assertEqual(
             (updated["dorm_area"], updated["dorm_building"], updated["dorm_room"]),
             ("西区", "5", "152"),
