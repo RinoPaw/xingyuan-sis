@@ -111,10 +111,16 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         y = content_row + visible_index
         if kind == "option":
             selected = session is not None and index == session.option_index
-            prefix = theme.selection_prefix(selected=selected)
-            text = screen._pad_cells(screen._clip_cells(prefix + safe(payload), width), width)
-            style = theme.selection_style() if selected else screen._TEXT_PRIMARY
-            board.put(x, y, text, style, f"option:{index}", width)
+            body_width = max(1, width - _SELECTION_GUTTER)
+            body = screen._pad_cells(screen._clip_cells(safe(payload), body_width), body_width)
+            if selected:
+                text = (
+                    screen._ansi("> ", theme.selection_marker_style())
+                    + screen._ansi(body, theme.selection_style())
+                )
+            else:
+                text = "  " + screen._ansi(body, screen._TEXT_PRIMARY)
+            board.put(x, y, text, action=f"option:{index}", width=width)
             continue
         if kind == "empty":
             board.put(x, y, safe(payload), screen._TEXT_SECONDARY, width=width)
@@ -126,7 +132,13 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
 
         row_selected = index == form.position and (session is None or session.options is None)
         if row_selected:
-            board.put(value_x, y, theme.selection_prefix(selected=True), theme.selection_style(), width=_SELECTION_GUTTER)
+            board.put(
+                value_x,
+                y,
+                theme.selection_prefix(selected=True),
+                theme.selection_marker_style(),
+                width=_SELECTION_GUTTER,
+            )
 
         birth_editing = (
             field.key == "birth_date"
