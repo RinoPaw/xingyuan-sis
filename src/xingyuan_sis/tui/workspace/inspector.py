@@ -7,6 +7,7 @@ from .. import screen, theme
 from ..layout import WorkspaceLayout, visible_start
 from ..view_common import Board, identity, panel_heading, safe
 from .data import Catalog
+from .field_geometry import control_text, control_width
 from .picker import prepare_candidates
 from .presentation import display_value
 from .state import FieldSession, FocusArea, Workspace
@@ -270,7 +271,7 @@ def render_inspector(
                 if marker_width:
                     if action.startswith("option:") and cursor - marker_width >= x:
                         # Picker rows reserve their marker to the left of the
-                        # candidate text.  Selection never moves the text.
+                        # candidate text. Selection never moves the text.
                         board.put(
                             cursor - marker_width,
                             y,
@@ -294,18 +295,23 @@ def render_inspector(
             if remaining <= 0:
                 break
             shown = screen._clip_cells(text, remaining)
-            display = screen._display_width(shown)
-            drawn_style = theme.selection_style(style) if strong else style
+            editing_box = bool(
+                session is not None
+                and action == selected_action
+                and session.options is None
+                and segment_index == len(segments) - 1
+            )
+            if editing_box:
+                box_width = control_width(shown, remaining)
+                shown = control_text(shown, box_width)
+                display = box_width
+                drawn_style = theme.selection_style(style)
+            else:
+                display = screen._display_width(shown)
+                drawn_style = theme.selection_style(style) if strong else style
 
             if action:
                 hit_width = max(1, display)
-                if (
-                    session is not None
-                    and action == selected_action
-                    and session.options is None
-                    and segment_index == len(segments) - 1
-                ):
-                    hit_width = max(hit_width, remaining)
                 board.regions.append(screen.HitRegion(cursor + 1, y + 1, hit_width, action))
             board.put(cursor, y, shown, drawn_style, width=remaining)
             cursor += display
