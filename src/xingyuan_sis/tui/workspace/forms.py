@@ -7,40 +7,12 @@ from ...terminal_input import input_style, read_input
 from .. import screen
 from .data import Catalog, Field
 from .state import FocusArea, Form, Workspace
-
-
-_STUDENT_CREATE_FIELD_ORDER = (
-    "name",
-    "student_no",
-    "family",
-    "branch",
-    "gender",
-    "age",
-    "enrollment_year",
-    "major_code",
-    "class_number",
-    "status",
-    "primary_element",
-    "primary_affinity",
-    "birth_date",
-    "contact",
-    "dorm_area",
-    "dorm_building",
-    "dorm_room",
-    "notes",
-)
+from .student_layout import order_fields as order_student_fields
 
 
 def _create_fields(state: Workspace, catalog: Catalog) -> tuple[Field, ...]:
-    """Return fields in the same user-facing order as the record archive."""
     fields = catalog.fields(state.key)
-    if state.key != "students":
-        return fields
-
-    by_key = {field.key: field for field in fields}
-    ordered = [by_key[key] for key in _STUDENT_CREATE_FIELD_ORDER if key in by_key]
-    ordered.extend(field for field in fields if field.key not in _STUDENT_CREATE_FIELD_ORDER)
-    return tuple(ordered)
+    return order_student_fields(fields) if state.key == "students" else fields
 
 
 def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
