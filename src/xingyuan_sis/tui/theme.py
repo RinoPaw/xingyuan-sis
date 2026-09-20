@@ -11,7 +11,6 @@ _BUTTON_CURRENT = screen._SURFACE_INTERACTIVE + screen._TEXT_ACCENT
 _BAR_SURFACE = screen._SURFACE_FOOTER + screen._TEXT_PRIMARY
 _TOPBAR = screen._SURFACE_TOPBAR + screen._TEXT_ACCENT + screen._BOLD
 _SECONDARY = screen._SURFACE_INTERACTIVE + screen._TEXT_PRIMARY
-_SELECTED = screen._SURFACE_SELECTED + screen._TEXT_PRIMARY
 _SELECTED_MARKER = screen._SURFACE_SELECTED + screen._TEXT_ACCENT
 
 
@@ -20,9 +19,9 @@ def selection_prefix(*, selected: bool = False, current: bool = False) -> str:
     return "> " if selected else "· " if current else "  "
 
 
-def selection_style() -> str:
-    """Strong selection surface with normal foreground text."""
-    return _SELECTED
+def selection_style(original_style: str) -> str:
+    """Add the selected surface without replacing the item's original foreground."""
+    return screen._SURFACE_SELECTED + original_style
 
 
 def selection_marker_style() -> str:
@@ -30,15 +29,20 @@ def selection_marker_style() -> str:
     return _SELECTED_MARKER
 
 
-def _style_selected_marker(text: str, marker: str = ">") -> str:
-    """Style a selected item while keeping only its marker blue."""
+def _style_selected_marker(
+    text: str,
+    marker: str = ">",
+    original_style: str = screen._TEXT_PRIMARY,
+) -> str:
+    """Add selection while keeping only the marker blue and the item in its own color."""
     index = text.find(marker)
+    selected_style = selection_style(original_style)
     if index < 0:
-        return screen._ansi(text, _SELECTED)
+        return screen._ansi(text, selected_style)
     return (
-        screen._ansi(text[:index], _SELECTED)
+        screen._ansi(text[:index], selected_style)
         + screen._ansi(marker, _SELECTED_MARKER)
-        + screen._ansi(text[index + len(marker):], _SELECTED)
+        + screen._ansi(text[index + len(marker):], selected_style)
     )
 
 
@@ -59,7 +63,7 @@ def button(
     if width is not None:
         shown = screen._pad_cells(screen._clip_cells(shown, width), width)
     if selected:
-        return _style_selected_marker(shown)
+        return _style_selected_marker(shown, original_style=screen._TEXT_PRIMARY)
     if current:
         return screen._ansi(shown, _BUTTON_CURRENT)
     return screen._ansi(shown, _BUTTON)
@@ -72,7 +76,9 @@ def secondary_item(label: str, *, selected: bool = False, width: int = 10) -> st
         screen._clip_cells(selection_prefix(selected=selected) + label, width),
         width,
     )
-    return _style_selected_marker(shown) if selected else screen._ansi(shown, _SECONDARY)
+    if selected:
+        return _style_selected_marker(shown, original_style=screen._TEXT_PRIMARY)
+    return screen._ansi(shown, _SECONDARY)
 
 
 def nav_item(
@@ -87,7 +93,7 @@ def nav_item(
     if width is not None:
         shown = screen._pad_cells(screen._clip_cells(shown, width), width)
     if selected:
-        return _style_selected_marker(shown)
+        return _style_selected_marker(shown, original_style=screen._TEXT_PRIMARY)
     if current:
         return screen._ansi(shown, screen._TEXT_ACCENT)
     return screen._ansi(shown, screen._TEXT_PRIMARY)
