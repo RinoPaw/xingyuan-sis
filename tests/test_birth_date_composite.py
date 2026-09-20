@@ -90,7 +90,47 @@ class BirthDateCompositeTests(unittest.TestCase):
         self.assertEqual(screen._display_width(segments["field:birth_month"]), 2)
         self.assertEqual(screen._display_width(segments["field:birth_day"]), 2)
 
-    def test_masked_editor_moves_between_slots_and_commits_once(self):
+    def test_arrow_keys_move_inside_slot_before_crossing_to_next_slot(self):
+        state = Workspace("students")
+        field_session.start(state, self.catalog, "birth_date")
+        session = state.field_session
+        session.values.update(birth_year=2005, birth_month=12, birth_day=22)
+        session.active = 1
+        buffers = field_session._birth_buffers(session)
+
+        self.assertEqual(buffers["birth_month"].cursor, 0)
+        field_session._move_birth_caret(session, buffers, "right")
+        self.assertEqual(session.active_key, "birth_month")
+        self.assertEqual(buffers["birth_month"].cursor, 1)
+
+        field_session._move_birth_caret(session, buffers, "right")
+        self.assertEqual(session.active_key, "birth_month")
+        self.assertEqual(buffers["birth_month"].cursor, 2)
+
+        field_session._move_birth_caret(session, buffers, "right")
+        self.assertEqual(session.active_key, "birth_day")
+        self.assertEqual(buffers["birth_day"].cursor, 0)
+
+    def test_backspace_changes_only_the_active_date_slot(self):
+        state = Workspace("students")
+        field_session.start(state, self.catalog, "birth_date")
+        session = state.field_session
+        session.values.update(birth_year=2005, birth_month=12, birth_day=22)
+        session.active = 1
+        buffers = field_session._birth_buffers(session)
+        buffers["birth_month"].cursor = 2
+
+        changed = field_session._edit_birth_buffer(
+            buffers["birth_month"],
+            TextEvent("backspace"),
+            2,
+        )
+
+        self.assertTrue(changed)
+        self.assertEqual(buffers["birth_month"].value, "1")
+        self.assertEqual(buffers["birth_day"].value, "22")
+
+    def test_masked_editor_uses_tab_to_cross_slots_and_commits_once(self):
         row = self.catalog.rows("students")[0]
         student_no = row["student_no"]
         self.catalog.service.update_student_by_no(student_no, birth_date="2006-09-07")
@@ -99,10 +139,10 @@ class BirthDateCompositeTests(unittest.TestCase):
         field_session.start(state, self.catalog, "birth_date")
 
         events = [
-            TextEvent("right"),
+            TextEvent("tab"),
             TextEvent("insert", "1"),
             TextEvent("insert", "2"),
-            TextEvent("right"),
+            TextEvent("tab"),
             TextEvent("insert", "3"),
             TextEvent("insert", "1"),
             TextEvent("submit"),
