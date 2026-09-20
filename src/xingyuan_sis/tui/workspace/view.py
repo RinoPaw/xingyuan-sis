@@ -5,7 +5,7 @@ from pathlib import Path
 from ...database import DB_PATH
 from .. import screen, theme
 from ..layout import WorkspaceLayout
-from ..view_common import Board, metric_summary, safe
+from ..view_common import Board, metric_summary
 from .commands import FORM_SAVE, toolbar as toolbar_commands
 from .dashboard import render_dashboard
 from .data import ACADEMICS, COLLECTIONS, Catalog
@@ -109,7 +109,7 @@ def _footer(state: Workspace, catalog: Catalog, width: int) -> str:
 def _split_divider(board: Board, state: Workspace, layout: WorkspaceLayout) -> None:
     split = layout.split_x
     panel_heading_row = layout.panel_heading_row(state.key)
-    for y in range(panel_heading_row, board.height - 2):
+    for y in range(panel_heading_row, board.height - 1):
         board.put(split, y, "│", screen._BORDER_SUBTLE)
 
 
@@ -175,14 +175,6 @@ def render(state: Workspace, catalog: Catalog):
             render_dashboard(board, state, catalog)
         else:
             _render_record_body(board, state, catalog, layout, width)
-
-        board.rows[height - 2] = []
-        board.put(
-            0,
-            height - 2,
-            theme.notice(safe(state.notice), error=state.notice.startswith("未完成：")) if state.notice else "",
-            width=width,
-        )
     else:
         action_row = layout.action_row
         if state.key == "data":
@@ -232,13 +224,6 @@ def render(state: Workspace, catalog: Catalog):
             _render_form_body(board, state, catalog, layout, width)
         else:
             _render_record_body(board, state, catalog, layout, width)
-
-        board.put(
-            0,
-            height - 2,
-            theme.notice(safe(state.notice), error=state.notice.startswith("未完成：")) if state.notice else "",
-            width=width,
-        )
 
     board.rows[-1] = [(0, _footer(state, catalog, width))]
     board.regions = [
