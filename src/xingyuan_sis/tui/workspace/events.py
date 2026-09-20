@@ -8,6 +8,7 @@ from .data import ACADEMICS, COLLECTIONS, Catalog
 from .field_session import (
     accept_option as accept_field_option,
     cancel as cancel_field_session,
+    move_active_field as move_field_session_active,
     start as start_record_field_session,
     start_form as start_form_field_session,
 )
@@ -255,7 +256,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 state.action_selected = 0
                 continue
             if key == "end":
-                state.action_selected = max(0, len(toolbar_actions) - 1)
+                state.action_selected = max(0, len(toolbar_actions) - 1, )
                 continue
             if key == "up":
                 continue
@@ -295,9 +296,14 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 elif key == "select" or (isinstance(key, str) and key.startswith("option:")):
                     if session.options:
                         index = int(key.split(":")[1]) if key.startswith("option:") else session.option_index
-                        if accept_field_option(state, catalog, index):
-                            return "field-edit", 0
+                        accept_field_option(state, catalog, index)
                 continue
+
+            if key in {"left", "right"}:
+                move_field_session_active(state, key)
+                continue
+            if key == "select":
+                return "field-edit", 0
             continue
 
         if state.form:
