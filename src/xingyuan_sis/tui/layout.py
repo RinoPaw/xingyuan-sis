@@ -95,10 +95,12 @@ class WorkspaceLayout:
         return self.panel_heading_row(key) + 1
 
     def panel_capacity(self, key: str) -> int:
-        """Rows available to panel content while reserving only footer chrome."""
+        """Rows available to inspector content while reserving footer chrome."""
         bottom_reserve = 1 if self.compact else 2
         return max(1, self.height - self.panel_content_row(key) - bottom_reserve)
 
     def roster_capacity(self, key: str) -> int:
-        """Visible record rows after reserving the roster's column-header row."""
-        return max(1, self.panel_capacity(key) - 1)
+        """Fill every record row above the footer after the roster column header."""
+        data_row = self.panel_content_row(key) + 1
+        footer_row = self.height - 1
+        return max(1, footer_row - data_row)
