@@ -110,6 +110,80 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertEqual(state.focus, workspace.FocusArea.ROSTER)
         self.assertEqual(state.content_panel, workspace.ContentPanel.ROSTER)
 
+    def test_delete_panel_temporarily_owns_focus_then_escape_restores_exact_context(self):
+        state = workspace.Workspace(
+            "students",
+            selected=4,
+            focus=workspace.FocusArea.TOOLBAR,
+            content_panel=workspace.ContentPanel.INSPECTOR,
+            detail_scroll=3,
+            detail_selected=6,
+            action_selected=2,
+        )
+        state.focus_content()
+        workspace_forms.open_form(state, self.catalog, "delete")
+
+        self.assertEqual(state.focus, workspace.FocusArea.INSPECTOR)
+        self.assertEqual(state.content_panel, workspace.ContentPanel.INSPECTOR)
+        self.assertIsNotNone(state.form.return_to)
+        self.assertEqual(state.form.return_to.focus, workspace.FocusArea.TOOLBAR)
+        self.assertEqual(state.form.return_to.detail_scroll, 3)
+        self.assertEqual(state.form.return_to.detail_selected, 6)
+
+        workspace_forms.cancel_form(state)
+        self.assertEqual(state.focus, workspace.FocusArea.TOOLBAR)
+        self.assertEqual(state.content_panel, workspace.ContentPanel.INSPECTOR)
+        self.assertEqual(state.detail_scroll, 3)
+        self.assertEqual(state.detail_selected, 6)
+        self.assertEqual(state.action_selected, 2)
+
+    def test_delete_confirmation_restores_the_same_context_after_commit(self):
+        state = workspace.Workspace(
+            "students",
+            selected=4,
+            focus=workspace.FocusArea.ROSTER,
+            content_panel=workspace.ContentPanel.ROSTER,
+            detail_scroll=2,
+            detail_selected=5,
+        )
+        original = state.current(self.catalog)
+        state.focus_content()
+        workspace_forms.open_form(state, self.catalog, "delete")
+        workspace_forms.apply_form(state, self.catalog)
+
+        self.assertIsNone(self.catalog.service.student_by_no(original["student_no"]))
+        self.assertEqual(state.focus, workspace.FocusArea.ROSTER)
+        self.assertEqual(state.content_panel, workspace.ContentPanel.ROSTER)
+        self.assertEqual(state.detail_scroll, 2)
+        self.assertEqual(state.detail_selected, 5)
+
+    def test_wide_delete_keeps_roster_and_replaces_inspector_with_aligned_panel(self):
+        state = workspace.Workspace("students", selected=1)
+        rows = state.rows(self.catalog)
+        selected = rows[1]
+        neighbor = rows[0]
+        state.focus_content()
+        workspace_forms.open_form(state, self.catalog, "delete")
+
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+            frame = workspace_view.render(state, self.catalog)
+
+        plain_lines = [screen._ANSI_RE.sub("", line) for line in frame.lines]
+        text = "\n".join(plain_lines)
+        self.assertIn("删除记录", text)
+        self.assertIn("确认删除以下记录？", text)
+        self.assertIn(selected["name"], text)
+        self.assertIn(neighbor["name"], text)
+        self.assertIn("记录", text)
+        self.assertIn("标识", text)
+        self.assertIn("影响", text)
+        self.assertIn("风险", text)
+        self.assertNotIn("\n档案", text)
+
+        record_line = next(line for line in plain_lines if "记录" in line and selected["name"] in line)
+        id_line = next(line for line in plain_lines if "标识" in line and selected["student_no"] in line)
+        self.assertEqual(record_line.index(selected["name"]), id_line.index(selected["student_no"]))
+
     def test_literal_command_shortcuts_open_the_same_transaction_forms(self):
         for key, action in (("a", "create"), ("d", "delete")):
             state = workspace.Workspace("students")
