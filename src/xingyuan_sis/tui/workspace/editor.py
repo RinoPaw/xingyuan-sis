@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .. import screen
+from .. import screen, theme
 from ..layout import WorkspaceLayout
 from ..view_common import Board, identity, panel_heading, safe
 from .data import COLLECTIONS, Catalog
@@ -11,6 +11,9 @@ from .state import FieldSessionOwner
 
 if TYPE_CHECKING:
     from .state import Workspace
+
+
+_SELECTION_GUTTER = 2
 
 
 def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, width: int) -> None:
@@ -101,16 +104,16 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
     label_width = min(12, max(4, width // 3))
     value_x = x + label_width + 2
     value_width = max(1, width - label_width - 2)
+    field_x = value_x + _SELECTION_GUTTER
+    field_width = max(1, value_width - _SELECTION_GUTTER)
 
     for visible_index, (kind, index, payload) in enumerate(entries[first:first + capacity]):
         y = content_row + visible_index
         if kind == "option":
-            text = screen._pad_cells(screen._clip_cells("  " + safe(payload), width), width)
-            style = (
-                screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED
-                if session is not None and index == session.option_index
-                else screen._TEXT_PRIMARY
-            )
+            selected = session is not None and index == session.option_index
+            prefix = theme.selection_prefix(selected=selected)
+            text = screen._pad_cells(screen._clip_cells(prefix + safe(payload), width), width)
+            style = theme.selection_style() if selected else screen._TEXT_PRIMARY
             board.put(x, y, text, style, f"option:{index}", width)
             continue
         if kind == "empty":
@@ -121,26 +124,31 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         label = screen._pad_cells(screen._clip_cells(field.label, label_width), label_width)
         board.put(x, y, label, screen._TEXT_SECONDARY, width=label_width)
 
+        row_selected = index == form.position and (session is None or session.options is None)
+        if row_selected:
+            board.put(value_x, y, theme.selection_prefix(selected=True), theme.selection_style(), width=_SELECTION_GUTTER)
+
         birth_editing = (
             field.key == "birth_date"
             and session is not None
             and session.anchor_key == "birth_date"
         )
         if birth_editing:
-            cursor = value_x
+            cursor = field_x
+            right = field_x + field_width
             parts = (("birth_year", 4), ("birth_month", 2), ("birth_day", 2))
             for part_index, (key, slot_width) in enumerate(parts):
                 if part_index:
                     board.put(cursor, y, "-", screen._TEXT_SECONDARY, width=1)
                     cursor += 1
-                if cursor >= value_x + value_width:
+                if cursor >= right:
                     break
-                available = min(slot_width, value_x + value_width - cursor)
+                available = min(slot_width, right - cursor)
                 raw = values.get(key)
                 text = "" if raw is None else str(raw)
                 text = screen._pad_cells(screen._clip_cells(text, available), available)
                 selected = session.active_key == key and session.options is None
-                style = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED if selected else screen._TEXT_PRIMARY
+                style = theme.selection_style() if selected else screen._TEXT_PRIMARY
                 board.put(cursor, y, text, style, f"field:{key}", available)
                 cursor += available
             continue
@@ -150,7 +158,6 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
             if state.key in COLLECTIONS
             else safe(values.get(field.key))
         )
-        selected = index == form.position and (session is None or session.options is None)
-        style = screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED if selected else screen._TEXT_PRIMARY
-        text = screen._pad_cells(screen._clip_cells(value, value_width), value_width)
-        board.put(value_x, y, text, style, f"field:{field.key}", value_width)
+        style = theme.selection_style() if row_selected else screen._TEXT_PRIMARY
+        text = screen._pad_cells(screen._clip_cells(value, field_width), field_width)
+        board.put(field_x, y, text, style, f"field:{field.key}", field_width)
