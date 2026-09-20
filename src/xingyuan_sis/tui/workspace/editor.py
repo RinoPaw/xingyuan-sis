@@ -19,7 +19,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
     layout = WorkspaceLayout(board.width, board.height)
     heading_row = layout.panel_heading_row(state.key)
     content_row = layout.panel_content_row(state.key)
-    bottom = board.height - 2
+    bottom = board.height - 1
 
     titles = {
         "delete": "删除记录",
