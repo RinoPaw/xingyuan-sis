@@ -87,13 +87,19 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
                 or (field.key == "birth_date" and session.anchor_key == "birth_date")
             )
             if session_on_field and session.options is not None:
+                if session.active_key == session.anchor_key:
+                    current = session.values.get(session.active_key)
+                    filtered = [option for option in session.options if option[0] != current]
+                    if len(filtered) != len(session.options):
+                        session.options = filtered
+                        session.option_index = 0
                 if session.options:
                     for option_index, (_, label) in enumerate(session.options):
                         entries.append(("option", option_index, label))
                         if option_index == session.option_index:
                             selected_entry = len(entries) - 1
                 else:
-                    entries.append(("empty", 0, "暂无可选记录，请先创建。"))
+                    entries.append(("empty", 0, "暂无其他候选项"))
                     selected_entry = len(entries) - 1
 
     capacity = max(1, bottom - content_row)
@@ -111,19 +117,20 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         y = content_row + visible_index
         if kind == "option":
             selected = session is not None and index == session.option_index
-            body_width = max(1, width - _SELECTION_GUTTER)
-            body = screen._pad_cells(screen._clip_cells(safe(payload), body_width), body_width)
-            if selected:
-                text = (
-                    screen._ansi("> ", theme.selection_marker_style())
-                    + screen._ansi(body, theme.selection_style())
-                )
-            else:
-                text = "  " + screen._ansi(body, screen._TEXT_PRIMARY)
-            board.put(x, y, text, action=f"option:{index}", width=width)
+            marker = "> " if selected else "  "
+            marker_style = theme.selection_marker_style() if selected else screen._TEXT_SECONDARY
+            board.put(value_x, y, marker, marker_style, action=f"option:{index}", width=_SELECTION_GUTTER)
+
+            body = screen._pad_cells(screen._clip_cells(safe(payload), field_width), field_width)
+            body_style = (
+                theme.selection_style(screen._TEXT_SECONDARY)
+                if selected
+                else screen._TEXT_SECONDARY
+            )
+            board.put(field_x, y, body, body_style, action=f"option:{index}", width=field_width)
             continue
         if kind == "empty":
-            board.put(x, y, safe(payload), screen._TEXT_SECONDARY, width=width)
+            board.put(field_x, y, safe(payload), screen._TEXT_SECONDARY, width=field_width)
             continue
 
         field = payload
