@@ -106,11 +106,26 @@ def action_targets(lines: list[Line]) -> list[tuple[int, str]]:
     return [(indexes[0], action) for action, indexes in action_line_map(lines, include_options=True).items()]
 
 
+def _student_grade_column(action: str) -> int | None:
+    """Return the semantic column inside a student's course/score pair."""
+    if action.startswith("field:related:grades:") and action.endswith(":score"):
+        return 1
+    if action.startswith("related:grades:"):
+        return 0
+    return None
+
+
+def _student_grade_row(row: list[str]) -> bool:
+    return len(row) >= 2 and {_student_grade_column(action) for action in row} >= {0, 1}
+
+
 def directional_target(lines: list[Line], current: str, direction: str) -> str | None:
     """Navigate directly on the final visible semantic geometry.
 
     Consecutive physical lines carrying the same actions are one semantic row,
     so wrapping or multiline content never creates a second navigation stop.
+    Student course/score rows form a two-column grid: vertical movement keeps
+    the current column, and entering that grid defaults to the course column.
     """
     rows: list[list[str]] = []
     for line in lines:
@@ -129,8 +144,17 @@ def directional_target(lines: list[Line], current: str, direction: str) -> str |
         return rows[row][column - 1] if column else None
     if direction == "right":
         return rows[row][min(column + 1, len(rows[row]) - 1)]
+
     target_row = min(max(0, row + (-1 if direction == "up" else 1)), len(rows) - 1)
-    return rows[target_row][-1]
+    target = rows[target_row]
+    if _student_grade_row(target):
+        current_column = _student_grade_column(current)
+        wanted = 0 if current_column is None else current_column
+        return next(
+            (action for action in target if _student_grade_column(action) == wanted),
+            target[0],
+        )
+    return target[-1]
 
 
 def render_inspector(
