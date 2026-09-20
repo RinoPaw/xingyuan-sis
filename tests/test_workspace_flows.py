@@ -107,12 +107,12 @@ class WorkspaceFlowTests(unittest.TestCase):
 
     def test_create_requires_enter_to_edit_and_arrows_only_move_selection(self):
         state = Workspace("students")
-        self.assertEqual(self.interact(state, ["create", "refresh"], (120, 35)), ("refresh", 0))
+        self.assertEqual(self.interact(state, ["create", "save"], (120, 35)), ("save", 0))
         self.assertIsNotNone(state.form)
         self.assertEqual(state.form.position, 0)
         self.assertIsNone(state.field_session)
 
-        self.assertEqual(self.interact(state, ["down", "refresh"], (120, 35)), ("refresh", 0))
+        self.assertEqual(self.interact(state, ["down", "save"], (120, 35)), ("save", 0))
         self.assertEqual(state.form.position, 1)
         self.assertIsNone(state.field_session)
 

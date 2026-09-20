@@ -60,8 +60,7 @@ class CreateFormConsistencyTests(unittest.TestCase):
         for key in COLLECTIONS:
             with self.subTest(key=key):
                 state = Workspace(key)
-                event = self.interact(state, ["create", "refresh"])
-                self.assertEqual(event, ("refresh", 0))
+                self.assertEqual(self.interact(state, ["create", "save"]), ("save", 0))
                 self.assertIsNotNone(state.form)
                 self.assertEqual(state.form.position, 0)
                 self.assertIsNone(state.field_session)
@@ -79,7 +78,7 @@ class CreateFormConsistencyTests(unittest.TestCase):
             if len(state.form.fields) < 2:
                 continue
             with self.subTest(key=key):
-                self.assertEqual(self.interact(state, ["down", "refresh"]), ("refresh", 0))
+                self.assertEqual(self.interact(state, ["down", "save"]), ("save", 0))
                 self.assertEqual(state.form.position, 1)
                 self.assertIsNone(state.field_session)
 
