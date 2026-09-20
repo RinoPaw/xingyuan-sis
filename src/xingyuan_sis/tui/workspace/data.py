@@ -175,8 +175,6 @@ class Catalog:
 
         for row in self.records["students"]:
             row["class_code"] = classes.get(row["class_id"], {}).get("code")
-            area, building, room = _dorm_parts(row.get("dormitory"))
-            row.update(dorm_area=area, dorm_building=building, dorm_room=room)
         for row in self.records["courses"] + self.records["majors"]:
             row["department_code"] = departments.get(row["department_id"], {}).get("code")
         for row in self.records["courses"]:
@@ -188,10 +186,14 @@ class Catalog:
         if key not in {"students", "classes", "announcements"}:
             return row
         class_id = row["id"] if key == "classes" else row.get("class_id")
-        return row | {
+        extra: dict[str, Any] = {
             "class_number": self.class_numbers.get(class_id),
             "class_label": self.class_labels.get(class_id),
         }
+        if key == "students":
+            area, building, room = _dorm_parts(row.get("dormitory"))
+            extra.update(dorm_area=area, dorm_building=building, dorm_room=room)
+        return row | extra
 
     def project(self, key: str, values: dict[str, Any]) -> dict[str, Any]:
         """Refresh relationship-derived display values for an in-place field projection."""
@@ -209,6 +211,10 @@ class Catalog:
             result["department_code"] = major.get("department_code")
             result["department_name"] = major.get("department_name")
         result["class_label"] = _class_label(result.get("major_name"), result.get("class_number"))
+        area, building, room = _dorm_parts(result.get("dormitory"))
+        result.setdefault("dorm_area", area)
+        result.setdefault("dorm_building", building)
+        result.setdefault("dorm_room", room)
         return result
 
     def rows(self, key: str, view: int = 0, query: str = "") -> list[dict[str, Any]]:
@@ -343,10 +349,9 @@ class Catalog:
             rows = [row for row in self.records["classes"] if row.get("major_code") == major_code]
             return [(self.class_numbers[row["id"]], self.class_numbers[row["id"]]) for row in rows]
 
+        dorms = [_dorm_parts(row.get("dormitory")) for row in self.records["students"]]
         if key == "students" and field_key == "dorm_area":
-            areas = dict.fromkeys(
-                row["dorm_area"] for row in self.records["students"] if row.get("dorm_area")
-            )
+            areas = dict.fromkeys(area for area, _, _ in dorms if area)
             return [(None, "未指定")] + [(area, area) for area in areas]
 
         if key == "students" and field_key == "dorm_building":
@@ -354,9 +359,8 @@ class Catalog:
             if not area:
                 return [(None, "未指定")]
             buildings = dict.fromkeys(
-                row["dorm_building"]
-                for row in self.records["students"]
-                if row.get("dorm_area") == area and row.get("dorm_building")
+                building for dorm_area, building, _ in dorms
+                if dorm_area == area and building
             )
             return [(None, "未指定")] + [(building, building) for building in buildings]
 
@@ -366,11 +370,8 @@ class Catalog:
             if not area or not building:
                 return [(None, "未指定")]
             rooms = dict.fromkeys(
-                row["dorm_room"]
-                for row in self.records["students"]
-                if row.get("dorm_area") == area
-                and row.get("dorm_building") == building
-                and row.get("dorm_room")
+                room for dorm_area, dorm_building, room in dorms
+                if dorm_area == area and dorm_building == building and room
             )
             return [(None, "未指定")] + [(room, room) for room in rooms]
 
