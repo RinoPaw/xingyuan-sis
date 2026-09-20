@@ -264,12 +264,10 @@ def render_inspector(
         content_right = x + width
         for segment_index, (text, style, action) in enumerate(segments):
             strong = bool(action and action == selected_action and (focused or session is not None))
-            weak = bool(action and action == selected_action and not strong)
-            if (strong or weak) and show_selection_marker:
-                marker = theme.selection_prefix(selected=strong, current=weak)
+            if strong and show_selection_marker:
+                marker = theme.selection_prefix(selected=True)
                 marker_width = min(screen._display_width(marker), max(0, content_right - cursor))
                 if marker_width:
-                    marker_style = theme.selection_marker_style() if strong else screen._TEXT_SECONDARY
                     if action.startswith("option:") and cursor - marker_width >= x:
                         # Picker rows reserve their marker to the left of the
                         # candidate text.  Selection never moves the text.
@@ -277,12 +275,19 @@ def render_inspector(
                             cursor - marker_width,
                             y,
                             marker,
-                            marker_style,
+                            theme.selection_marker_style(),
                             action,
                             width=marker_width,
                         )
                     else:
-                        board.put(cursor, y, marker, marker_style, action, width=marker_width)
+                        board.put(
+                            cursor,
+                            y,
+                            marker,
+                            theme.selection_marker_style(),
+                            action,
+                            width=marker_width,
+                        )
                         cursor += marker_width
 
             remaining = max(0, content_right - cursor)
