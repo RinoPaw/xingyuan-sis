@@ -46,6 +46,17 @@ class WorkspaceInlineEditTests(unittest.TestCase):
                 options = self.catalog.options("students", field, values)
                 self.assertEqual([value for value, _ in options], choices)
 
+        dormitories = list(dict.fromkeys(
+            row["dormitory"]
+            for row in self.catalog.records["students"]
+            if row.get("dormitory")
+        ))
+        dormitory_options = self.catalog.options("students", "dormitory", values)
+        self.assertEqual(
+            [value for value, _ in dormitory_options],
+            [None, *dormitories],
+        )
+
         families = self.catalog.options("students", "family", values)
         self.assertIn(values["family"], [value for value, _ in families])
 
@@ -59,7 +70,7 @@ class WorkspaceInlineEditTests(unittest.TestCase):
 
         for field in (
             "student_no", "name", "enrollment_year", "age",
-            "birth_date", "contact", "dormitory", "notes",
+            "birth_date", "contact", "notes",
         ):
             with self.subTest(freeform=field):
                 self.assertIsNone(self.catalog.options("students", field, values))
