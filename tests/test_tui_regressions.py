@@ -77,7 +77,9 @@ class TuiRegressionAuditTests(unittest.TestCase):
                 workspace_view._roster(focused, state, self.catalog, 59)
                 focused_frame = focused.frame()
                 focused_region = next(r for r in focused_frame.regions if r.action == "row:0")
-                self.assertIn(screen._SURFACE_SELECTED, focused_frame.lines[focused_region.y - 1])
+                focused_line = focused_frame.lines[focused_region.y - 1]
+                self.assertIn(screen._SURFACE_SELECTED, focused_line)
+                self.assertIn(screen._TEXT_ACCENT, focused_line)
 
                 state.set_focus(workspace.FocusArea.INSPECTOR)
                 context = workspace_view.Board(60, 35)
@@ -85,8 +87,13 @@ class TuiRegressionAuditTests(unittest.TestCase):
                 context_frame = context.frame()
                 context_region = next(r for r in context_frame.regions if r.action == "row:0")
                 context_line = context_frame.lines[context_region.y - 1]
-                self.assertIn(screen._SURFACE_INTERACTIVE, context_line)
+                context_plain = screen._ANSI_RE.sub("", context_line)
+                self.assertIn("· ", context_plain)
+                self.assertIn(screen._TEXT_SECONDARY, context_line)
+                self.assertIn(screen._TEXT_PRIMARY, context_line)
+                self.assertNotIn(screen._SURFACE_INTERACTIVE, context_line)
                 self.assertNotIn(screen._SURFACE_SELECTED, context_line)
+                self.assertNotIn(screen._TEXT_ACCENT, context_line)
 
                 inspector = workspace_view.Board(60, 35)
                 workspace_view._inspector(inspector, state, self.catalog, 1, 55)
