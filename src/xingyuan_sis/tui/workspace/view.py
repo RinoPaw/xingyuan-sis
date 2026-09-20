@@ -11,7 +11,7 @@ from .dashboard import render_dashboard
 from .data import ACADEMICS, COLLECTIONS, Catalog
 from .detail import lines as generic_lines
 from .editor import render_editor
-from .inspector import Line, action_targets, layout_lines, render_inspector
+from .inspector import Line, action_targets, inspector_content_width, layout_lines, render_inspector
 from .roster import render_roster as _roster
 from .state import ContentPanel, FocusArea, Workspace
 from .student_inspector import lines as student_lines
@@ -29,7 +29,11 @@ def detail_lines(
     state: Workspace | None = None,
 ) -> list[Line]:
     """Return the final geometry shared by rendering, target extraction and navigation."""
-    return layout_lines(content_lines(key, row, catalog, state), width, WorkspaceLayout.measure())
+    return layout_lines(
+        content_lines(key, row, catalog, state),
+        inspector_content_width(width),
+        WorkspaceLayout.measure(),
+    )
 
 
 def detail_targets(key: str, row, catalog: Catalog, width: int):
