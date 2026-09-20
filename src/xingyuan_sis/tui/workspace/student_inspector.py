@@ -10,6 +10,7 @@ from .data import Catalog
 from .inspector import Line, Segment, expand_options, field_segment
 from .presentation import project_record
 from .state import Workspace
+from .student_layout import StudentFieldRow, rows as layout_rows
 
 
 def _age(values: dict[str, Any]) -> str:
@@ -41,9 +42,6 @@ def lines(
     if birth_editing:
         values["birth_date"] = projected_birth_date(student_session.values)
 
-    def label(text: str) -> Segment:
-        return text, screen._TEXT_SECONDARY, ""
-
     def field(
         key: str,
         text: str | None = None,
@@ -56,19 +54,36 @@ def lines(
         text = "" if raw is None else str(raw)
         return screen._pad_cells(screen._clip_cells(text, width), width)
 
-    year = values.get("enrollment_year")
-    result: list[Line] = [
-        [label("姓名  "), field("name")],
-        [label("学号  "), field("student_no")],
-        [label("物种  "), field("family"), (" · ", screen._TEXT_SECONDARY, ""), field("branch")],
-        [label("性别  "), field("gender")],
-        [label("年龄  "), field("age", _age(values))],
-        [label("入学  "), field("enrollment_year", f"{safe(year)}级")],
-        [label("学院  "), field("department_name")],
-        [label("班级  "), field("major_code"), (" · ", screen._TEXT_SECONDARY, ""), field("class_number")],
-        [label("学籍  "), field("status")],
-        [label("元素  "), field("primary_element"), (" · ", screen._TEXT_SECONDARY, ""), field("primary_affinity")],
-    ]
+    def field_row(spec: StudentFieldRow) -> Line:
+        label_width = 6 if spec.section == "main" else 10
+        line: Line = [(
+            screen._pad_cells(screen._clip_cells(spec.label, label_width), label_width),
+            screen._TEXT_SECONDARY,
+            "",
+        )]
+
+        if spec.keys == ("birth_date",) and birth_editing:
+            line.extend((
+                field("birth_year", birth_slot("birth_year", 4)),
+                ("-", screen._TEXT_SECONDARY, ""),
+                field("birth_month", birth_slot("birth_month", 2)),
+                ("-", screen._TEXT_SECONDARY, ""),
+                field("birth_day", birth_slot("birth_day", 2)),
+            ))
+            return line
+
+        for index, key in enumerate(spec.keys):
+            if index:
+                line.append((" · ", screen._TEXT_SECONDARY, ""))
+            if key == "age":
+                line.append(field(key, _age(values)))
+            elif key == "enrollment_year":
+                line.append(field(key, f"{safe(values.get(key))}级"))
+            else:
+                line.append(field(key))
+        return line
+
+    result: list[Line] = [field_row(spec) for spec in layout_rows("main")]
 
     related_key, related = catalog.related("students", row)
     result.extend((
@@ -110,28 +125,6 @@ def lines(
         [],
         [("个人信息", screen._BOLD + screen._TEXT_PRIMARY, "")],
     ))
-    if birth_editing:
-        result.append([
-            label("出生日期  "),
-            field("birth_year", birth_slot("birth_year", 4)),
-            ("-", screen._TEXT_SECONDARY, ""),
-            field("birth_month", birth_slot("birth_month", 2)),
-            ("-", screen._TEXT_SECONDARY, ""),
-            field("birth_day", birth_slot("birth_day", 2)),
-        ])
-    else:
-        result.append([label("出生日期  "), field("birth_date")])
-    result.extend((
-        [label("联系方式  "), field("contact")],
-        [
-            label("宿舍      "),
-            field("dorm_area"),
-            (" · ", screen._TEXT_SECONDARY, ""),
-            field("dorm_building"),
-            (" · ", screen._TEXT_SECONDARY, ""),
-            field("dorm_room"),
-        ],
-        [label("备注      "), field("notes")],
-    ))
+    result.extend(field_row(spec) for spec in layout_rows("personal"))
 
     return expand_options(result, student_session)
