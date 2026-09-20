@@ -155,7 +155,7 @@ class WorkspaceTests(unittest.TestCase):
             with self.subTest(score=score), self.assertRaises(ValueError):
                 self.catalog.save("grades", {"score": score}, row)
 
-    def test_class_picker_saves_major_and_local_number_as_one_relationship(self):
+    def test_class_picker_saves_relationship_without_auto_advancing(self):
         state = self.inspector_state("students", selected=9)
         original = state.current(self.catalog).copy()
         workspace_field.start(state, self.catalog, "major_code")
@@ -166,9 +166,21 @@ class WorkspaceTests(unittest.TestCase):
         )
         selected_major = state.field_session.options[major_index][0]
         workspace_field.accept_option(state, self.catalog, major_index)
-        self.assertEqual(state.field_session.active_key, "class_number")
-        selected_number = state.field_session.options[0][0]
-        workspace_field.accept_option(state, self.catalog, 0)
+
+        if state.field_session is not None:
+            self.assertEqual(state.field_session.active_key, "major_code")
+            self.assertIsNone(state.field_session.options)
+            self.assertTrue(workspace_field.move_active_field(state, "right"))
+            self.assertEqual(state.field_session.active_key, "class_number")
+            workspace_field.edit_current(state, self.catalog)
+            number_index = next(
+                i for i, (value, _) in enumerate(state.field_session.options)
+                if value is not None
+            )
+            selected_number = state.field_session.options[number_index][0]
+            workspace_field.accept_option(state, self.catalog, number_index)
+        else:
+            selected_number = original["class_number"]
 
         changed = self.catalog.service.student_by_no(original["student_no"])
         expected = next(
