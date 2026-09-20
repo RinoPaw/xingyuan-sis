@@ -19,7 +19,7 @@ def selection_prefix(*, selected: bool = False, current: bool = False) -> str:
     return "> " if selected else "· " if current else "  "
 
 
-def selection_style(original_style: str) -> str:
+def selection_style(original_style: str = screen._TEXT_PRIMARY) -> str:
     """Add the selected surface without replacing the item's original foreground."""
     return screen._SURFACE_SELECTED + original_style
 
