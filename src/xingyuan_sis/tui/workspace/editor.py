@@ -61,6 +61,49 @@ def _render_delete_panel(
         board.put(value_x, row_y, value, style, width=value_width)
 
 
+def _field_label(field, width: int) -> str:
+    """Render one field label; the schema's required flag is the only authority."""
+    width = max(1, width)
+    if not field.required or width < 2:
+        return screen._ansi(
+            screen._pad_cells(screen._clip_cells(field.label, width), width),
+            screen._TEXT_SECONDARY,
+        )
+    label_width = max(0, width - 2)
+    text = screen._pad_cells(screen._clip_cells(field.label, label_width), label_width)
+    return (
+        screen._ansi(text, screen._TEXT_SECONDARY)
+        + screen._ansi(" *", screen._TEXT_DANGER)
+    )
+
+
+def _render_form_heading(
+    board: Board,
+    state: Workspace,
+    x: int,
+    y: int,
+    width: int,
+    heading: str,
+) -> None:
+    """Keep task identity, required legend and mouse save action in one row."""
+    board.put(x, y, panel_heading(heading, True), width=width)
+    form = state.form
+    if form is None or not form.fields:
+        return
+
+    save = theme.button("保存")
+    save_width = screen._display_width(save)
+    if save_width <= width:
+        board.put(x + width - save_width, y, save, action="save", width=save_width)
+
+    legend = screen._ansi("* 必填", screen._TEXT_DANGER)
+    legend_width = screen._display_width(legend)
+    legend_x = x + width - save_width - legend_width - 2
+    heading_width = screen._display_width(heading) + 2
+    if legend_x >= x + heading_width:
+        board.put(legend_x, y, legend, width=legend_width)
+
+
 def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, width: int) -> None:
     """Render a complete transaction while FieldSession owns any active field edit."""
     form = state.form
@@ -76,8 +119,12 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         "seed": "建立演示校园",
         "reset-password": "重置学生密码",
     }
-    heading = "档案" if form.mode == "create" and state.key in COLLECTIONS else titles.get(form.mode, "档案")
-    board.put(x, heading_row, panel_heading(heading, True), width=width)
+    heading = (
+        f"新增{COLLECTIONS[state.key].title}"
+        if form.mode == "create" and state.key in COLLECTIONS
+        else titles.get(form.mode, "档案")
+    )
+    _render_form_heading(board, state, x, heading_row, width, heading)
 
     if form.mode == "delete":
         _render_delete_panel(board, state, catalog, x, content_row, width, bottom)
@@ -93,7 +140,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
             messages = [
                 (f"重置 {title} 的密码？", screen._TEXT_PRIMARY),
                 (identifier, screen._TEXT_SECONDARY),
-                ("旧密码将失效，下次登录须改密。", screen._TEXT_SECONDARY),
+                ("密码将恢复为学号；下次登录须改密。", screen._TEXT_SECONDARY),
             ]
         capacity = max(1, bottom - content_row)
         spacing = 2 if capacity >= len(messages) * 2 else 1
@@ -102,6 +149,11 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
             if y < bottom:
                 board.put(x, y, message, style, width=width)
         return
+
+    if state.notice:
+        is_error = state.notice.startswith("未完成：")
+        board.put(x, content_row, theme.notice(state.notice, error=is_error), width=width)
+        content_row += 2
 
     session = state.field_session
     if session is not None and session.owner is not FieldSessionOwner.FORM:
@@ -170,8 +222,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
             continue
 
         field = payload
-        label = screen._pad_cells(screen._clip_cells(field.label, label_width), label_width)
-        board.put(x, y, label, screen._TEXT_SECONDARY, width=label_width)
+        board.put(x, y, _field_label(field, label_width), width=label_width)
 
         row_selected = index == form.position and session is None
         if row_selected:
