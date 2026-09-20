@@ -255,22 +255,33 @@ class WorkspaceInlineEditTests(unittest.TestCase):
             original["status"],
         )
 
-    def test_family_edit_completes_branch_before_one_atomic_save(self):
+    def test_family_edit_requires_explicit_move_before_editing_branch(self):
         state = self.inspector_state()
         original = state.current(self.catalog).copy()
+        original_branch = original["branch"]
         workspace_field.start(state, self.catalog, "family")
         workspace_field.edit_current(state, self.catalog)
         family_index = next(
             i for i, (value, _) in enumerate(state.field_session.options)
-            if value != original["family"] and any(
-                row["family_name"] == value for row in self.catalog.species_branches
-            )
+            if value != original["family"] and original_branch not in {
+                row["name"] for row in self.catalog.species_branches
+                if row["family_name"] == value
+            }
         )
         chosen_family = state.field_session.options[family_index][0]
         workspace_field.accept_option(state, self.catalog, family_index)
+
+        self.assertEqual(state.field_session.active_key, "family")
+        self.assertIsNone(state.field_session.options)
+        self.assertTrue(workspace_field.move_active_field(state, "right"))
         self.assertEqual(state.field_session.active_key, "branch")
-        chosen_branch = state.field_session.options[0][0]
-        workspace_field.accept_option(state, self.catalog, 0)
+        workspace_field.edit_current(state, self.catalog)
+        branch_index = next(
+            i for i, (value, _) in enumerate(state.field_session.options)
+            if value is not None
+        )
+        chosen_branch = state.field_session.options[branch_index][0]
+        workspace_field.accept_option(state, self.catalog, branch_index)
 
         self.assertIsNone(state.field_session)
         changed = self.catalog.service.student_by_no(original["student_no"])
