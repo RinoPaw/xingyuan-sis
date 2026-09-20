@@ -12,9 +12,6 @@ if TYPE_CHECKING:
     from .state import Workspace
 
 
-_COLUMN_GROWTH = 6
-
-
 def roster_window(state: Workspace, row_count: int, capacity: int) -> int:
     state.roster_scroll = visible_start(state.selected, row_count, capacity, state.roster_scroll)
     return state.roster_scroll
@@ -25,39 +22,40 @@ def _fit_columns(
     rows: list[dict[str, Any]],
     available: int,
 ) -> list[list[Any]]:
-    """Fit readable columns without letting a wide terminal stretch the table apart."""
-    measured: list[list[Any]] = []
-    for key, label, preferred_size in definitions:
-        label_width = screen._display_width(label)
-        content_width = max(
-            [label_width, *(screen._display_width(safe(row.get(key))) for row in rows)]
-        )
-        natural_width = min(content_width, max(label_width, preferred_size + _COLUMN_GROWTH))
-        preferred_width = min(natural_width, max(label_width, preferred_size))
-        measured.append([key, label, preferred_width, natural_width])
+    """Show only columns whose labels and values can be rendered in full.
 
+    Column order is also priority order. Every visible column gets its exact
+    natural terminal-cell width. When the roster is too narrow, lower-priority
+    columns disappear as whole columns instead of forcing ellipses into values.
+    The historical preferred sizes are deliberately ignored here: empty padding
+    must never steal space from real content.
+    """
+    available = max(1, available)
+    measured: list[list[Any]] = []
+    for key, label, _preferred_size in definitions:
+        width = max(
+            [screen._display_width(label), *(screen._display_width(safe(row.get(key))) for row in rows)]
+        )
+        measured.append([key, label, max(1, width)])
+
+    # Keep adding columns in semantic priority order while every visible value
+    # still fits in full. If even the first column is wider than the viewport,
+    # give it the viewport and let the board provide the unavoidable hard edge;
+    # normal roster columns are expected to be much narrower than this.
     columns: list[list[Any]] = []
     used = 0
-    for key, label, preferred_width, natural_width in measured:
+    for key, label, natural_width in measured:
         separator = 1 if columns else 0
-        if used + separator + preferred_width > available:
-            if not columns:
-                columns.append([key, label, max(1, available), natural_width])
+        needed = separator + natural_width
+        if used + needed > available:
             break
-        columns.append([key, label, preferred_width, natural_width])
-        used += separator + preferred_width
+        columns.append([key, label, natural_width])
+        used += needed
 
-    remaining = max(0, available - used)
-    while remaining and any(column[2] < column[3] for column in columns):
-        for column in columns:
-            if column[2] >= column[3]:
-                continue
-            column[2] += 1
-            remaining -= 1
-            if remaining == 0:
-                break
-
-    return [[key, label, size] for key, label, size, _ in columns]
+    if not columns and measured:
+        key, label, natural_width = measured[0]
+        columns.append([key, label, min(natural_width, available)])
+    return columns
 
 
 def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) -> None:
@@ -82,11 +80,11 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
     board.put(1, header_row, header, screen._TEXT_SECONDARY, width=width - 1)
     for index, row in enumerate(rows[first:first + capacity], start=first):
         raw = " ".join(
-            screen._pad_cells(screen._clip_cells(safe(row.get(key)), size), size)
+            screen._pad_cells(safe(row.get(key)), size)
             for key, _, size in columns
         )
         body_width = max(1, width - 3)
-        body = screen._pad_cells(screen._clip_cells(raw, body_width), body_width)
+        body = screen._pad_cells(raw, body_width)
         is_current = index == state.selected
         text = theme.contextual_item(
             body,
