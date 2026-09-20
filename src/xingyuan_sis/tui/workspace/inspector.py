@@ -218,7 +218,7 @@ def render_inspector(
         marker = theme.selection_prefix(selected=strong, current=weak)
         if marker.strip():
             marker_style = theme.selection_style() if strong else screen._TEXT_SECONDARY
-            board.put(x, y, marker, marker_style, selected_action, width=min(_SELECTION_GUTTER, width))
+            board.put(x, y, marker, marker_style, width=min(_SELECTION_GUTTER, width))
 
         cursor = x + _SELECTION_GUTTER
         content_right = x + width
