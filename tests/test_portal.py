@@ -65,22 +65,32 @@ class PortalLayoutTests(unittest.TestCase):
         self.assertTrue(primary_row.startswith("> 教务"))
         self.assertTrue(secondary_row.startswith("· 教务"))
 
-    def test_buttons_distinguish_current_context_from_keyboard_focus(self) -> None:
+    def test_weak_context_never_competes_with_real_focus(self) -> None:
         with patch("sys.stdout.isatty", return_value=True), patch.dict(os.environ):
             os.environ.pop("NO_COLOR", None)
-            weak = theme.button("学生", current=True)
+            weak_button = theme.button("学生", current=True)
+            weak_nav = theme.nav_item("个人中心", current=True)
             strong = theme.button("学生", selected=True)
             marker = screen._ansi(">", theme.selection_marker_style())
+
         self.assertEqual(screen._TEXT_ON_SELECTED, screen._TEXT_PRIMARY)
-        self.assertIn(screen._SURFACE_INTERACTIVE, weak)
-        self.assertIn(screen._TEXT_ACCENT, weak)
-        self.assertIn("[·学生 ]", screen._ANSI_RE.sub("", weak))
-        self.assertNotIn(screen._SURFACE_SELECTED, weak)
+        self.assertIn(screen._SURFACE_INTERACTIVE, weak_button)
+        self.assertNotIn(screen._SURFACE_SELECTED, weak_button)
+        self.assertNotIn(screen._TEXT_ACCENT, weak_button)
+        self.assertIn(screen._TEXT_SECONDARY, weak_button)
+        self.assertIn("[·学生 ]", screen._ANSI_RE.sub("", weak_button))
+
+        self.assertNotIn(screen._SURFACE_SELECTED, weak_nav)
+        self.assertNotIn(screen._SURFACE_INTERACTIVE, weak_nav)
+        self.assertNotIn(screen._TEXT_ACCENT, weak_nav)
+        self.assertIn(screen._TEXT_SECONDARY, weak_nav)
+        self.assertEqual(screen._ANSI_RE.sub("", weak_nav).strip(), "· 个人中心")
+
         self.assertIn(screen._SURFACE_SELECTED, strong)
         self.assertIn(marker, strong)
         self.assertNotIn(screen._TEXT_ACCENT, strong.replace(marker, ""))
         self.assertIn("[>学生 ]", screen._ANSI_RE.sub("", strong))
-        self.assertNotEqual(weak, strong)
+        self.assertNotEqual(weak_button, strong)
 
     def test_portal_footer_has_one_core_contract_and_contextual_commands(self) -> None:
         identity = Identity("Administrator", "admin")
