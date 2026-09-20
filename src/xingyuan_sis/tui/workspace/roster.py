@@ -88,18 +88,11 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
         body_width = max(1, width - 3)
         body = screen._pad_cells(screen._clip_cells(raw, body_width), body_width)
         is_current = index == state.selected
-        if is_current and focused:
-            text = (
-                screen._ansi("> ", theme.selection_marker_style())
-                + screen._ansi(body, theme.selection_style())
-            )
-        elif is_current:
-            text = (
-                screen._ansi("· ", screen._TEXT_SECONDARY)
-                + screen._ansi(body, screen._TEXT_PRIMARY)
-            )
-        else:
-            text = "  " + screen._ansi(body, screen._TEXT_PRIMARY)
+        text = theme.contextual_item(
+            body,
+            selected=is_current and focused,
+            current=is_current and not focused,
+        )
         board.put(1, data_row + index - first, text, action=f"row:{index}", width=width - 1)
 
     if not rows:
