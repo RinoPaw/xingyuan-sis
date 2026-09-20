@@ -51,7 +51,7 @@ class LoginView(ttk.Frame):
         hero = ttk.Frame(self, style="Sidebar.TFrame", padding=(56, 56))
         hero.grid(row=0, column=0, sticky="nsew")
         hero.columnconfigure(0, weight=1)
-        hero.rowconfigure(4, weight=1)
+        hero.rowconfigure(3, weight=1)
 
         ttk.Label(hero, text="✦", style="LoginHeroTitle.TLabel").grid(
             row=0, column=0, sticky="w"
@@ -62,18 +62,6 @@ class LoginView(ttk.Frame):
         ttk.Label(hero, text="学生信息系统", style="LoginHeroBody.TLabel").grid(
             row=2, column=0, sticky="w", pady=(8, 0)
         )
-        ttk.Label(
-            hero,
-            text="本地数据 · SQLite · Python",
-            style="LoginHeroBody.TLabel",
-        ).grid(row=3, column=0, sticky="w", pady=(28, 0))
-        ttk.Label(
-            hero,
-            text="GUI 与终端界面共享同一套业务与数据层。",
-            style="LoginHeroBody.TLabel",
-            wraplength=300,
-            justify="left",
-        ).grid(row=5, column=0, sticky="sw")
 
     def _render_form(self) -> None:
         for child in self.form.winfo_children():
@@ -90,9 +78,14 @@ class LoginView(ttk.Frame):
             self._render_login()
 
     def _render_setup(self) -> None:
-        self._heading("首次使用", "先为 Administrator 设置管理员密码。")
+        self._heading("设置管理员密码")
         self._field_label(2, "管理员账号")
-        username = ttk.Entry(self.form, textvariable=self.username_var, state="readonly")
+        username = ttk.Entry(
+            self.form,
+            textvariable=self.username_var,
+            state="disabled",
+            takefocus=False,
+        )
         username.grid(row=3, column=0, sticky="ew", pady=(6, 18))
         self._field_label(4, "设置密码")
         password = ttk.Entry(self.form, textvariable=self.password_var, show="•")
@@ -146,10 +139,15 @@ class LoginView(ttk.Frame):
         ).grid(row=7, column=0, sticky="ew", pady=(8, 0))
         password.focus_set()
 
-    def _heading(self, title: str, subtitle: str) -> None:
+    def _heading(self, title: str, subtitle: str | None = None) -> None:
         ttk.Label(self.form, text=title, style="LoginTitle.TLabel").grid(
-            row=0, column=0, sticky="w"
+            row=0,
+            column=0,
+            sticky="w",
+            pady=(0, 28) if subtitle is None else 0,
         )
+        if subtitle is None:
+            return
         ttk.Label(
             self.form,
             text=subtitle,
