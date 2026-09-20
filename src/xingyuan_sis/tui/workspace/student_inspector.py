@@ -123,7 +123,14 @@ def lines(
         result.append([label("出生日期  "), field("birth_date")])
     result.extend((
         [label("联系方式  "), field("contact")],
-        [label("宿舍      "), field("dormitory")],
+        [
+            label("宿舍      "),
+            field("dorm_area"),
+            (" · ", screen._TEXT_SECONDARY, ""),
+            field("dorm_building"),
+            (" · ", screen._TEXT_SECONDARY, ""),
+            field("dorm_room"),
+        ],
         [label("备注      "), field("notes")],
     ))
 
