@@ -62,7 +62,7 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertEqual(selected_at_delete, [15])
         self.assertEqual(state.selected, 15)
 
-    def test_toolbar_focus_keeps_current_record_weakly_selected(self):
+    def test_toolbar_focus_keeps_current_record_as_weak_context_only(self):
         state = workspace.Workspace("students", selected=15, focus=workspace.FocusArea.TOOLBAR)
         selected = state.current(self.catalog)
 
@@ -76,9 +76,13 @@ class WorkspaceActionTests(unittest.TestCase):
             if selected["name"] in screen._ANSI_RE.sub("", line)
             and selected["student_no"] in screen._ANSI_RE.sub("", line)
         )
-        self.assertIn(screen._SURFACE_INTERACTIVE, selected_line)
+        plain = screen._ANSI_RE.sub("", selected_line)
+        self.assertIn("· ", plain)
+        self.assertIn(screen._TEXT_SECONDARY, selected_line)
         self.assertIn(screen._TEXT_PRIMARY, selected_line)
+        self.assertNotIn(screen._SURFACE_INTERACTIVE, selected_line)
         self.assertNotIn(screen._SURFACE_SELECTED, selected_line)
+        self.assertNotIn(screen._TEXT_ACCENT, selected_line)
 
     def test_search_click_does_not_promote_inspector_to_selected_state(self):
         state = workspace.Workspace(
