@@ -1,13 +1,23 @@
 """Shared local field editing for existing records and transaction drafts."""
 from __future__ import annotations
 
-from ...terminal_input import input_style, read_inline_input
+import sys
+
+from ...terminal_input import editing_cursor, input_style, read_inline_input
 from .. import screen
+from ..text_edit import input_mode, read_event
 from .birth_date_editor import BIRTH_DATE_FIELDS, BIRTH_DATE_KEYS, canonical as birth_canonical
 from .birth_date_editor import options as birth_options, parts as birth_parts, projected as projected_birth_date
 from .data import COLLECTIONS, Catalog
 from .presentation import project_record
 from .state import FieldSession, FieldSessionOwner, FocusArea, Workspace
+
+
+_BIRTH_SLOT_WIDTHS = {
+    "birth_year": 4,
+    "birth_month": 2,
+    "birth_day": 2,
+}
 
 
 def _related_anchor(anchor_key: str) -> tuple[str, str, str] | None:
@@ -210,14 +220,127 @@ def _open_options(state: Workspace, catalog: Catalog) -> bool:
 
 
 def _field_geometry(frame: screen.ScreenFrame, action: str) -> tuple[int, int, int]:
-    region = next(region for region in frame.regions if region.action == action)
+    """Return the actual field region, not the selection marker sharing its action."""
+    regions = [region for region in frame.regions if region.action == action]
+    if not regions:
+        raise ValueError(f"找不到字段位置：{action}")
+    region = max(regions, key=lambda candidate: (candidate.x, candidate.width))
     return region.y, region.x, max(1, region.width)
+
+
+def _birth_raw_values(session: FieldSession) -> dict[str, str]:
+    return {
+        key: "" if session.values.get(key) is None else str(session.values.get(key))
+        for key in BIRTH_DATE_KEYS
+    }
+
+
+def _sync_birth_raw(session: FieldSession, raw: dict[str, str]) -> None:
+    session.values.update({key: value if value else None for key, value in raw.items()})
+
+
+def _parsed_birth_values(raw: dict[str, str]) -> dict[str, int | None]:
+    return {
+        key: (int(value) if value else None)
+        for key, value in raw.items()
+    }
+
+
+def _position_birth_cursor(frame: screen.ScreenFrame, session: FieldSession, raw: dict[str, str], replace: bool) -> None:
+    action = f"field:{session.active_key}"
+    row, column, region_width = _field_geometry(frame, action)
+    width = min(region_width, _BIRTH_SLOT_WIDTHS[session.active_key])
+    text_width = screen._display_width(raw[session.active_key])
+    offset = 0 if replace else min(text_width, max(0, width - 1))
+    sys.stdout.write(f"\x1b[{row};{column + offset}H")
+    sys.stdout.flush()
+
+
+def _edit_birth_date(state: Workspace, catalog: Catalog) -> None:
+    """Edit year/month/day as one masked control with three independent slots."""
+    session = state.field_session
+    if session is None:
+        return
+
+    from .view import render
+
+    raw = _birth_raw_values(session)
+    replace = True
+
+    def redraw() -> None:
+        _sync_birth_raw(session, raw)
+        frame = render(state, catalog)
+        screen._paint(frame.lines)
+        _position_birth_cursor(frame, session, raw, replace)
+
+    state.notice = ""
+    redraw()
+    with input_mode(), editing_cursor():
+        while True:
+            event = read_event(None)
+            if event is None:
+                continue
+            kind = event.kind
+
+            if kind == "cancel":
+                raise KeyboardInterrupt
+            if kind == "submit":
+                parsed = _parsed_birth_values(raw)
+                try:
+                    birth_canonical(parsed)
+                except (TypeError, ValueError):
+                    sys.stdout.write("\a")
+                    sys.stdout.flush()
+                    continue
+                session.values.update(parsed)
+                commit(state, catalog)
+                return
+
+            if kind in {"left", "right", "home", "end", "tab"}:
+                if kind == "left":
+                    session.active = max(0, session.active - 1)
+                elif kind in {"right", "tab"}:
+                    session.active = min(len(session.fields) - 1, session.active + 1)
+                elif kind == "home":
+                    session.active = 0
+                else:
+                    session.active = len(session.fields) - 1
+                replace = True
+                redraw()
+                continue
+
+            key = session.active_key
+            before = raw[key]
+            if kind == "insert":
+                digits = "".join(char for char in event.text if char.isdigit())
+                if not digits:
+                    continue
+                width = _BIRTH_SLOT_WIDTHS[key]
+                base = "" if replace else raw[key]
+                raw[key] = (base + digits)[:width]
+                replace = False
+            elif kind in {"backspace", "delete", "clear"}:
+                if kind == "backspace" and not replace:
+                    raw[key] = raw[key][:-1]
+                else:
+                    raw[key] = ""
+                replace = False
+            else:
+                continue
+
+            if key == "birth_month" and not raw[key]:
+                raw["birth_day"] = ""
+            if raw[key] != before or key == "birth_month":
+                redraw()
 
 
 def edit_current(state: Workspace, catalog: Catalog) -> None:
     """Open the active field in place; Enter confirms the local FieldSession."""
     session = state.field_session
     if session is None:
+        return
+    if _is_birth_session(state, session):
+        _edit_birth_date(state, catalog)
         return
     if _open_options(state, catalog):
         return
