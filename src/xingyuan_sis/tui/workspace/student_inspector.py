@@ -19,16 +19,6 @@ def _age(values: dict[str, Any]) -> str:
     return "—" if age is None else f"{age}岁"
 
 
-def _target_count(lines: list[Line]) -> int:
-    """Count semantic inspector targets in display order."""
-    seen: set[str] = set()
-    for line in lines:
-        for _, _, action in line:
-            if action and not action.startswith("option:"):
-                seen.add(action)
-    return len(seen)
-
-
 def lines(
     row: dict[str, Any],
     catalog: Catalog,
@@ -98,26 +88,19 @@ def lines(
     if not related:
         result.append([("暂无关联记录", screen._TEXT_SECONDARY, "")])
     else:
-        first_related_target = _target_count(result)
         course_names = [safe(item["course_name"]) for item in related]
         course_width = max((screen._display_width(name) for name in course_names), default=0)
-        for index, (item, course_name) in enumerate(zip(related, course_names, strict=True)):
+        for item, course_name in zip(related, course_names, strict=True):
             score_value = item["score"]
             score_action = f"field:related:{related_key}:{item['id']}:score"
             if session is not None and f"field:{session.anchor_key}" == score_action:
                 score_value = session.values.get("score")
             score = safe(score_value) if score_value is not None else "待录入"
             course_action = f"related:{related_key}:{item['id']}"
-            course_selected = (
-                state is not None
-                and session is None
-                and state.detail_selected == first_related_target + index * 2
-            )
             course_padding = " " * max(0, course_width - screen._display_width(course_name))
-            course_row: Line = []
-            if not course_selected:
-                course_row.append(("  ", screen._TEXT_PRIMARY, ""))
-            course_row.append((course_name, screen._TEXT_ACCENT + "\x1b[4m", course_action))
+            course_row: Line = [
+                (course_name, screen._TEXT_ACCENT + "\x1b[4m", course_action),
+            ]
             if course_padding:
                 course_row.append((course_padding, screen._TEXT_PRIMARY, ""))
             course_row.extend((
