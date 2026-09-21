@@ -140,15 +140,11 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
     if form.mode == "delete":
         if state.key != "data":
             state.rows(catalog)
-        if state.key == "students":
-            state.set_focus(FocusArea.ROSTER)
-            state.detail_scroll, state.detail_selected = 0, 0
-        else:
-            state.restore_focus_context(form.return_to)
+        state.restore_focus_context(form.return_to)
     elif form.mode == "create" and record_id is not None and any(
         row["id"] == record_id for row in state.rows(catalog)
     ):
-        state.set_focus(FocusArea.ROSTER if state.key == "students" else FocusArea.INSPECTOR)
+        state.set_focus(FocusArea.INSPECTOR)
         state.detail_scroll, state.detail_selected = 0, 0
     else:
         state.set_focus(FocusArea.DASHBOARD if state.key == "data" else FocusArea.ROSTER)
