@@ -1,8 +1,11 @@
-"""Transient TerminalTextEffects animations for student roster mutations."""
+"""Transient roster animations for student create/delete mutations."""
 from __future__ import annotations
 
 from collections.abc import Iterator
+from copy import copy
+from dataclasses import dataclass
 import os
+import random
 import sys
 import time
 
@@ -13,25 +16,45 @@ from .state import FocusArea, Workspace
 
 _FRAME_INTERVAL = 1 / 60
 _BURN_BLANK = "\u00a0"
+_PRINT_STOPS = ((0x02, 0xB8, 0xBD), (0xC1, 0xF0, 0xE3), (0x00, 0xFF, 0xA0))
+_BURN_COLORS = ((0xFF, 0xFF, 0xFF), (0xFF, 0xF7, 0x5D), (0xFE, 0x65, 0x0D), (0x8A, 0x00, 0x3C), (0x51, 0x01, 0x00))
+_BURN_SYMBOLS = ("'", ".", "▖", "▙", "█", "▜", "▀", "▝", ".")
+
+
+@dataclass(frozen=True)
+class RosterEffectSnapshot:
+    """One visual row captured around a real student mutation.
+
+    Delete captures before persistence so the disappearing row still exists;
+    playback happens only after the delete succeeds. Create captures after the
+    record exists. The animation therefore belongs to the mutation, independent
+    of whether that mutation was reached by mouse, keyboard shortcut, or Enter.
+    """
+
+    kind: str
+    lines: tuple[str, ...]
+    x: int
+    y: int
+    width: int
+    text: str
 
 
 def _one_line(frame: str) -> str:
-    """Extract the embedded one-row canvas and restore invisible burn blanks."""
     lines = frame.splitlines()
     return (lines[0] if lines else "").replace(_BURN_BLANK, " ")
 
 
-def _configure_terminal(effect) -> None:
-    """Keep TTE responsible for the effect while Xingyuan owns the screen."""
-    effect.terminal_config.canvas_width = -1
+def _configure_terminal(effect, width: int) -> None:
+    """Let TTE animate one exact roster span while Xingyuan owns the screen."""
+    effect.terminal_config.canvas_width = max(1, width)
     effect.terminal_config.canvas_height = 1
     effect.terminal_config.ignore_terminal_dimensions = True
     effect.terminal_config.frame_rate = 0
     effect.terminal_config.no_color = os.environ.get("NO_COLOR") is not None
 
 
-def _print_frames(text: str) -> Iterator[str]:
-    """Use the Print showroom configuration verbatim."""
+def _tte_print_frames(text: str, width: int) -> Iterator[str]:
+    """Use the official Print showroom example configuration."""
     from terminaltexteffects import Color, Gradient, easing
     from terminaltexteffects.effects.effect_print import Print
 
@@ -44,15 +67,15 @@ def _print_frames(text: str) -> Iterator[str]:
     )
     config.final_gradient_steps = 12
     config.final_gradient_direction = Gradient.Direction.DIAGONAL
-    config.print_head_return_speed = 1.25
-    config.print_speed = 1
+    config.print_head_return_speed = 1.5
+    config.print_speed = 2
     config.print_head_easing = easing.in_out_quad
-    _configure_terminal(effect)
+    _configure_terminal(effect, width)
     yield from effect
 
 
-def _burn_frames(text: str) -> Iterator[str]:
-    """Use the showroom Burn configuration with TTE's native random origin."""
+def _tte_burn_frames(text: str, width: int) -> Iterator[str]:
+    """Use the official Burn palette with TTE's native random origin."""
     from terminaltexteffects import Color, Gradient
     from terminaltexteffects.effects.effect_burn import Burn
 
@@ -66,32 +89,170 @@ def _burn_frames(text: str) -> Iterator[str]:
         Color("#8a003c"),
         Color("#510100"),
     )
-    # The showroom Burn emits smoke above its source. Embedded in a one-row
-    # roster entry that would overwrite neighbouring students, so only smoke is
-    # disabled; ignition order and burn scenes remain the stock TTE effect.
+    # Smoke rises out of a one-row roster entry and would paint neighboring
+    # students. Everything else remains the stock Burn effect.
     config.smoke_chance = 0.0
     config.final_gradient_stops = (Color("#00c3ff"), Color("#ffff1c"))
     config.final_gradient_steps = 12
     config.final_gradient_direction = Gradient.Direction.VERTICAL
-    _configure_terminal(effect)
-
-    # BurnIterator builds PrimsSimple without a starting character. TTE then
-    # chooses a random coordinate itself. Because blank roster cells are NBSP
-    # inside this private canvas, every cell can participate in the same graph.
+    _configure_terminal(effect, width)
     yield from effect
 
 
-def _frames(kind: str, text: str) -> Iterator[str]:
-    if kind == "print":
-        yield from _print_frames(text)
-    elif kind == "burn":
-        yield from _burn_frames(text)
-    else:
-        raise ValueError(f"未知名册特效：{kind}")
+def _rgb_style(rgb: tuple[int, int, int]) -> str:
+    return f"\x1b[38;2;{rgb[0]};{rgb[1]};{rgb[2]}m"
+
+
+def _mix(left: tuple[int, int, int], right: tuple[int, int, int], amount: float) -> tuple[int, int, int]:
+    amount = min(1.0, max(0.0, amount))
+    return tuple(round(a + (b - a) * amount) for a, b in zip(left, right))  # type: ignore[return-value]
+
+
+def _gradient(stops: tuple[tuple[int, int, int], ...], amount: float) -> tuple[int, int, int]:
+    if len(stops) == 1:
+        return stops[0]
+    scaled = min(1.0, max(0.0, amount)) * (len(stops) - 1)
+    index = min(len(stops) - 2, int(scaled))
+    return _mix(stops[index], stops[index + 1], scaled - index)
+
+
+def _units(text: str) -> list[tuple[str, int]]:
+    """Keep every source symbol at its terminal-cell width for fallback frames."""
+    units: list[tuple[str, int]] = []
+    for char in text:
+        width = screen._cell_width(char)
+        if width == 0 and units:
+            symbol, previous_width = units[-1]
+            units[-1] = (symbol + char, previous_width)
+        elif width > 0:
+            units.append((char, width))
+    return units
+
+
+def _print_fallback_frames(text: str, width: int) -> Iterator[str]:
+    """TTE-shaped colored Print fallback for an environment missing the package."""
+    units = _units(text)
+    if not units:
+        return
+    total = max(1, sum(size for _, size in units) - 1)
+    final_colors: list[tuple[int, int, int]] = []
+    cell = 0
+    for _, size in units:
+        final_colors.append(_gradient(_PRINT_STOPS, cell / total))
+        cell += size
+
+    speed = 2
+    head_symbols = ("█", "▓", "▒", "░")
+    typed = 0
+    while typed < len(units):
+        next_typed = min(len(units), typed + speed)
+        for head_symbol in head_symbols:
+            parts: list[str] = []
+            for index, (symbol, size) in enumerate(units):
+                if index < typed:
+                    parts.append(_rgb_style(final_colors[index]) + symbol)
+                elif index < next_typed:
+                    parts.append(_rgb_style(final_colors[index]) + head_symbol * size)
+                else:
+                    parts.append(" " * size)
+            yield "".join(parts) + screen._RESET
+        typed = next_typed
+
+    yield "".join(
+        _rgb_style(final_colors[index]) + symbol
+        for index, (symbol, _) in enumerate(units)
+    ) + screen._RESET
+
+
+def _random_burn_order(count: int) -> list[int]:
+    """One-row equivalent of TTE's random Prim growth from a random origin."""
+    if count <= 0:
+        return []
+    start = random.randrange(count)
+    order = [start]
+    left, right = start - 1, start + 1
+    while left >= 0 or right < count:
+        candidates = []
+        if left >= 0:
+            candidates.append("left")
+        if right < count:
+            candidates.append("right")
+        side = random.choice(candidates)
+        if side == "left":
+            order.append(left)
+            left -= 1
+        else:
+            order.append(right)
+            right += 1
+    return order
+
+
+def _burn_fallback_frames(text: str, width: int) -> Iterator[str]:
+    """Burn every cell, including blanks, with the official glyph/palette vocabulary."""
+    units = _units(text)
+    if not units:
+        return
+    order = _random_burn_order(len(units))
+    active: dict[int, int] = {}
+    cursor = 0
+    starting = (0x83, 0x73, 0x73)
+    hold = 2
+    max_stage = len(_BURN_SYMBOLS) * hold
+
+    while cursor < len(order) or active:
+        for _ in range(random.randint(2, 4)):
+            if cursor >= len(order):
+                break
+            active[order[cursor]] = 0
+            cursor += 1
+
+        parts: list[str] = []
+        finished: list[int] = []
+        for index, (symbol, size) in enumerate(units):
+            stage = active.get(index)
+            if stage is None:
+                # Blank cells stay visually blank until their own flame arrives.
+                shown = " " * size if symbol.isspace() else symbol
+                parts.append(_rgb_style(starting) + shown)
+                continue
+            symbol_index = min(len(_BURN_SYMBOLS) - 1, stage // hold)
+            color = _gradient(_BURN_COLORS, symbol_index / max(1, len(_BURN_SYMBOLS) - 1))
+            parts.append(_rgb_style(color) + _BURN_SYMBOLS[symbol_index] * size)
+            stage += 1
+            if stage >= max_stage:
+                finished.append(index)
+            else:
+                active[index] = stage
+
+        for index in finished:
+            del active[index]
+            units[index] = (" " * units[index][1], units[index][1])
+        yield "".join(parts) + screen._RESET
+
+
+def _effect_frames(kind: str, text: str, width: int) -> Iterator[str]:
+    """Prefer TTE itself; fall back to a close row-local rendition if unavailable/broken."""
+    try:
+        if kind == "print":
+            yield from _tte_print_frames(text, width)
+        elif kind == "burn":
+            yield from _tte_burn_frames(text, width)
+        else:
+            raise ValueError(f"未知名册特效：{kind}")
+        return
+    except Exception:
+        # The UI must still express the mutation when a previously-created venv
+        # has not yet installed the newly-added dependency or TTE changes API.
+        if kind == "print":
+            yield from _print_fallback_frames(text, width)
+        elif kind == "burn":
+            yield from _burn_fallback_frames(text, width)
+        else:
+            raise
 
 
 def _burn_canvas(text: str, width: int) -> str:
-    """Make every terminal cell burnable, including visually blank cells."""
+    """Make visually blank terminal cells real Burn graph vertices."""
     padded = screen._pad_cells(screen._clip_cells(text, width), width)
     return padded.replace(" ", _BURN_BLANK)
 
@@ -101,7 +262,6 @@ def _surface() -> str:
 
 
 def _draw_row(x: int, y: int, width: int, raw: str) -> None:
-    """Replace exactly one roster-row span without disturbing neighbouring rows."""
     surface = _surface()
     shown = screen._clip_cells(_one_line(raw), width)
     if os.environ.get("NO_COLOR") is not None:
@@ -121,95 +281,85 @@ def _draw_row(x: int, y: int, width: int, raw: str) -> None:
     sys.stdout.flush()
 
 
-def _effect_failure_notice(state: Workspace, kind: str, error: Exception) -> None:
-    """Never hide a broken optional animation behind a successful mutation."""
-    if isinstance(error, ModuleNotFoundError) and error.name == "terminaltexteffects":
-        state.notice = "特效依赖未安装：请重新执行 python -m pip install -e ."
-        return
-    label = "Burn" if kind == "burn" else "Print"
-    state.notice = f"{label} 特效未播放：{error}"
-
-
-def play_student_roster_effect(
+def capture_student_roster_effect(
     state: Workspace,
     catalog: Catalog,
     record_id: int,
     kind: str,
-) -> bool:
-    """Animate one student entry using TTE while preserving workspace semantics."""
-    if state.key != "students":
-        return False
+) -> RosterEffectSnapshot | None:
+    """Capture the target row without mutating the live workspace state."""
+    if state.key != "students" or kind not in {"print", "burn"}:
+        return None
 
     rows = state.rows(catalog)
     index = next((i for i, row in enumerate(rows) if row["id"] == record_id), None)
     if index is None:
-        return False
-
-    state.select_row(index)
-    if kind == "burn":
-        state.set_focus(FocusArea.ROSTER)
-        state.detail_scroll = 0
-        state.detail_selected = 0
-
-    if not sys.stdout.isatty():
-        return False
+        return None
 
     from .view import render
 
-    form = state.form
+    preview = copy(state)
+    preview.form = None
+    preview.field_session = None
+    preview.select_row(index)
     if kind == "burn":
-        state.form = None
-    try:
-        frame = render(state, catalog)
-    finally:
-        state.form = form
+        preview.set_focus(FocusArea.ROSTER)
+        preview.detail_scroll = 0
+        preview.detail_selected = 0
 
+    frame = render(preview, catalog)
     region = next((item for item in frame.regions if item.action == f"row:{index}"), None)
     if region is None or region.width <= 2:
-        return False
+        return None
 
     body_width = region.width - 2
-    body = roster_row_body(state, catalog, index, body_width)
+    body = roster_row_body(preview, catalog, index, body_width)
     if not body.strip():
+        return None
+
+    if kind == "print":
+        return RosterEffectSnapshot(
+            kind,
+            tuple(frame.lines),
+            region.x + 2,
+            region.y,
+            body_width,
+            body.rstrip(),
+        )
+
+    return RosterEffectSnapshot(
+        kind,
+        tuple(frame.lines),
+        region.x,
+        region.y,
+        region.width,
+        screen._pad_cells(screen._clip_cells("  " + body, region.width), region.width),
+    )
+
+
+def play_student_roster_effect(effect: RosterEffectSnapshot | None) -> bool:
+    """Play a captured effect after its corresponding mutation has succeeded."""
+    if effect is None or not sys.stdout.isatty():
         return False
 
-    body_x = region.x + 2
-    y = region.y
     try:
-        screen._paint(frame.lines)
-        if kind == "print":
-            text = body.rstrip()
-            frames = iter(_frames("print", text))
-            first = next(frames, None)
-            if first is None:
-                return False
-            _draw_row(body_x, y, body_width, first)
-            time.sleep(_FRAME_INTERVAL)
-            for raw in frames:
-                _draw_row(body_x, y, body_width, raw)
-                time.sleep(_FRAME_INTERVAL)
-            return True
+        screen._paint(effect.lines)
+        if effect.kind == "print":
+            _draw_row(effect.x, effect.y, effect.width, "")
+            text = effect.text
+        else:
+            # Remove the selection marker before ignition; the deleted record is
+            # already no longer current from the workspace's point of view.
+            _draw_row(effect.x, effect.y, effect.width, effect.text)
+            text = _burn_canvas(effect.text, effect.width)
 
-        # Prime TTE before touching the visible row. If the dependency or effect
-        # initialization fails, the original record remains intact instead of
-        # mysteriously turning into a blank line before the delete is committed.
-        text = _burn_canvas("  " + body, region.width)
-        frames = iter(_frames("burn", text))
-        first = next(frames, None)
-        if first is None:
-            return False
-
-        _draw_row(region.x, y, region.width, first)
-        time.sleep(_FRAME_INTERVAL)
-        for raw in frames:
-            _draw_row(region.x, y, region.width, raw)
+        for raw in _effect_frames(effect.kind, text, effect.width):
+            _draw_row(effect.x, effect.y, effect.width, raw)
             time.sleep(_FRAME_INTERVAL)
 
-        # Burn itself finishes on TTE's final-gradient text. Clear the row only
-        # after the complete effect; apply_form immediately deletes the record
-        # and the next normal render closes the list with no visible gap.
-        _draw_row(region.x, y, region.width, "")
+        if effect.kind == "burn":
+            _draw_row(effect.x, effect.y, effect.width, "")
         return True
-    except Exception as error:
-        _effect_failure_notice(state, kind, error)
+    except Exception:
+        # Effects never get to veto an already-successful data mutation.
         return False
