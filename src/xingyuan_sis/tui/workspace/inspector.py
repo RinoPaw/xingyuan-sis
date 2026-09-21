@@ -193,7 +193,7 @@ def render_inspector(
 ) -> None:
     layout = WorkspaceLayout(board.width, board.height)
     top = layout.panel_content_row(state.key)
-    footer_row = board.height - 1
+    bottom = board.height - 1
     row = state.current(catalog)
     focused = state.focus is FocusArea.INSPECTOR
     if row is None:
@@ -215,8 +215,6 @@ def render_inspector(
         return
 
     session = state.field_session
-    has_delete_action = not catalog.read_only
-    action_row = footer_row - 1 if has_delete_action else footer_row
     heading = identity(state.key, row)[0] if layout.compact else "档案"
     board.put(
         x,
@@ -227,7 +225,7 @@ def render_inspector(
     )
 
     lines = layout_lines(raw_lines, width, layout)
-    capacity = max(1, layout.panel_capacity(state.key) - (1 if has_delete_action else 0))
+    capacity = layout.panel_capacity(state.key)
 
     selected_action = ""
     target_line = 0
@@ -320,11 +318,8 @@ def render_inspector(
             board.put(cursor, y, shown, drawn_style, width=remaining)
             cursor += display
 
-    if has_delete_action and session is None:
-        board.button(x, action_row, "删除", "delete")
-
     if session is None:
         board.regions.extend(
             screen.HitRegion(x + 1, y + 1, width, "focus-details")
-            for y in range(top, action_row)
+            for y in range(top, bottom)
         )
