@@ -13,9 +13,10 @@ if TYPE_CHECKING:
 
 
 def roster_window(state: Workspace, row_count: int, capacity: int) -> int:
-    display_count = row_count + (1 if state.roster_gap is not None else 0)
-    anchor = state.roster_gap if state.roster_gap is not None else state.selected
-    state.roster_scroll = visible_start(anchor, display_count, capacity, state.roster_scroll)
+    anchor = state.selected
+    if state.roster_gap is not None:
+        anchor = min(state.roster_gap, max(0, row_count - 1))
+    state.roster_scroll = visible_start(anchor, row_count, capacity, state.roster_scroll)
     return state.roster_scroll
 
 
@@ -108,18 +109,6 @@ def roster_row_body(
     return _row_body(rows[index], columns, width)
 
 
-def _display_slots(rows: list[dict[str, Any]], gap: int | None) -> list[tuple[int | None, dict[str, Any] | None]]:
-    """Map visual roster slots to real row indexes, including one deletion gap."""
-    slots: list[tuple[int | None, dict[str, Any] | None]] = []
-    for index, row in enumerate(rows):
-        if gap == index:
-            slots.append((None, None))
-        slots.append((index, row))
-    if gap == len(rows):
-        slots.append((None, None))
-    return slots
-
-
 def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) -> None:
     rows = state.rows(catalog)
     focused = state.focus is FocusArea.ROSTER
@@ -128,11 +117,10 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
     header_row = layout.panel_content_row(state.key)
     data_row = header_row + 1
     capacity = layout.roster_capacity(state.key)
-    slots = _display_slots(rows, state.roster_gap)
     first = roster_window(state, len(rows), capacity)
     heading = panel_heading("名册", focused)
     range_text = f"  {len(rows):02d}" + (
-        f"  /  {first + 1}–{min(first + capacity, len(slots))}" if slots else ""
+        f"  /  {first + 1}–{min(first + capacity, len(rows))}" if rows else ""
     )
     board.put(1, heading_row, heading + screen._ansi(range_text, screen._TEXT_SECONDARY), width=width - 1)
 
@@ -141,14 +129,8 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
 
     header = "  " + " ".join(screen._pad_cells(label, size) for _, label, size in columns)
     board.put(1, header_row, header, screen._TEXT_SECONDARY, width=width - 1)
-    for display_index, (row_index, row) in enumerate(slots[first:first + capacity], start=first):
-        y = data_row + display_index - first
-        if row is None or row_index is None:
-            # The deleted record's slot is intentionally blank: no marker, no
-            # weak context and no hit target for a record that no longer exists.
-            board.put(1, y, " " * (width - 1), width=width - 1)
-            continue
-
+    for row_index, row in enumerate(rows[first:first + capacity], start=first):
+        y = data_row + row_index - first
         body = _row_body(row, columns, body_width)
         is_current = state.roster_gap is None and row_index == state.selected
         text = theme.contextual_item(
@@ -158,7 +140,7 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
         )
         board.put(1, y, text, action=f"row:{row_index}", width=width - 1)
 
-    if not rows and state.roster_gap is None:
+    if not rows:
         message_row = data_row + 1
         board.put(
             1, message_row,
