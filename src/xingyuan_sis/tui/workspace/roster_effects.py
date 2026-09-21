@@ -102,7 +102,18 @@ def play_student_roster_effect(
 
     from .view import render
 
-    frame = render(state, catalog)
+    # A confirmed delete no longer needs to keep its confirmation panel on
+    # screen. Temporarily detach it while measuring/painting the roster so the
+    # same Burn behavior works in both split and compact layouts. The Form is
+    # restored before returning because apply_form still owns the transaction.
+    form = state.form
+    if kind == "burn":
+        state.form = None
+    try:
+        frame = render(state, catalog)
+    finally:
+        state.form = form
+
     region = next((item for item in frame.regions if item.action == f"row:{index}"), None)
     if region is None or region.width <= 2:
         return False
@@ -114,7 +125,7 @@ def play_student_roster_effect(
 
     try:
         frames = _frames(kind, text)
-    except (ImportError, AttributeError, TypeError, ValueError):
+    except Exception:
         # Effects are decorative; a missing/incompatible runtime must never
         # prevent a confirmed data mutation from completing.
         return False
@@ -130,7 +141,7 @@ def play_student_roster_effect(
         for raw in frames:
             _draw_body(x, y, body_width, raw)
             time.sleep(_FRAME_INTERVAL)
-    except OSError:
+    except Exception:
         return False
 
     return True
