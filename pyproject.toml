@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Xingyuan University student information system"
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = ["terminaltexteffects>=0.15,<0.16"]
 
 [project.scripts]
 xy = "xingyuan_sis.entry:main"
