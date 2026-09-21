@@ -61,27 +61,34 @@ def run(
                     and form.original is not None
                     else None
                 )
+                deleting_position = state.selected if deleting_id is not None else None
+
                 if deleting_id is not None:
-                    # The record remains real while Burn consumes its row. Only
-                    # after the visual exit completes is the deletion applied.
+                    # Burn owns the selected roster row while the record still
+                    # exists. Confirmation then commits the deletion underneath it.
                     play_student_roster_effect(state, catalog, deleting_id, "burn")
 
                 created_id = apply_form(state, catalog)
-                if state.key == "students" and mode == "delete":
-                    # The form transaction may restore the pre-dialog context;
-                    # confirmed deletion deliberately ends on the left roster.
-                    state.set_focus(FocusArea.ROSTER)
+                if state.key == "students" and mode == "delete" and deleting_position is not None:
+                    # Keep the exact deleted slot empty. No neighboring student
+                    # becomes current until the user explicitly presses up/down.
+                    rows = state.rows(catalog)
+                    state.leave_roster_gap(min(deleting_position, len(rows)))
                 elif state.key == "students" and mode == "create" and created_id is not None:
-                    # Creation has committed, so Print runs at the record's real
-                    # sorted/filtered position in the left roster.
+                    # apply_form has already converted the draft into the normal
+                    # inspector and left focus there. Print only introduces the
+                    # new row at its real sorted position on the left.
                     play_student_roster_effect(state, catalog, created_id, "print")
             elif event[0] == "refresh":
                 row = state.current(catalog)
                 catalog.refresh()
-                state.selected = next(
-                    (i for i, record in enumerate(state.rows(catalog)) if row and record["id"] == row["id"]),
-                    0,
-                )
+                if state.roster_gap is None:
+                    state.selected = next(
+                        (i for i, record in enumerate(state.rows(catalog)) if row and record["id"] == row["id"]),
+                        0,
+                    )
+                else:
+                    state.rows(catalog)
                 state.notice = "已刷新。"
         except KeyboardInterrupt:
             if state.field_session is not None:
