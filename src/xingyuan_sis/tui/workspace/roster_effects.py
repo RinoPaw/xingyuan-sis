@@ -116,21 +116,31 @@ def play_student_roster_effect(
     if not text:
         return False
 
-    try:
-        frames = _frames(kind, text)
-    except Exception:
-        return False
-
     x = region.x + 2
     y = region.y
     try:
+        # First make the state transition visible: Save becomes a browsable
+        # archive while focus stays there, or Delete moves focus to the roster.
         screen._paint(frame.lines)
         if kind == "print":
             _draw_body(x, y, body_width, "")
+
+        try:
+            frames = _frames(kind, text)
+        except Exception:
+            if kind == "print":
+                _draw_body(x, y, body_width, text)
+            return False
+
         for raw in frames:
             _draw_body(x, y, body_width, raw)
             time.sleep(_FRAME_INTERVAL)
     except Exception:
+        if kind == "print":
+            try:
+                _draw_body(x, y, body_width, text)
+            except Exception:
+                pass
         return False
 
     return True
