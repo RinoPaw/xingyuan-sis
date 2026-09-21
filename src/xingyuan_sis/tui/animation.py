@@ -39,10 +39,23 @@ def play_region_frames(
     width: int,
     frames: Iterable[str],
 ) -> None:
-    """Play transient frames inside one fixed terminal region."""
+    """Play full transient canvases with their bottom row anchored at ``y``."""
     _paint(base_lines)
+    first = True
     for frame in frames:
-        _paint_region(x, y, width, frame)
+        if not first:
+            # Restore the application surface before the next full effect frame.
+            # This prevents rows used by a taller previous canvas from leaking
+            # into a later, shorter frame without modifying the effect itself.
+            _paint(base_lines)
+        first = False
+
+        rows = frame.split("\n")
+        top = y - len(rows) + 1
+        for offset, row in enumerate(rows):
+            target_y = top + offset
+            if 1 <= target_y <= len(base_lines):
+                _paint_region(x, target_y, width, row)
         time.sleep(_TRANSIENT_FRAME_INTERVAL)
 
 

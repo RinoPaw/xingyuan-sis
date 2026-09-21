@@ -6,11 +6,9 @@ from dataclasses import dataclass
 from itertools import chain
 import os
 
-from terminaltexteffects.effects.effect_burn import Burn
-from terminaltexteffects.effects.effect_print import Print
-from terminaltexteffects.utils import colorterm
-
 from .. import animation, screen
+from ..effects.effect_burn import Burn
+from ..effects.effect_print import Print
 from .data import Catalog
 from .roster import roster_row_body
 from .state import FocusArea, Workspace
@@ -30,74 +28,27 @@ class RosterEffectSnapshot:
     text: str
 
 
-def _one_line(frame: str) -> str:
-    return frame.partition("\n")[0]
+def _effect(kind: str, text: str):
+    """Create the locally ported TTE effect without changing its canvas geometry."""
+    try:
+        effect_cls = _EFFECTS[kind]
+    except KeyError as exc:
+        raise ValueError(f"unknown roster effect: {kind}") from exc
 
-
-def _effect(kind: str, text: str, width: int):
-    """Create the official TTE effect constrained to one roster row."""
-    source = screen._TEXT_PRIMARY + text + screen._RESET if kind == "burn" else text
-    effect = _EFFECTS[kind](source)
+    effect = effect_cls(text)
     terminal = effect.terminal_config
-    terminal.canvas_width = width
-    terminal.canvas_height = 1
+    # The application owns output timing and placement. Leave TTE's canvas
+    # width/height and effect state machine untouched so yielded frames remain
+    # the native frames for this exact input.
     terminal.ignore_terminal_dimensions = True
     terminal.frame_rate = 0
     terminal.no_color = os.environ.get("NO_COLOR") is not None
-
-    if kind == "burn":
-        # Input color makes real spaces part of TTE's graph. Their visual
-        # adaptation happens after TTE advances the official Burn scene.
-        terminal.existing_color_handling = "dynamic"
-        effect.effect_config.smoke_chance = 0.0
-
     return effect
 
 
-def _burn_frame(iterator, width: int) -> str:
-    """Project TTE's Burn state onto a roster-row surface.
-
-    Text cells use the official Burn glyph verbatim. Originally blank cells
-    remain blank and expose TTE's fire color as background only while their
-    official ``burn`` scene is active.
-    """
-    chunks: list[str] = []
-    cursor = 1
-    for character in sorted(iterator.terminal.get_characters(), key=lambda item: item.input_coord.column):
-        column = character.input_coord.column
-        if column > cursor:
-            chunks.append(" " * (column - cursor))
-
-        visual = character.animation.current_character_visual
-        input_width = max(1, screen._display_width(character.input_symbol))
-        if character.input_symbol == " ":
-            scene = character.animation.active_scene
-            color = visual._fg_color_code if scene is not None and scene.scene_id == "burn" else None
-            shown = f"{colorterm.bg(color)} {screen._RESET}" if color is not None else " "
-            shown_width = 1
-        else:
-            shown = visual.formatted_symbol
-            shown_width = screen._display_width(visual.symbol)
-
-        chunks.append(shown)
-        if shown_width < input_width:
-            chunks.append(" " * (input_width - shown_width))
-        cursor = column + input_width
-
-    if cursor <= width:
-        chunks.append(" " * (width - cursor + 1))
-    return "".join(chunks)
-
-
-def _frames(kind: str, text: str, width: int):
-    effect = _effect(kind, text, width)
-    if kind == "print":
-        yield from (_one_line(frame) for frame in effect)
-        return
-
-    iterator = iter(effect)
-    for _ in iterator:
-        yield _burn_frame(iterator, width)
+def _frames(kind: str, text: str):
+    """Yield each complete upstream effect frame without projection or rewriting."""
+    yield from _effect(kind, text)
 
 
 def capture_student_roster_effect(
@@ -147,5 +98,5 @@ def play_student_roster_effect(effect: RosterEffectSnapshot | None) -> None:
 
     before = ("",) if effect.kind == "print" else (effect.text,)
     after = () if effect.kind == "print" else ("",)
-    frames = chain(before, _frames(effect.kind, effect.text, effect.width), after)
+    frames = chain(before, _frames(effect.kind, effect.text), after)
     animation.play_region_frames(effect.lines, effect.x, effect.y, effect.width, frames)
