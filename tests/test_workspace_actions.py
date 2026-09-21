@@ -208,6 +208,19 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertIsNone(state.roster_gap)
         self.assertEqual(state.current(self.catalog)["id"], rows[4]["id"])
 
+    def test_toolbar_return_to_roster_resolves_gap_to_the_next_student(self):
+        state = workspace.Workspace("students", selected=4)
+        rows = state.rows(self.catalog)
+        state.leave_roster_gap(4)
+        self.assertIsNone(state.current(self.catalog))
+
+        state.set_focus(workspace.FocusArea.TOOLBAR)
+        state.focus_content()
+
+        self.assertEqual(state.focus, workspace.FocusArea.ROSTER)
+        self.assertIsNone(state.roster_gap)
+        self.assertEqual(state.current(self.catalog)["id"], rows[4]["id"])
+
     def test_wide_delete_keeps_roster_and_replaces_inspector_with_aligned_panel(self):
         state = workspace.Workspace("students", selected=1)
         rows = state.rows(self.catalog)
