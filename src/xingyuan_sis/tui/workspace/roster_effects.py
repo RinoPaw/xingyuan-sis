@@ -42,8 +42,6 @@ def _frames(kind: str, text: str) -> list[str]:
     else:
         raise ValueError(f"未知名册特效：{kind}")
 
-    # The effect is embedded into one existing roster row, so TTE must only
-    # produce the row canvas. Xingyuan keeps ownership of the surrounding TUI.
     effect.terminal_config.canvas_width = -1
     effect.terminal_config.canvas_height = 1
     effect.terminal_config.ignore_terminal_dimensions = True
@@ -76,11 +74,11 @@ def play_student_roster_effect(
     record_id: int,
     kind: str,
 ) -> bool:
-    """Focus and animate exactly one student row in-place.
+    """Animate exactly one student row while preserving the owning panel's focus.
 
-    ``burn`` is played while the record still exists, immediately before the
-    deletion transaction is applied. ``print`` is played after creation, once
-    the new record has reached its sorted/filtered roster position.
+    Burn transfers focus to the roster because deletion ends on an empty roster
+    slot. Print leaves the inspector focused; it only introduces the newly saved
+    student's weak-context row on the left.
     """
     if state.key != "students":
         return False
@@ -90,22 +88,17 @@ def play_student_roster_effect(
     if index is None:
         return False
 
-    state.selected = index
-    state.set_focus(FocusArea.ROSTER)
-    state.detail_scroll = 0
-    state.detail_selected = 0
+    state.select_row(index)
+    if kind == "burn":
+        state.set_focus(FocusArea.ROSTER)
+        state.detail_scroll = 0
+        state.detail_selected = 0
 
-    # Tests, redirected output and non-interactive callers still get the focus
-    # transition; only a real terminal receives animation frames.
     if not sys.stdout.isatty():
         return False
 
     from .view import render
 
-    # A confirmed delete no longer needs to keep its confirmation panel on
-    # screen. Temporarily detach it while measuring/painting the roster so the
-    # same Burn behavior works in both split and compact layouts. The Form is
-    # restored before returning because apply_form still owns the transaction.
     form = state.form
     if kind == "burn":
         state.form = None
@@ -126,15 +119,11 @@ def play_student_roster_effect(
     try:
         frames = _frames(kind, text)
     except Exception:
-        # Effects are decorative; a missing/incompatible runtime must never
-        # prevent a confirmed data mutation from completing.
         return False
 
-    x = region.x + 2  # keep the focused ``> `` marker stationary
+    x = region.x + 2
     y = region.y
     try:
-        # Paint the focus transition only after frame generation, so a newly
-        # created row cannot sit fully visible while Print prepares its frames.
         screen._paint(frame.lines)
         if kind == "print":
             _draw_body(x, y, body_width, "")
