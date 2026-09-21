@@ -8,6 +8,7 @@ import os
 
 from terminaltexteffects.effects.effect_burn import Burn
 from terminaltexteffects.effects.effect_print import Print
+from terminaltexteffects.utils import colorterm
 
 from .. import animation, screen
 from .data import Catalog
@@ -35,13 +36,8 @@ def _one_line(frame: str) -> str:
 
 def _effect(kind: str, text: str, width: int):
     """Create the official TTE effect constrained to one roster row."""
-    if kind == "burn":
-        # Burn deliberately treats ANSI-colored spaces as burnable input. Keep
-        # the row visually blank in those cells while using TTE's own supported
-        # existing-color path instead of substituting fake characters.
-        text = screen._TEXT_PRIMARY + text + screen._RESET
-
-    effect = _EFFECTS[kind](text)
+    source = screen._TEXT_PRIMARY + text + screen._RESET if kind == "burn" else text
+    effect = _EFFECTS[kind](source)
     terminal = effect.terminal_config
     terminal.canvas_width = width
     terminal.canvas_height = 1
@@ -50,10 +46,57 @@ def _effect(kind: str, text: str, width: int):
     terminal.no_color = os.environ.get("NO_COLOR") is not None
 
     if kind == "burn":
+        # Input color makes real spaces part of TTE's graph. Their visual
+        # adaptation happens after TTE advances the official Burn scene.
         terminal.existing_color_handling = "dynamic"
         effect.effect_config.smoke_chance = 0.0
 
     return effect
+
+
+def _burn_frame(iterator, width: int) -> str:
+    """Project TTE's Burn state onto a roster-row surface.
+
+    Text cells use the official Burn glyph verbatim. Cells that were originally
+    blank use the same current fire color as a background, so the row surface
+    burns without inventing visible placeholder characters.
+    """
+    chunks: list[str] = []
+    cursor = 1
+    for character in sorted(iterator.terminal.get_characters(), key=lambda item: item.input_coord.column):
+        column = character.input_coord.column
+        if column > cursor:
+            chunks.append(" " * (column - cursor))
+
+        visual = character.animation.current_character_visual
+        input_width = max(1, screen._display_width(character.input_symbol))
+        if character.input_symbol == " ":
+            color = visual._fg_color_code
+            shown = f"{colorterm.bg(color)} {screen._RESET}" if color is not None else " "
+            shown_width = 1
+        else:
+            shown = visual.formatted_symbol
+            shown_width = visual.cell_width
+
+        chunks.append(shown)
+        if shown_width < input_width:
+            chunks.append(" " * (input_width - shown_width))
+        cursor = column + input_width
+
+    if cursor <= width:
+        chunks.append(" " * (width - cursor + 1))
+    return "".join(chunks)
+
+
+def _frames(kind: str, text: str, width: int):
+    effect = _effect(kind, text, width)
+    if kind == "print":
+        yield from (_one_line(frame) for frame in effect)
+        return
+
+    iterator = iter(effect)
+    for _ in iterator:
+        yield _burn_frame(iterator, width)
 
 
 def capture_student_roster_effect(
@@ -103,9 +146,5 @@ def play_student_roster_effect(effect: RosterEffectSnapshot | None) -> None:
 
     before = ("",) if effect.kind == "print" else (effect.text,)
     after = () if effect.kind == "print" else ("",)
-    frames = chain(
-        before,
-        (_one_line(frame) for frame in _effect(effect.kind, effect.text, effect.width)),
-        after,
-    )
+    frames = chain(before, _frames(effect.kind, effect.text, effect.width), after)
     animation.play_region_frames(effect.lines, effect.x, effect.y, effect.width, frames)
