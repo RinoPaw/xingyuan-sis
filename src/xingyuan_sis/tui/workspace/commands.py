@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 SEARCH = Command("search", "搜索", "/")
 CREATE = Command("create", "增加", "a")
-DELETE = Command("delete", "删除", "d")
+DELETE = Command("delete", "删除", "d", toolbar=False)
 RESET_PASSWORD = Command("reset-password", "重置密码")
 IMPORT = Command("import", "导入", "i")
 EXPORT = Command("export", "导出", "o")
