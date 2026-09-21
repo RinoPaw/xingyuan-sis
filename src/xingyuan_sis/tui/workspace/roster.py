@@ -49,9 +49,6 @@ def _fit_columns(
     widths = [column[2] for column in columns]
     shortage = max(0, sum(widths) - usable)
 
-    # First reclaim only genuinely flexible width: values that are wider than
-    # their preferred size. Columns already shorter than their preferred size
-    # do not reserve invisible padding and therefore never need "compression".
     while shortage:
         candidates = [
             index
@@ -60,18 +57,10 @@ def _fit_columns(
         ]
         if not candidates:
             break
-        # Take one cell from the column with the most remaining excess. This
-        # avoids arbitrarily sacrificing the first column when several long
-        # text columns are present.
         index = max(candidates, key=lambda item: widths[item] - columns[item][3])
         widths[index] -= 1
         shortage -= 1
 
-    # Extremely narrow terminals can still be smaller than the sum of all
-    # preferred targets. Keep every column present and spend the remaining loss
-    # on columns that can still shrink without clipping their heading. The
-    # board will provide the unavoidable hard edge only if even headings do not
-    # fit, which should occur only in compact layouts.
     while shortage:
         candidates = [
             index
@@ -90,9 +79,36 @@ def _fit_columns(
     ]
 
 
+def _row_body(row: dict[str, Any], columns: list[list[Any]], width: int) -> str:
+    raw = " ".join(
+        screen._pad_cells(screen._clip_cells(safe(row.get(key)), size), size)
+        for key, _, size in columns
+    )
+    return screen._pad_cells(screen._clip_cells(raw, width), width)
+
+
+def roster_row_body(
+    state: Workspace,
+    catalog: Catalog,
+    index: int,
+    width: int,
+) -> str:
+    """Return the exact plain roster body used for one visible row.
+
+    Transient effects consume this instead of reimplementing table geometry.
+    The two-cell focus marker is deliberately not part of the body.
+    """
+    rows = state.rows(catalog)
+    if not 0 <= index < len(rows):
+        return ""
+    width = max(1, width)
+    columns = _fit_columns(COLLECTIONS[state.key].columns, rows, width)
+    return _row_body(rows[index], columns, width)
+
+
 def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) -> None:
     rows = state.rows(catalog)
-    focused = state.focus is FocusArea.ROSTER and state.form is None
+    focused = state.focus is FocusArea.ROSTER
     layout = WorkspaceLayout(board.width, board.height)
     heading_row = layout.panel_heading_row(state.key)
     header_row = layout.panel_content_row(state.key)
@@ -105,18 +121,13 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
     )
     board.put(1, heading_row, heading + screen._ansi(range_text, screen._TEXT_SECONDARY), width=width - 1)
 
-    available = max(1, width - 3)
-    columns = _fit_columns(COLLECTIONS[state.key].columns, rows, available)
+    body_width = max(1, width - 3)
+    columns = _fit_columns(COLLECTIONS[state.key].columns, rows, body_width)
 
     header = "  " + " ".join(screen._pad_cells(label, size) for _, label, size in columns)
     board.put(1, header_row, header, screen._TEXT_SECONDARY, width=width - 1)
     for index, row in enumerate(rows[first:first + capacity], start=first):
-        raw = " ".join(
-            screen._pad_cells(screen._clip_cells(safe(row.get(key)), size), size)
-            for key, _, size in columns
-        )
-        body_width = max(1, width - 3)
-        body = screen._pad_cells(screen._clip_cells(raw, body_width), body_width)
+        body = _row_body(row, columns, body_width)
         is_current = index == state.selected
         text = theme.contextual_item(
             body,
