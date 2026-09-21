@@ -86,16 +86,19 @@ def _render_form_heading(
     width: int,
     heading: str,
 ) -> None:
-    """Keep task identity and mouse save action in one row."""
+    """Render only the task identity; the transaction action lives below the archive."""
     board.put(x, y, panel_heading(heading, True), width=width)
-    form = state.form
-    if form is None or not form.fields:
-        return
 
-    save = theme.button("保存")
-    save_width = screen._display_width(save)
-    if save_width <= width:
-        board.put(x + width - save_width, y, save, action="save", width=save_width)
+
+def _render_form_action(board: Board, mode: str, x: int, y: int) -> None:
+    label = {
+        "delete": "确认删除",
+        "seed": "确认",
+        "reset-password": "确认",
+        "import": "执行",
+        "export": "执行",
+    }.get(mode, "保存")
+    board.button(x, y, label, "save")
 
 
 def _entry_height(kind: str, row_height: int) -> int:
@@ -138,7 +141,8 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
     heading_row = layout.panel_heading_row(state.key)
     status_row = heading_row + 1
     content_row = max(layout.panel_content_row(state.key), status_row + 1)
-    bottom = board.height - 1
+    action_row = board.height - 2
+    bottom = action_row
 
     titles = {
         "delete": "删除记录",
@@ -156,6 +160,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
 
     if form.mode == "delete":
         _render_delete_panel(board, state, catalog, x, content_row, width, bottom)
+        _render_form_action(board, form.mode, x, action_row)
         return
 
     if form.mode in {"seed", "reset-password"}:
@@ -176,6 +181,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
             y = content_row + index * spacing
             if y < bottom:
                 board.put(x, y, message, style, width=width)
+        _render_form_action(board, form.mode, x, action_row)
         return
 
     if state.notice and status_row < bottom:
@@ -322,3 +328,5 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
             f"field:{field.key}",
             width_for_field,
         )
+
+    _render_form_action(board, form.mode, x, action_row)
