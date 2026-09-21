@@ -14,7 +14,6 @@ from .data import Catalog
 from .roster import roster_row_body
 from .state import FocusArea, Workspace
 
-_BURN_BLANK = "\u00a0"
 _EFFECTS = {"print": Print, "burn": Burn}
 
 
@@ -31,21 +30,29 @@ class RosterEffectSnapshot:
 
 
 def _one_line(frame: str) -> str:
-    return frame.partition("\n")[0].replace(_BURN_BLANK, " ")
+    return frame.partition("\n")[0]
 
 
 def _effect(kind: str, text: str, width: int):
     """Create the official TTE effect constrained to one roster row."""
-    effect = _EFFECTS[kind](text)
     if kind == "burn":
-        # Smoke would leave the row and overwrite adjacent students.
-        effect.effect_config.smoke_chance = 0.0
+        # Burn deliberately treats ANSI-colored spaces as burnable input. Keep
+        # the row visually blank in those cells while using TTE's own supported
+        # existing-color path instead of substituting fake characters.
+        text = screen._TEXT_PRIMARY + text + screen._RESET
+
+    effect = _EFFECTS[kind](text)
     terminal = effect.terminal_config
     terminal.canvas_width = width
     terminal.canvas_height = 1
     terminal.ignore_terminal_dimensions = True
     terminal.frame_rate = 0
     terminal.no_color = os.environ.get("NO_COLOR") is not None
+
+    if kind == "burn":
+        terminal.existing_color_handling = "dynamic"
+        effect.effect_config.smoke_chance = 0.0
+
     return effect
 
 
@@ -84,7 +91,7 @@ def capture_student_roster_effect(
         x, width, text = region.x + 2, body_width, body.rstrip()
     else:
         x, width = region.x, region.width
-        text = screen._pad_cells(screen._clip_cells("  " + body, width), width).replace(" ", _BURN_BLANK)
+        text = screen._pad_cells(screen._clip_cells("  " + body, width), width)
 
     return RosterEffectSnapshot(kind, tuple(frame.lines), x, region.y, width, text)
 
@@ -94,7 +101,7 @@ def play_student_roster_effect(effect: RosterEffectSnapshot | None) -> None:
     if effect is None:
         return
 
-    before = ("",) if effect.kind == "print" else (_one_line(effect.text),)
+    before = ("",) if effect.kind == "print" else (effect.text,)
     after = () if effect.kind == "print" else ("",)
     frames = chain(
         before,
