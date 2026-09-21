@@ -193,17 +193,21 @@ def render_inspector(
 ) -> None:
     layout = WorkspaceLayout(board.width, board.height)
     top = layout.panel_content_row(state.key)
-    bottom = board.height - 1
+    footer_row = board.height - 1
     row = state.current(catalog)
     focused = state.focus is FocusArea.INSPECTOR
     if row is None:
         board.put(x, layout.panel_heading_row(state.key), panel_heading("档案", focused), width=width)
-        board.put(
-            x, top + 1,
-            "没有匹配的记录" if state.query else "暂无记录",
-            screen._TEXT_SECONDARY,
-            width=width,
+        message = (
+            "当前未选择学生"
+            if state.key == "students" and state.roster_gap is not None
+            else "没有匹配的记录"
+            if state.query
+            else "暂无记录"
         )
+        board.put(x, top + 1, message, screen._TEXT_SECONDARY, width=width)
+        if state.roster_gap is not None:
+            return
         if state.query:
             board.button(x, top + 3, "清除搜索", "reset-search")
         elif not catalog.read_only:
@@ -211,6 +215,8 @@ def render_inspector(
         return
 
     session = state.field_session
+    has_delete_action = not catalog.read_only
+    action_row = footer_row - 1 if has_delete_action else footer_row
     heading = identity(state.key, row)[0] if layout.compact else "档案"
     board.put(
         x,
@@ -221,7 +227,7 @@ def render_inspector(
     )
 
     lines = layout_lines(raw_lines, width, layout)
-    capacity = layout.panel_capacity(state.key)
+    capacity = max(1, layout.panel_capacity(state.key) - (1 if has_delete_action else 0))
 
     selected_action = ""
     target_line = 0
@@ -270,8 +276,6 @@ def render_inspector(
                 marker_width = min(screen._display_width(marker), max(0, content_right - cursor))
                 if marker_width:
                     if action.startswith("option:") and cursor - marker_width >= x:
-                        # Picker rows reserve their marker to the left of the
-                        # candidate text. Selection never moves the text.
                         board.put(
                             cursor - marker_width,
                             y,
@@ -316,8 +320,11 @@ def render_inspector(
             board.put(cursor, y, shown, drawn_style, width=remaining)
             cursor += display
 
+    if has_delete_action and session is None:
+        board.button(x, action_row, "删除", "delete")
+
     if session is None:
         board.regions.extend(
             screen.HitRegion(x + 1, y + 1, width, "focus-details")
-            for y in range(top, bottom)
+            for y in range(top, action_row)
         )
