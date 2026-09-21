@@ -22,7 +22,7 @@ class WorkspaceActionTests(unittest.TestCase):
         seed_demo(self.db)
         self.catalog = Catalog(self.db)
 
-    def test_record_commands_are_the_toolbar_and_footer_source(self):
+    def test_record_commands_use_toolbar_and_archive_action_slots(self):
         state = workspace.Workspace("students")
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             frame = workspace_view.render(state, self.catalog)
@@ -38,28 +38,47 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertIn("Esc 返回", footer)
         self.assertIn("/ 搜索", footer)
         self.assertIn("A 增加", footer)
-        self.assertIn("D 删除", footer)
+        self.assertNotIn("D 删除", footer)
         self.assertNotIn("E 编辑", footer)
         self.assertFalse(any(region.y == 35 for region in frame.regions))
 
-    def test_toolbar_enter_invokes_the_same_delete_command(self):
-        state = workspace.Workspace("students", selected=15)
-        selected_at_delete: list[int] = []
+    def test_archive_delete_and_create_save_share_the_bottom_action_slot(self):
+        state = workspace.Workspace(
+            "students",
+            focus=workspace.FocusArea.INSPECTOR,
+            content_panel=workspace.ContentPanel.INSPECTOR,
+        )
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+            browsing = workspace_view.render(state, self.catalog)
+        delete = next(region for region in browsing.regions if region.action == "delete")
 
-        def capture(_state, _catalog, action):
-            if action == "delete":
-                selected_at_delete.append(_state.selected)
+        workspace_forms.open_form(state, self.catalog, "create")
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+            creating = workspace_view.render(state, self.catalog)
+        save = next(region for region in creating.regions if region.action == "save")
 
-        with patch.object(
-            keys, "_read_key",
-            side_effect=["focus", "focus", "right", "right", "select", "refresh"],
-        ), patch.object(screen, "_paint"), patch.object(
-            screen, "_terminal_size", return_value=os.terminal_size((120, 35))
-        ), patch.object(workspace_events, "open_form", side_effect=capture):
+        self.assertEqual((delete.x, delete.y), (save.x, save.y))
+        self.assertEqual(delete.y, 34)
+
+    def test_archive_delete_button_opens_the_delete_transaction_for_current_record(self):
+        state = workspace.Workspace(
+            "students",
+            selected=15,
+            focus=workspace.FocusArea.INSPECTOR,
+            content_panel=workspace.ContentPanel.INSPECTOR,
+        )
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+            frame = workspace_view.render(state, self.catalog)
+        delete = next(region for region in frame.regions if region.action == "delete")
+
+        with patch.object(keys, "_read_key", side_effect=[keys.MouseClick(delete.x, delete.y), "back", "refresh"]), \
+             patch.object(screen, "_paint"), patch.object(
+                 screen, "_terminal_size", return_value=os.terminal_size((120, 35))
+             ), patch.object(workspace_events, "open_form") as open_form:
             event = workspace_events.interact(state, self.catalog)
 
         self.assertEqual(event, ("refresh", 0))
-        self.assertEqual(selected_at_delete, [15])
+        open_form.assert_called_once_with(state, self.catalog, "delete")
         self.assertEqual(state.selected, 15)
 
     def test_toolbar_focus_keeps_current_record_as_weak_context_only(self):
@@ -156,6 +175,36 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertEqual(state.detail_scroll, 2)
         self.assertEqual(state.detail_selected, 5)
 
+    def test_deleted_student_can_leave_an_empty_slot_until_up_or_down_selects_a_neighbor(self):
+        state = workspace.Workspace("students", selected=4)
+        original = state.current(self.catalog)
+        workspace_forms.open_form(state, self.catalog, "delete")
+        workspace_forms.apply_form(state, self.catalog)
+        rows = state.rows(self.catalog)
+        state.leave_roster_gap(4)
+
+        self.assertIsNone(self.catalog.service.student_by_no(original["student_no"]))
+        self.assertIsNone(state.current(self.catalog))
+        self.assertEqual(state.roster_gap, 4)
+        self.assertEqual(state.focus, workspace.FocusArea.ROSTER)
+
+        with patch.object(keys, "_read_key", side_effect=["up", "refresh"]), \
+             patch.object(screen, "_paint"), patch.object(
+                 screen, "_terminal_size", return_value=os.terminal_size((120, 35))
+             ):
+            workspace_events.interact(state, self.catalog)
+        self.assertIsNone(state.roster_gap)
+        self.assertEqual(state.current(self.catalog)["id"], rows[3]["id"])
+
+        state.leave_roster_gap(4)
+        with patch.object(keys, "_read_key", side_effect=["down", "refresh"]), \
+             patch.object(screen, "_paint"), patch.object(
+                 screen, "_terminal_size", return_value=os.terminal_size((120, 35))
+             ):
+            workspace_events.interact(state, self.catalog)
+        self.assertIsNone(state.roster_gap)
+        self.assertEqual(state.current(self.catalog)["id"], rows[4]["id"])
+
     def test_wide_delete_keeps_roster_and_replaces_inspector_with_aligned_panel(self):
         state = workspace.Workspace("students", selected=1)
         rows = state.rows(self.catalog)
@@ -176,6 +225,7 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertIn("标识", text)
         self.assertIn("影响", text)
         self.assertIn("风险", text)
+        self.assertIn("确认删除", text)
         self.assertNotIn("\n档案", text)
 
         record_line = next(line for line in plain_lines if "记录" in line and selected["name"] in line)
