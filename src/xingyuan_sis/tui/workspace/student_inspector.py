@@ -93,7 +93,7 @@ def lines(
     related_key, related = catalog.related("students", row)
     result.extend((
         [],
-        [(f"选课与成绩  {len(related):02d}", screen._BOLD + screen._TEXT_PRIMARY, "")],
+        [("选课与成绩", screen._BOLD + screen._TEXT_PRIMARY, "")],
     ))
     if not related:
         result.append([("暂无关联记录", screen._TEXT_SECONDARY, "")])
