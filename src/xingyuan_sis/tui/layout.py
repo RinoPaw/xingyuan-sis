@@ -17,9 +17,7 @@ _CONTROL_ROWS = {
     "data": 2,
 }
 
-_MAX_ROSTER_WIDTH = 72
-_MIN_INSPECTOR_WIDTH = 28
-_MAX_INSPECTOR_WIDTH = 42
+_DEFAULT_INSPECTOR_WIDTH = 28
 
 
 def visible_start(selected: int, total: int, capacity: int, first: int = 0) -> int:
@@ -55,17 +53,21 @@ class WorkspaceLayout:
 
     @property
     def desired_inspector_width(self) -> int:
-        desired = _MAX_INSPECTOR_WIDTH if self.inspector_width is None else self.inspector_width
-        return min(_MAX_INSPECTOR_WIDTH, max(_MIN_INSPECTOR_WIDTH, desired))
+        """Return the width requested by the semantic content owner.
+
+        Layout does not invent a second sizing policy. Renderers that know the
+        current content pass its preferred width; callers without semantic
+        context get only a conservative default.
+        """
+        desired = _DEFAULT_INSPECTOR_WIDTH if self.inspector_width is None else self.inspector_width
+        return max(1, desired)
 
     @property
     def split_x(self) -> int:
-        """Keep a dense roster beside a content-sized inspector on wide terminals."""
+        """Give the inspector exactly what it asks for and the roster the rest."""
         if not self.split:
             return self.width
-        desired = self.desired_inspector_width
-        balanced = max(self.width // 2, self.width - desired - 4)
-        return min(_MAX_ROSTER_WIDTH, balanced)
+        return max(1, self.width - self.desired_inspector_width - 4)
 
     @property
     def panel_x(self) -> int:
