@@ -183,6 +183,34 @@ def directional_target(lines: list[Line], current: str, direction: str) -> str |
     return min(target_row, key=lambda target: abs(target[1] - current_x))[0]
 
 
+def empty_inspector_content(state: Workspace, catalog: Catalog) -> tuple[str, str, str, str]:
+    """Return the one semantic definition used to size and render an empty archive."""
+    heading = "档案"
+    message = (
+        "当前未选择学生"
+        if state.key == "students" and state.roster_gap is not None
+        else "没有匹配的记录"
+        if state.query
+        else "暂无记录"
+    )
+    if state.roster_gap is not None:
+        return heading, message, "", ""
+    if state.query:
+        return heading, message, "清除搜索", "reset-search"
+    if not catalog.read_only:
+        return heading, message, "新建记录", "create"
+    return heading, message, "", ""
+
+
+def empty_inspector_width(state: Workspace, catalog: Catalog) -> int:
+    """Measure the empty inspector from the exact content it will render."""
+    heading, message, action_label, _ = empty_inspector_content(state, catalog)
+    candidates = [screen._display_width(heading), screen._display_width(message)]
+    if action_label:
+        candidates.append(screen._display_width(theme.button(action_label)))
+    return max(candidates, default=1) + 2
+
+
 def render_inspector(
     board: Board,
     state: Workspace,
@@ -197,21 +225,11 @@ def render_inspector(
     row = state.current(catalog)
     focused = state.focus is FocusArea.INSPECTOR
     if row is None:
-        board.put(x, layout.panel_heading_row(state.key), panel_heading("档案", focused), width=width)
-        message = (
-            "当前未选择学生"
-            if state.key == "students" and state.roster_gap is not None
-            else "没有匹配的记录"
-            if state.query
-            else "暂无记录"
-        )
+        heading, message, action_label, action = empty_inspector_content(state, catalog)
+        board.put(x, layout.panel_heading_row(state.key), panel_heading(heading, focused), width=width)
         board.put(x, top + 1, message, screen._TEXT_SECONDARY, width=width)
-        if state.roster_gap is not None:
-            return
-        if state.query:
-            board.button(x, top + 3, "清除搜索", "reset-search")
-        elif not catalog.read_only:
-            board.button(x, top + 3, "新建记录", "create")
+        if action_label:
+            board.button(x, top + 3, action_label, action)
         return
 
     session = state.field_session
