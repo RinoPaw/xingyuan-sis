@@ -17,6 +17,11 @@ from .state import ContentPanel, FocusArea, Workspace
 from .student_inspector import lines as student_lines
 
 
+_EMPTY_INSPECTOR_WIDTH = 18
+_RECORD_INSPECTOR_MIN_WIDTH = 28
+_RECORD_INSPECTOR_MAX_WIDTH = 42
+
+
 def content_lines(key: str, row, catalog: Catalog, state: Workspace | None = None) -> list[Line]:
     return student_lines(row, catalog, state) if key == "students" else generic_lines(key, row, catalog, state)
 
@@ -40,17 +45,37 @@ def detail_targets(key: str, row, catalog: Catalog, width: int):
     return action_targets(detail_lines(key, row, catalog, width))
 
 
-def workspace_layout(state: Workspace, catalog: Catalog) -> WorkspaceLayout:
-    terminal = screen._terminal_size()
+def _preferred_inspector_width(state: Workspace, catalog: Catalog) -> int:
+    """Own the one semantic width decision for the right-hand workspace panel."""
+    if state.form is not None:
+        # Transaction fields already adapt internally between inline and stacked
+        # controls. Give that editor its stable working width and let its own
+        # geometry handle narrower terminals.
+        return _RECORD_INSPECTOR_MIN_WIDTH
+
     row = state.current(catalog) if state.key != "data" else None
-    preferred = None
-    if row is not None:
-        longest = max(
-            screen._display_width("".join(text for text, _, _ in line))
-            for line in content_lines(state.key, row, catalog)
-        )
-        preferred = min(42, max(28, longest + 2))
-    return WorkspaceLayout(max(1, terminal.columns - 1), max(4, terminal.lines), preferred)
+    if row is None:
+        # Empty archive states contain only a heading and one short status line.
+        return _EMPTY_INSPECTOR_WIDTH
+
+    longest = max(
+        screen._display_width("".join(text for text, _, _ in line))
+        for line in content_lines(state.key, row, catalog)
+    )
+    return min(
+        _RECORD_INSPECTOR_MAX_WIDTH,
+        max(_RECORD_INSPECTOR_MIN_WIDTH, longest + 2),
+    )
+
+
+def workspace_layout(state: Workspace, catalog: Catalog) -> WorkspaceLayout:
+    """Resolve semantic panel width once, then let WorkspaceLayout place it."""
+    terminal = screen._terminal_size()
+    return WorkspaceLayout(
+        max(1, terminal.columns - 1),
+        max(4, terminal.lines),
+        _preferred_inspector_width(state, catalog),
+    )
 
 
 def _inspector(board: Board, state: Workspace, catalog: Catalog, x: int, width: int) -> None:
