@@ -156,7 +156,20 @@ class Workspace:
         self.set_focus(FocusArea.ROSTER)
 
     def set_focus(self, area: FocusArea) -> None:
-        """Move keyboard focus while keeping the content-panel invariant."""
+        """Move keyboard focus while keeping the content-panel invariant.
+
+        A deletion gap survives the automatic transition into the roster. Once
+        the user later returns from the toolbar to the roster, that deliberate
+        navigation resumes browsing at the record immediately below the gap.
+        """
+        if (
+            self.focus is FocusArea.TOOLBAR
+            and area is FocusArea.ROSTER
+            and self.roster_gap is not None
+        ):
+            self.selected = self.roster_gap
+            self.roster_gap = None
+
         self.focus = area
         if area is FocusArea.ROSTER:
             self.content_panel = ContentPanel.ROSTER
@@ -166,16 +179,16 @@ class Workspace:
     def focus_content(self) -> None:
         """Return from toolbar focus to the content panel it belongs to."""
         if self.key == "data":
-            self.focus = FocusArea.DASHBOARD
+            self.set_focus(FocusArea.DASHBOARD)
         else:
-            self.focus = (
+            self.set_focus(
                 FocusArea.INSPECTOR
                 if self.content_panel is ContentPanel.INSPECTOR
                 else FocusArea.ROSTER
             )
 
     def capture_focus_context(self) -> FocusContext:
-        """Snapshot the interaction context before a temporary task takes focus."""
+        """Snapshot the interaction context before a temporary task may restore."""
         return FocusContext(
             self.focus,
             self.content_panel,
