@@ -1,31 +1,23 @@
-"""Transient roster animations for student create/delete mutations."""
+"""Student roster animations driven by committed create/delete mutations."""
 from __future__ import annotations
 
 from collections.abc import Iterator
 from copy import copy
 from dataclasses import dataclass
+from itertools import chain
 import os
-import sys
-import time
 
-from .. import screen
+from .. import animation, screen
 from .data import Catalog
 from .roster import roster_row_body
 from .state import FocusArea, Workspace
 
-_FRAME_INTERVAL = 1 / 60
 _BURN_BLANK = "\u00a0"
 
 
 @dataclass(frozen=True)
 class RosterEffectSnapshot:
-    """One visual row captured around a real student mutation.
-
-    Delete captures before persistence so the disappearing row still exists;
-    playback happens only after the delete succeeds. Create captures after the
-    record exists. The animation therefore belongs to the mutation, independent
-    of whether that mutation was reached by mouse, keyboard shortcut, or Enter.
-    """
+    """Visual state required to animate one roster mutation."""
 
     kind: str
     lines: tuple[str, ...]
@@ -36,13 +28,12 @@ class RosterEffectSnapshot:
 
 
 def _one_line(frame: str) -> str:
-    lines = frame.splitlines()
-    return (lines[0] if lines else "").replace(_BURN_BLANK, " ")
+    return frame.splitlines()[0].replace(_BURN_BLANK, " ")
 
 
 def _configure_terminal(effect, width: int) -> None:
-    """Let TTE animate one exact roster span while Xingyuan owns the screen."""
-    effect.terminal_config.canvas_width = max(1, width)
+    """Constrain TTE to the roster row owned by the workspace."""
+    effect.terminal_config.canvas_width = width
     effect.terminal_config.canvas_height = 1
     effect.terminal_config.ignore_terminal_dimensions = True
     effect.terminal_config.frame_rate = 0
@@ -50,7 +41,7 @@ def _configure_terminal(effect, width: int) -> None:
 
 
 def _print_frames(text: str, width: int) -> Iterator[str]:
-    """Use the official Print showroom example configuration."""
+    """Run the official Print showroom configuration."""
     from terminaltexteffects import Color, Gradient, easing
     from terminaltexteffects.effects.effect_print import Print
 
@@ -71,7 +62,7 @@ def _print_frames(text: str, width: int) -> Iterator[str]:
 
 
 def _burn_frames(text: str, width: int) -> Iterator[str]:
-    """Use official TTE Burn with its native random ignition order."""
+    """Run TTE Burn with its native random Prim ignition order."""
     from terminaltexteffects import Color, Gradient
     from terminaltexteffects.effects.effect_burn import Burn
 
@@ -85,8 +76,6 @@ def _burn_frames(text: str, width: int) -> Iterator[str]:
         Color("#8a003c"),
         Color("#510100"),
     )
-    # Smoke rises outside this one-row roster span and would overwrite adjacent
-    # students. Ignition, Prim growth, burn scenes and colors remain TTE's own.
     config.smoke_chance = 0.0
     config.final_gradient_stops = (Color("#00c3ff"), Color("#ffff1c"))
     config.final_gradient_steps = 12
@@ -96,7 +85,6 @@ def _burn_frames(text: str, width: int) -> Iterator[str]:
 
 
 def _effect_frames(kind: str, text: str, width: int) -> Iterator[str]:
-    """Dispatch to the one supported implementation: TerminalTextEffects."""
     if kind == "print":
         yield from _print_frames(text, width)
     elif kind == "burn":
@@ -106,33 +94,9 @@ def _effect_frames(kind: str, text: str, width: int) -> Iterator[str]:
 
 
 def _burn_canvas(text: str, width: int) -> str:
-    """Make visually blank terminal cells real Burn graph vertices."""
+    """Represent visually blank roster cells as burnable TTE characters."""
     padded = screen._pad_cells(screen._clip_cells(text, width), width)
     return padded.replace(" ", _BURN_BLANK)
-
-
-def _surface() -> str:
-    return (screen._SURFACE_DEFAULT + screen._TEXT_PRIMARY) if os.environ.get("NO_COLOR") is None else ""
-
-
-def _draw_row(x: int, y: int, width: int, raw: str) -> None:
-    surface = _surface()
-    shown = screen._clip_cells(_one_line(raw), width)
-    if os.environ.get("NO_COLOR") is not None:
-        shown = screen._ANSI_RE.sub("", shown)
-    elif surface:
-        shown = shown.replace(screen._RESET, screen._RESET + surface)
-    remaining = max(0, width - screen._display_width(shown))
-    sys.stdout.write(
-        f"\x1b[{y};{x}H"
-        + screen._RESET
-        + surface
-        + shown
-        + " " * remaining
-        + screen._RESET
-        + surface
-    )
-    sys.stdout.flush()
 
 
 def capture_student_roster_effect(
@@ -141,8 +105,8 @@ def capture_student_roster_effect(
     record_id: int,
     kind: str,
 ) -> RosterEffectSnapshot | None:
-    """Capture the target row without mutating the live workspace state."""
-    if state.key != "students" or kind not in {"print", "burn"}:
+    """Capture the concrete roster row that belongs to one mutation."""
+    if state.key != "students":
         return None
 
     rows = state.rows(catalog)
@@ -162,14 +126,9 @@ def capture_student_roster_effect(
         preview.detail_selected = 0
 
     frame = render(preview, catalog)
-    region = next((item for item in frame.regions if item.action == f"row:{index}"), None)
-    if region is None or region.width <= 2:
-        return None
-
+    region = next(item for item in frame.regions if item.action == f"row:{index}")
     body_width = region.width - 2
     body = roster_row_body(preview, catalog, index, body_width)
-    if not body.strip():
-        return None
 
     if kind == "print":
         return RosterEffectSnapshot(
@@ -191,30 +150,28 @@ def capture_student_roster_effect(
     )
 
 
-def play_student_roster_effect(effect: RosterEffectSnapshot | None) -> bool:
-    """Play the captured mutation effect through TerminalTextEffects only."""
-    if effect is None or not sys.stdout.isatty():
-        return False
+def play_student_roster_effect(effect: RosterEffectSnapshot | None) -> None:
+    """Play one captured roster mutation through the shared animation layer."""
+    if effect is None:
+        return
 
-    try:
-        screen._paint(effect.lines)
-        if effect.kind == "print":
-            _draw_row(effect.x, effect.y, effect.width, "")
-            text = effect.text
-        else:
-            # Remove the selection marker before ignition; the deleted record is
-            # already no longer current from the workspace's point of view.
-            _draw_row(effect.x, effect.y, effect.width, effect.text)
-            text = _burn_canvas(effect.text, effect.width)
+    if effect.kind == "print":
+        frames = chain(
+            ("",),
+            (_one_line(frame) for frame in _effect_frames("print", effect.text, effect.width)),
+        )
+    else:
+        burn_text = _burn_canvas(effect.text, effect.width)
+        frames = chain(
+            (effect.text,),
+            (_one_line(frame) for frame in _effect_frames("burn", burn_text, effect.width)),
+            ("",),
+        )
 
-        for raw in _effect_frames(effect.kind, text, effect.width):
-            _draw_row(effect.x, effect.y, effect.width, raw)
-            time.sleep(_FRAME_INTERVAL)
-
-        if effect.kind == "burn":
-            _draw_row(effect.x, effect.y, effect.width, "")
-        return True
-    except Exception:
-        # A failed decorative effect never gets a second implementation path and
-        # never rolls back an already-successful data mutation.
-        return False
+    animation.play_region_frames(
+        effect.lines,
+        effect.x,
+        effect.y,
+        effect.width,
+        frames,
+    )
