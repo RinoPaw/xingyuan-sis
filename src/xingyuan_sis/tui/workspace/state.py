@@ -152,25 +152,27 @@ class Workspace:
         self.detail_selected = 0
         self.set_focus(FocusArea.ROSTER)
 
+    def resume_roster_gap(self) -> bool:
+        """Resume browsing at the record immediately below a deletion gap."""
+        if self.roster_gap is None:
+            return False
+        self.select_row(self.roster_gap)
+        self.detail_scroll = 0
+        self.detail_selected = 0
+        return True
+
     def resolve_roster_gap(
         self,
         row_count: int,
         direction: str,
         page_size: int = 1,
     ) -> bool:
-        """Resolve every navigation meaning of a deleted record's logical position."""
+        """Resolve keyboard navigation away from a deleted record's logical position."""
         gap = self.roster_gap
         if gap is None:
             return False
 
-        if direction == "resume":
-            if row_count:
-                target = min(gap, row_count - 1)
-            else:
-                self.roster_gap = None
-                self.selected = 0
-                return True
-        elif direction == "up":
+        if direction == "up":
             target = gap - 1 if gap > 0 else None
         elif direction == "down":
             target = gap if gap < row_count else None
@@ -199,20 +201,20 @@ class Workspace:
         elif area is FocusArea.INSPECTOR:
             self.content_panel = ContentPanel.INSPECTOR
 
-    def focus_roster(self, catalog: Catalog) -> None:
-        """Enter the roster, resolving a deletion gap only when leaving the toolbar."""
+    def focus_roster(self) -> None:
+        """Enter the roster; leaving the toolbar explicitly resumes any gap."""
         if self.focus is FocusArea.TOOLBAR:
-            self.resolve_roster_gap(len(self.rows(catalog)), "resume")
+            self.resume_roster_gap()
         self.set_focus(FocusArea.ROSTER)
 
-    def focus_content(self, catalog: Catalog) -> None:
+    def focus_content(self) -> None:
         """Return from toolbar focus to the content panel it belongs to."""
         if self.key == "data":
             self.set_focus(FocusArea.DASHBOARD)
         elif self.content_panel is ContentPanel.INSPECTOR:
             self.set_focus(FocusArea.INSPECTOR)
         else:
-            self.focus_roster(catalog)
+            self.focus_roster()
 
     def capture_focus_context(self) -> FocusContext:
         """Snapshot the interaction context before a temporary task may restore."""
