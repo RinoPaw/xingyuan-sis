@@ -144,10 +144,7 @@ def _page_roster(state: Workspace, catalog: Catalog, direction: str) -> None:
     if not rows:
         return
     capacity = WorkspaceLayout.measure().roster_capacity(state.key)
-    if state.roster_gap is not None:
-        gap = state.roster_gap
-        target = max(0, gap - capacity) if direction == "page_up" else min(len(rows) - 1, gap + capacity - 1)
-        state.select_row(target)
+    state.resolve_roster_gap(len(rows), direction, capacity)
     maximum = max(0, len(rows) - capacity)
     delta = capacity if direction == "page_down" else -capacity
     first = min(max(0, state.roster_scroll + delta), maximum)
@@ -173,29 +170,6 @@ def _focus_cycle(state: Workspace, catalog: Catalog) -> tuple[FocusArea, ...]:
     if state.current(catalog) is None:
         return (FocusArea.ROSTER, FocusArea.TOOLBAR)
     return (FocusArea.ROSTER, FocusArea.INSPECTOR, FocusArea.TOOLBAR)
-
-
-def _select_from_roster_gap(state: Workspace, catalog: Catalog, direction: str) -> bool:
-    """Resolve one explicit move away from a deleted record's empty slot."""
-    gap = state.roster_gap
-    if gap is None:
-        return False
-    rows = state.rows(catalog)
-    target: int | None = None
-    if direction == "up" and gap > 0:
-        target = gap - 1
-    elif direction == "down" and gap < len(rows):
-        target = gap
-    elif direction == "home" and rows:
-        target = 0
-    elif direction == "end" and rows:
-        target = len(rows) - 1
-
-    if target is not None:
-        state.select_row(target)
-        state.detail_scroll = 0
-        state.detail_selected = 0
-    return True
 
 
 def _activate_detail_action(
@@ -265,7 +239,11 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
         if key == "focus" and state.form is None and state.field_session is None:
             areas = _focus_cycle(state, catalog)
             current = state.focus if state.focus in areas else areas[0]
-            state.set_focus(areas[(areas.index(current) + 1) % len(areas)])
+            target = areas[(areas.index(current) + 1) % len(areas)]
+            if target is FocusArea.ROSTER:
+                state.focus_roster()
+            else:
+                state.set_focus(target)
             if state.focus is FocusArea.INSPECTOR:
                 reveal_detail_selection(state, catalog)
             continue
@@ -421,7 +399,9 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             else:
                 _page_roster(state, catalog, key)
         elif key in {"up", "down", "home", "end"}:
-            if state.focus is FocusArea.ROSTER and _select_from_roster_gap(state, catalog, key):
+            if state.focus is FocusArea.ROSTER and state.resolve_roster_gap(
+                len(state.rows(catalog)), key
+            ):
                 continue
             if state.focus in {FocusArea.ROSTER, FocusArea.DASHBOARD} and key == "up" and not wheel:
                 if ((state.key == "data" and state.detail_scroll == 0)
