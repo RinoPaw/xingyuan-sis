@@ -22,40 +22,72 @@ def _fit_columns(
     rows: list[dict[str, Any]],
     available: int,
 ) -> list[list[Any]]:
-    """Show only columns whose labels and values can be rendered in full.
+    """Allocate roster width from real content before truncating any value.
 
-    Column order is also priority order. Every visible column gets its exact
-    natural terminal-cell width. When the roster is too narrow, lower-priority
-    columns disappear as whole columns instead of forcing ellipses into values.
-    The historical preferred sizes are deliberately ignored here: empty padding
-    must never steal space from real content.
+    Preferred sizes are shrink targets, not reserved padding. A column whose
+    real content is shorter than its preferred size never wastes cells that a
+    longer column could use. When the natural table is genuinely too wide,
+    columns with content beyond their preferred size give up that excess first.
+    Compact columns therefore stay intact while long text such as names or class
+    labels may eventually receive an ellipsis.
     """
     available = max(1, available)
-    measured: list[list[Any]] = []
-    for key, label, _preferred_size in definitions:
-        width = max(
-            [screen._display_width(label), *(screen._display_width(safe(row.get(key))) for row in rows)]
-        )
-        measured.append([key, label, max(1, width)])
-
-    # Keep adding columns in semantic priority order while every visible value
-    # still fits in full. If even the first column is wider than the viewport,
-    # give it the viewport and let the board provide the unavoidable hard edge;
-    # normal roster columns are expected to be much narrower than this.
     columns: list[list[Any]] = []
-    used = 0
-    for key, label, natural_width in measured:
-        separator = 1 if columns else 0
-        needed = separator + natural_width
-        if used + needed > available:
-            break
-        columns.append([key, label, natural_width])
-        used += needed
+    for key, label, preferred_size in definitions:
+        label_width = screen._display_width(label)
+        natural_width = max(
+            [label_width, *(screen._display_width(safe(row.get(key))) for row in rows)]
+        )
+        shrink_target = max(label_width, min(natural_width, preferred_size))
+        columns.append([key, label, natural_width, shrink_target])
 
-    if not columns and measured:
-        key, label, natural_width = measured[0]
-        columns.append([key, label, min(natural_width, available)])
-    return columns
+    if not columns:
+        return []
+
+    separators = len(columns) - 1
+    usable = max(1, available - separators)
+    widths = [column[2] for column in columns]
+    shortage = max(0, sum(widths) - usable)
+
+    # First reclaim only genuinely flexible width: values that are wider than
+    # their preferred size. Columns already shorter than their preferred size
+    # do not reserve invisible padding and therefore never need "compression".
+    while shortage:
+        candidates = [
+            index
+            for index, column in enumerate(columns)
+            if widths[index] > column[3]
+        ]
+        if not candidates:
+            break
+        # Take one cell from the column with the most remaining excess. This
+        # avoids arbitrarily sacrificing the first column when several long
+        # text columns are present.
+        index = max(candidates, key=lambda item: widths[item] - columns[item][3])
+        widths[index] -= 1
+        shortage -= 1
+
+    # Extremely narrow terminals can still be smaller than the sum of all
+    # preferred targets. Keep every column present and spend the remaining loss
+    # on columns that can still shrink without clipping their heading. The
+    # board will provide the unavoidable hard edge only if even headings do not
+    # fit, which should occur only in compact layouts.
+    while shortage:
+        candidates = [
+            index
+            for index, column in enumerate(columns)
+            if widths[index] > screen._display_width(column[1])
+        ]
+        if not candidates:
+            break
+        index = max(candidates, key=lambda item: widths[item] - screen._display_width(columns[item][1]))
+        widths[index] -= 1
+        shortage -= 1
+
+    return [
+        [key, label, max(1, width)]
+        for (key, label, _natural, _target), width in zip(columns, widths)
+    ]
 
 
 def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) -> None:
@@ -80,11 +112,11 @@ def render_roster(board: Board, state: Workspace, catalog: Catalog, width: int) 
     board.put(1, header_row, header, screen._TEXT_SECONDARY, width=width - 1)
     for index, row in enumerate(rows[first:first + capacity], start=first):
         raw = " ".join(
-            screen._pad_cells(safe(row.get(key)), size)
+            screen._pad_cells(screen._clip_cells(safe(row.get(key)), size), size)
             for key, _, size in columns
         )
         body_width = max(1, width - 3)
-        body = screen._pad_cells(raw, body_width)
+        body = screen._pad_cells(screen._clip_cells(raw, body_width), body_width)
         is_current = index == state.selected
         text = theme.contextual_item(
             body,
