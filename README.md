@@ -1,6 +1,6 @@
 # 星原 SIS
 
-一个使用 Python 标准库和 SQLite 实现的本地学生信息系统课程项目。
+一个使用 Python 和 SQLite 实现的本地学生信息系统课程项目。
 
 它提供四种入口：Tkinter 图形界面、适合日常操作的终端 TUI、低能力终端下的基础数字菜单，以及适合脚本和精确查询的 CLI。四种入口共享同一套 Service / Repository，不维护四份业务逻辑。
 
@@ -25,9 +25,10 @@
 - Python 3.14+
 - SQLite / `sqlite3`
 - Tkinter / `ttk` 图形界面
-- Python 标准库终端交互
+- 自绘 ANSI 终端交互
+- TerminalTextEffects（TUI 名册局部增删动效）
 
-没有第三方运行时依赖。
+除 TerminalTextEffects 外，业务、持久化、CLI、基础终端界面和 Tkinter GUI 均使用 Python 标准库。
 
 ## 快速开始
 
