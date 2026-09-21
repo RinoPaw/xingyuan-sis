@@ -70,8 +70,9 @@ def run(
 
                 created_id = apply_form(state, catalog)
                 if state.key == "students" and mode == "delete" and deleting_position is not None:
-                    # Keep the exact deleted slot empty. No neighboring student
-                    # becomes current until the user explicitly presses up/down.
+                    # Preserve only the deleted record's logical position. The
+                    # rendered roster closes up immediately and no neighbor is
+                    # current until the user explicitly presses up/down.
                     rows = state.rows(catalog)
                     state.leave_roster_gap(min(deleting_position, len(rows)))
                 elif state.key == "students" and mode == "create" and created_id is not None:
