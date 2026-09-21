@@ -5,7 +5,6 @@ from collections.abc import Iterator
 from copy import copy
 from dataclasses import dataclass
 import os
-import random
 import sys
 import time
 
@@ -16,9 +15,6 @@ from .state import FocusArea, Workspace
 
 _FRAME_INTERVAL = 1 / 60
 _BURN_BLANK = "\u00a0"
-_PRINT_STOPS = ((0x02, 0xB8, 0xBD), (0xC1, 0xF0, 0xE3), (0x00, 0xFF, 0xA0))
-_BURN_COLORS = ((0xFF, 0xFF, 0xFF), (0xFF, 0xF7, 0x5D), (0xFE, 0x65, 0x0D), (0x8A, 0x00, 0x3C), (0x51, 0x01, 0x00))
-_BURN_SYMBOLS = ("'", ".", "▖", "▙", "█", "▜", "▀", "▝", ".")
 
 
 @dataclass(frozen=True)
@@ -53,7 +49,7 @@ def _configure_terminal(effect, width: int) -> None:
     effect.terminal_config.no_color = os.environ.get("NO_COLOR") is not None
 
 
-def _tte_print_frames(text: str, width: int) -> Iterator[str]:
+def _print_frames(text: str, width: int) -> Iterator[str]:
     """Use the official Print showroom example configuration."""
     from terminaltexteffects import Color, Gradient, easing
     from terminaltexteffects.effects.effect_print import Print
@@ -74,8 +70,8 @@ def _tte_print_frames(text: str, width: int) -> Iterator[str]:
     yield from effect
 
 
-def _tte_burn_frames(text: str, width: int) -> Iterator[str]:
-    """Use the official Burn palette with TTE's native random origin."""
+def _burn_frames(text: str, width: int) -> Iterator[str]:
+    """Use official TTE Burn with its native random ignition order."""
     from terminaltexteffects import Color, Gradient
     from terminaltexteffects.effects.effect_burn import Burn
 
@@ -89,8 +85,8 @@ def _tte_burn_frames(text: str, width: int) -> Iterator[str]:
         Color("#8a003c"),
         Color("#510100"),
     )
-    # Smoke rises out of a one-row roster entry and would paint neighboring
-    # students. Everything else remains the stock Burn effect.
+    # Smoke rises outside this one-row roster span and would overwrite adjacent
+    # students. Ignition, Prim growth, burn scenes and colors remain TTE's own.
     config.smoke_chance = 0.0
     config.final_gradient_stops = (Color("#00c3ff"), Color("#ffff1c"))
     config.final_gradient_steps = 12
@@ -99,156 +95,14 @@ def _tte_burn_frames(text: str, width: int) -> Iterator[str]:
     yield from effect
 
 
-def _rgb_style(rgb: tuple[int, int, int]) -> str:
-    return f"\x1b[38;2;{rgb[0]};{rgb[1]};{rgb[2]}m"
-
-
-def _mix(left: tuple[int, int, int], right: tuple[int, int, int], amount: float) -> tuple[int, int, int]:
-    amount = min(1.0, max(0.0, amount))
-    return tuple(round(a + (b - a) * amount) for a, b in zip(left, right))  # type: ignore[return-value]
-
-
-def _gradient(stops: tuple[tuple[int, int, int], ...], amount: float) -> tuple[int, int, int]:
-    if len(stops) == 1:
-        return stops[0]
-    scaled = min(1.0, max(0.0, amount)) * (len(stops) - 1)
-    index = min(len(stops) - 2, int(scaled))
-    return _mix(stops[index], stops[index + 1], scaled - index)
-
-
-def _units(text: str) -> list[tuple[str, int]]:
-    """Keep every source symbol at its terminal-cell width for fallback frames."""
-    units: list[tuple[str, int]] = []
-    for char in text:
-        width = screen._cell_width(char)
-        if width == 0 and units:
-            symbol, previous_width = units[-1]
-            units[-1] = (symbol + char, previous_width)
-        elif width > 0:
-            units.append((char, width))
-    return units
-
-
-def _print_fallback_frames(text: str, width: int) -> Iterator[str]:
-    """TTE-shaped colored Print fallback for an environment missing the package."""
-    units = _units(text)
-    if not units:
-        return
-    total = max(1, sum(size for _, size in units) - 1)
-    final_colors: list[tuple[int, int, int]] = []
-    cell = 0
-    for _, size in units:
-        final_colors.append(_gradient(_PRINT_STOPS, cell / total))
-        cell += size
-
-    speed = 2
-    head_symbols = ("█", "▓", "▒", "░")
-    typed = 0
-    while typed < len(units):
-        next_typed = min(len(units), typed + speed)
-        for head_symbol in head_symbols:
-            parts: list[str] = []
-            for index, (symbol, size) in enumerate(units):
-                if index < typed:
-                    parts.append(_rgb_style(final_colors[index]) + symbol)
-                elif index < next_typed:
-                    parts.append(_rgb_style(final_colors[index]) + head_symbol * size)
-                else:
-                    parts.append(" " * size)
-            yield "".join(parts) + screen._RESET
-        typed = next_typed
-
-    yield "".join(
-        _rgb_style(final_colors[index]) + symbol
-        for index, (symbol, _) in enumerate(units)
-    ) + screen._RESET
-
-
-def _random_burn_order(count: int) -> list[int]:
-    """One-row equivalent of TTE's random Prim growth from a random origin."""
-    if count <= 0:
-        return []
-    start = random.randrange(count)
-    order = [start]
-    left, right = start - 1, start + 1
-    while left >= 0 or right < count:
-        candidates = []
-        if left >= 0:
-            candidates.append("left")
-        if right < count:
-            candidates.append("right")
-        side = random.choice(candidates)
-        if side == "left":
-            order.append(left)
-            left -= 1
-        else:
-            order.append(right)
-            right += 1
-    return order
-
-
-def _burn_fallback_frames(text: str, width: int) -> Iterator[str]:
-    """Burn every cell, including blanks, with the official glyph/palette vocabulary."""
-    units = _units(text)
-    if not units:
-        return
-    order = _random_burn_order(len(units))
-    active: dict[int, int] = {}
-    cursor = 0
-    starting = (0x83, 0x73, 0x73)
-    hold = 2
-    max_stage = len(_BURN_SYMBOLS) * hold
-
-    while cursor < len(order) or active:
-        for _ in range(random.randint(2, 4)):
-            if cursor >= len(order):
-                break
-            active[order[cursor]] = 0
-            cursor += 1
-
-        parts: list[str] = []
-        finished: list[int] = []
-        for index, (symbol, size) in enumerate(units):
-            stage = active.get(index)
-            if stage is None:
-                # Blank cells stay visually blank until their own flame arrives.
-                shown = " " * size if symbol.isspace() else symbol
-                parts.append(_rgb_style(starting) + shown)
-                continue
-            symbol_index = min(len(_BURN_SYMBOLS) - 1, stage // hold)
-            color = _gradient(_BURN_COLORS, symbol_index / max(1, len(_BURN_SYMBOLS) - 1))
-            parts.append(_rgb_style(color) + _BURN_SYMBOLS[symbol_index] * size)
-            stage += 1
-            if stage >= max_stage:
-                finished.append(index)
-            else:
-                active[index] = stage
-
-        for index in finished:
-            del active[index]
-            units[index] = (" " * units[index][1], units[index][1])
-        yield "".join(parts) + screen._RESET
-
-
 def _effect_frames(kind: str, text: str, width: int) -> Iterator[str]:
-    """Prefer TTE itself; fall back to a close row-local rendition if unavailable/broken."""
-    try:
-        if kind == "print":
-            yield from _tte_print_frames(text, width)
-        elif kind == "burn":
-            yield from _tte_burn_frames(text, width)
-        else:
-            raise ValueError(f"未知名册特效：{kind}")
-        return
-    except Exception:
-        # The UI must still express the mutation when a previously-created venv
-        # has not yet installed the newly-added dependency or TTE changes API.
-        if kind == "print":
-            yield from _print_fallback_frames(text, width)
-        elif kind == "burn":
-            yield from _burn_fallback_frames(text, width)
-        else:
-            raise
+    """Dispatch to the one supported implementation: TerminalTextEffects."""
+    if kind == "print":
+        yield from _print_frames(text, width)
+    elif kind == "burn":
+        yield from _burn_frames(text, width)
+    else:
+        raise ValueError(f"未知名册特效：{kind}")
 
 
 def _burn_canvas(text: str, width: int) -> str:
@@ -338,7 +192,7 @@ def capture_student_roster_effect(
 
 
 def play_student_roster_effect(effect: RosterEffectSnapshot | None) -> bool:
-    """Play a captured effect after its corresponding mutation has succeeded."""
+    """Play the captured mutation effect through TerminalTextEffects only."""
     if effect is None or not sys.stdout.isatty():
         return False
 
@@ -361,5 +215,6 @@ def play_student_roster_effect(effect: RosterEffectSnapshot | None) -> bool:
             _draw_row(effect.x, effect.y, effect.width, "")
         return True
     except Exception:
-        # Effects never get to veto an already-successful data mutation.
+        # A failed decorative effect never gets a second implementation path and
+        # never rolls back an already-successful data mutation.
         return False
