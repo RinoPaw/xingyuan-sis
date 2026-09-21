@@ -80,6 +80,11 @@ class WorkspaceLayout:
     def action_row(self) -> int:
         return 2 if self.compact else 3
 
+    @property
+    def panel_action_row(self) -> int:
+        """Stable row used by archive-local Save/Delete/Confirm actions."""
+        return max(0, self.height - 2)
+
     def separator_row(self, key: str) -> int:
         """Row separating workspace controls from record content."""
         if self.compact:
@@ -94,9 +99,12 @@ class WorkspaceLayout:
         """First row available to panel content below its heading."""
         return self.panel_heading_row(key) + 1
 
-    def panel_capacity(self, key: str) -> int:
-        """Fill inspector content through the row immediately above the footer."""
-        return max(1, self.height - self.panel_content_row(key) - 1)
+    def panel_capacity(self, key: str, *, reserved_bottom_rows: int = 0) -> int:
+        """Return panel content rows after reserving fixed actions above the footer."""
+        return max(
+            1,
+            self.height - self.panel_content_row(key) - 1 - max(0, reserved_bottom_rows),
+        )
 
     def roster_capacity(self, key: str) -> int:
         """Fill every record row above the footer after the roster column header."""
