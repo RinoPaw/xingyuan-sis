@@ -67,7 +67,11 @@ def run(
                     play_student_roster_effect(state, catalog, deleting_id, "burn")
 
                 created_id = apply_form(state, catalog)
-                if state.key == "students" and mode == "create" and created_id is not None:
+                if state.key == "students" and mode == "delete":
+                    # The form transaction may restore the pre-dialog context;
+                    # confirmed deletion deliberately ends on the left roster.
+                    state.set_focus(FocusArea.ROSTER)
+                elif state.key == "students" and mode == "create" and created_id is not None:
                     # Creation has committed, so Print runs at the record's real
                     # sorted/filtered position in the left roster.
                     play_student_roster_effect(state, catalog, created_id, "print")
