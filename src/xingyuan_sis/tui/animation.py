@@ -1,9 +1,11 @@
-"""Home-screen orbital illustration and quiet background stars."""
+"""Terminal animation primitives and decorative effects."""
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 import math
 import os
 import re
+import time
 
 from .screen import (
     _ANSI_RE,
@@ -12,11 +14,14 @@ from .screen import (
     _ansi,
     _cell_width,
     _hit_action,
+    _paint,
+    _paint_region,
     MouseClick,
     ScreenFrame,
 )
 
 
+_TRANSIENT_FRAME_INTERVAL = 1 / 60
 _SPARKLE_DOTS = ("⠁", "⠂", "⠄", "⠈", "⠐", "⠠", "⡀", "⢀")
 _SPARKLE_FRAME = 0.150
 _SPARKLE_BG = 38
@@ -25,6 +30,20 @@ _SPARKLE_DENSITY_DENOMINATOR = 10
 _RING_INNER_SCALE = 1.8
 _RING_OUTER_SCALE = 2.12
 _RING_MINOR_SCALE = 0.48
+
+
+def play_region_frames(
+    base_lines: Sequence[str],
+    x: int,
+    y: int,
+    width: int,
+    frames: Iterable[str],
+) -> None:
+    """Play transient frames inside one fixed terminal region."""
+    _paint(base_lines)
+    for frame in frames:
+        _paint_region(x, y, width, frame)
+        time.sleep(_TRANSIENT_FRAME_INTERVAL)
 
 
 def _ring_band_contains(u: float, v: float, radius: float) -> bool:
