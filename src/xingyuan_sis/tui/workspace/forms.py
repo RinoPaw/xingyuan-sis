@@ -81,34 +81,18 @@ def _use_student_number_as_password(catalog: Catalog, student_no: object) -> Non
     catalog.initial_password = None
 
 
-def _play_student_mutation(
-    state: Workspace,
-    catalog: Catalog,
-    record_id: int,
-    kind: str,
-) -> str:
-    """Run the visual consequence of a student mutation and return any failure notice."""
-    from .roster_effects import play_student_roster_effect
-
-    previous_notice = state.notice
-    if play_student_roster_effect(state, catalog, record_id, kind):
-        state.notice = previous_notice
-        return ""
-    failure = state.notice
-    state.notice = previous_notice
-    return failure
-
-
 def apply_form(state: Workspace, catalog: Catalog) -> int | None:
-    """Apply one transaction; mutation effects belong to the mutation itself."""
+    """Apply one transaction; visual effects are consequences of committed mutations."""
     catalog.require_write()
     form = state.form
     if form is None:
         return None
 
+    from .roster_effects import capture_student_roster_effect, play_student_roster_effect
+
     record_id: int | None = None
     deleting_position: int | None = None
-    effect_failure = ""
+    delete_effect = None
 
     if form.mode == "create":
         values = {field.key: form.values.get(field.key) for field in form.fields}
@@ -134,7 +118,10 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
     elif form.mode == "delete":
         if state.key == "students":
             deleting_position = state.selected
-            effect_failure = _play_student_mutation(
+            # Capture presentation while the record still exists, but do not
+            # play anything until persistence succeeds. A failed delete must
+            # never visually burn a record that remains in the database.
+            delete_effect = capture_student_roster_effect(
                 state,
                 catalog,
                 int(form.original["id"]),
@@ -190,11 +177,14 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
         state.set_focus(FocusArea.DASHBOARD if state.key == "data" else FocusArea.ROSTER)
         state.detail_scroll, state.detail_selected = 0, 0
 
-    if state.key == "students" and form.mode == "create" and record_id is not None and created_visible:
-        effect_failure = _play_student_mutation(state, catalog, record_id, "print")
-
-    if effect_failure:
-        state.notice = f"{state.notice} {effect_failure}"
+    # Effects are dispatched from the successful mutation result, not from a
+    # button or shortcut path. Any UI route that reaches this transaction gets
+    # exactly the same visual consequence.
+    if form.mode == "delete" and delete_effect is not None:
+        play_student_roster_effect(delete_effect)
+    elif state.key == "students" and form.mode == "create" and record_id is not None and created_visible:
+        create_effect = capture_student_roster_effect(state, catalog, record_id, "print")
+        play_student_roster_effect(create_effect)
 
     return record_id
 
