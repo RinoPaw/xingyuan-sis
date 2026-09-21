@@ -10,6 +10,7 @@ from .data import Catalog
 from .events import interact
 from .field_session import cancel as cancel_field_session, edit_current
 from .forms import apply_form, read_search
+from .roster_effects import play_student_roster_effect
 from .state import ContentPanel, FieldSession, FieldSessionOwner, FocusArea, Form, Workspace
 
 
@@ -50,7 +51,26 @@ def run(
                 except KeyboardInterrupt:
                     state.notice = "已取消输入。"
             elif event[0] == "save":
-                apply_form(state, catalog)
+                form = state.form
+                mode = form.mode if form is not None else ""
+                deleting_id = (
+                    int(form.original["id"])
+                    if state.key == "students"
+                    and form is not None
+                    and form.mode == "delete"
+                    and form.original is not None
+                    else None
+                )
+                if deleting_id is not None:
+                    # The record remains real while Burn consumes its row. Only
+                    # after the visual exit completes is the deletion applied.
+                    play_student_roster_effect(state, catalog, deleting_id, "burn")
+
+                created_id = apply_form(state, catalog)
+                if state.key == "students" and mode == "create" and created_id is not None:
+                    # Creation has committed, so Print runs at the record's real
+                    # sorted/filtered position in the left roster.
+                    play_student_roster_effect(state, catalog, created_id, "print")
             elif event[0] == "refresh":
                 row = state.current(catalog)
                 catalog.refresh()
