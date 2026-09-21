@@ -51,6 +51,25 @@ def _frames(kind: str, text: str) -> list[str]:
     return _sample(list(effect), _MAX_FRAMES[kind])
 
 
+def _draw_body(x: int, y: int, width: int, raw: str) -> None:
+    color_enabled = os.environ.get("NO_COLOR") is None
+    surface = (screen._SURFACE_DEFAULT + screen._TEXT_PRIMARY) if color_enabled else ""
+    shown = screen._clip_cells(_one_line(raw), width)
+    if not color_enabled:
+        shown = screen._ANSI_RE.sub("", shown)
+    remaining = max(0, width - screen._display_width(shown))
+    sys.stdout.write(
+        f"\x1b[{y};{x}H"
+        + screen._RESET
+        + surface
+        + shown
+        + screen._RESET
+        + surface
+        + " " * remaining
+    )
+    sys.stdout.flush()
+
+
 def play_student_roster_effect(
     state: Workspace,
     catalog: Catalog,
@@ -84,7 +103,6 @@ def play_student_roster_effect(
     from .view import render
 
     frame = render(state, catalog)
-    screen._paint(frame.lines)
     region = next((item for item in frame.regions if item.action == f"row:{index}"), None)
     if region is None or region.width <= 2:
         return False
@@ -97,30 +115,22 @@ def play_student_roster_effect(
     try:
         frames = _frames(kind, text)
     except (ImportError, AttributeError, TypeError, ValueError):
-        # Effects are decorative; a missing/incompatible optional runtime must
-        # never prevent a confirmed data mutation from completing.
+        # Effects are decorative; a missing/incompatible runtime must never
+        # prevent a confirmed data mutation from completing.
         return False
 
     x = region.x + 2  # keep the focused ``> `` marker stationary
     y = region.y
-    color_enabled = os.environ.get("NO_COLOR") is None
-    surface = (screen._SURFACE_DEFAULT + screen._TEXT_PRIMARY) if color_enabled else ""
-
-    for raw in frames:
-        shown = screen._clip_cells(_one_line(raw), body_width)
-        if not color_enabled:
-            shown = screen._ANSI_RE.sub("", shown)
-        remaining = max(0, body_width - screen._display_width(shown))
-        sys.stdout.write(
-            f"\x1b[{y};{x}H"
-            + screen._RESET
-            + surface
-            + shown
-            + screen._RESET
-            + surface
-            + " " * remaining
-        )
-        sys.stdout.flush()
-        time.sleep(_FRAME_INTERVAL)
+    try:
+        # Paint the focus transition only after frame generation, so a newly
+        # created row cannot sit fully visible while Print prepares its frames.
+        screen._paint(frame.lines)
+        if kind == "print":
+            _draw_body(x, y, body_width, "")
+        for raw in frames:
+            _draw_body(x, y, body_width, raw)
+            time.sleep(_FRAME_INTERVAL)
+    except OSError:
+        return False
 
     return True
