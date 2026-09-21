@@ -13,6 +13,7 @@ from .screen import (
     _DECORATIVE_GOLD,
     _ansi,
     _cell_width,
+    _display_width,
     _hit_action,
     _paint,
     _paint_region,
@@ -39,23 +40,27 @@ def play_region_frames(
     width: int,
     frames: Iterable[str],
 ) -> None:
-    """Play full transient canvases with their bottom row anchored at ``y``."""
+    """Play transient canvases without repainting the application between frames."""
     _paint(base_lines)
-    first = True
-    for frame in frames:
-        if not first:
-            # Restore the application surface before the next full effect frame.
-            # This prevents rows used by a taller previous canvas from leaking
-            # into a later, shorter frame without modifying the effect itself.
-            _paint(base_lines)
-        first = False
+    previous_top = y + 1
 
+    for frame in frames:
         rows = frame.split("\n")
         top = y - len(rows) + 1
+
+        # If the new canvas is shorter, restore only rows uncovered by it. The
+        # rest of the application never needs to be repainted during an effect.
+        for target_y in range(previous_top, min(top, y)):
+            if 1 <= target_y <= len(base_lines):
+                base = base_lines[target_y - 1]
+                _paint_region(1, target_y, max(1, _display_width(base)), base)
+
         for offset, row in enumerate(rows):
             target_y = top + offset
             if 1 <= target_y <= len(base_lines):
                 _paint_region(x, target_y, width, row)
+
+        previous_top = top
         time.sleep(_TRANSIENT_FRAME_INTERVAL)
 
 
