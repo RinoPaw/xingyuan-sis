@@ -37,6 +37,32 @@ def display_value(
     return safe(value)
 
 
+def display_semantic_fields(
+    catalog: Catalog,
+    collection: str,
+    values: Mapping[str, Any],
+    field_keys: tuple[str, ...],
+) -> tuple[tuple[str, str], ...]:
+    """Project one user-facing semantic row from one or more implementation fields.
+
+    Missing subfields are presentation detail, not separate archive values. A row
+    with no value at all is shown once as an em dash; partially populated rows
+    show only the parts that actually exist. Picker labels such as ``未指定`` stay
+    inside pickers and never leak into the archive view.
+    """
+    if not field_keys:
+        return ()
+
+    visible = tuple(
+        (key, display_value(catalog, collection, values, key))
+        for key in field_keys
+        if values.get(key) not in {None, ""}
+    )
+    if visible:
+        return visible
+    return ((field_keys[0], "—"),)
+
+
 def delete_impacts(
     catalog: Catalog,
     collection: str,
