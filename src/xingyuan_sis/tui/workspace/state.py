@@ -152,37 +152,67 @@ class Workspace:
         self.detail_selected = 0
         self.set_focus(FocusArea.ROSTER)
 
+    def resolve_roster_gap(
+        self,
+        row_count: int,
+        direction: str,
+        page_size: int = 1,
+    ) -> bool:
+        """Resolve every navigation meaning of a deleted record's logical position."""
+        gap = self.roster_gap
+        if gap is None:
+            return False
+
+        if direction == "resume":
+            if row_count:
+                target = min(gap, row_count - 1)
+            else:
+                self.roster_gap = None
+                self.selected = 0
+                return True
+        elif direction == "up":
+            target = gap - 1 if gap > 0 else None
+        elif direction == "down":
+            target = gap if gap < row_count else None
+        elif direction == "home":
+            target = 0 if row_count else None
+        elif direction == "end":
+            target = row_count - 1 if row_count else None
+        elif direction == "page_up":
+            target = max(0, gap - page_size) if row_count else None
+        elif direction == "page_down":
+            target = min(row_count - 1, gap + page_size - 1) if row_count else None
+        else:
+            raise ValueError(f"未知花名册导航：{direction}")
+
+        if target is not None:
+            self.select_row(target)
+            self.detail_scroll = 0
+            self.detail_selected = 0
+        return True
+
     def set_focus(self, area: FocusArea) -> None:
-        """Move keyboard focus while keeping the content-panel invariant.
-
-        A deletion gap survives the automatic transition into the roster. Once
-        the user later returns from the toolbar to the roster, that deliberate
-        navigation resumes browsing at the record immediately below the gap.
-        """
-        if (
-            self.focus is FocusArea.TOOLBAR
-            and area is FocusArea.ROSTER
-            and self.roster_gap is not None
-        ):
-            self.selected = self.roster_gap
-            self.roster_gap = None
-
+        """Move keyboard focus while keeping the content-panel invariant."""
         self.focus = area
         if area is FocusArea.ROSTER:
             self.content_panel = ContentPanel.ROSTER
         elif area is FocusArea.INSPECTOR:
             self.content_panel = ContentPanel.INSPECTOR
 
-    def focus_content(self) -> None:
+    def focus_roster(self, catalog: Catalog) -> None:
+        """Enter the roster, resolving a deletion gap only when leaving the toolbar."""
+        if self.focus is FocusArea.TOOLBAR:
+            self.resolve_roster_gap(len(self.rows(catalog)), "resume")
+        self.set_focus(FocusArea.ROSTER)
+
+    def focus_content(self, catalog: Catalog) -> None:
         """Return from toolbar focus to the content panel it belongs to."""
         if self.key == "data":
             self.set_focus(FocusArea.DASHBOARD)
+        elif self.content_panel is ContentPanel.INSPECTOR:
+            self.set_focus(FocusArea.INSPECTOR)
         else:
-            self.set_focus(
-                FocusArea.INSPECTOR
-                if self.content_panel is ContentPanel.INSPECTOR
-                else FocusArea.ROSTER
-            )
+            self.focus_roster(catalog)
 
     def capture_focus_context(self) -> FocusContext:
         """Snapshot the interaction context before a temporary task may restore."""
