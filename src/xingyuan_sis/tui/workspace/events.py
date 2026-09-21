@@ -13,6 +13,7 @@ from .field_session import (
     start_form as start_form_field_session,
 )
 from .forms import cancel_form, move_form_position, open_form
+from .inspector import action_line_map
 from .state import FocusArea, Workspace
 
 
@@ -21,19 +22,6 @@ def _detail_geometry(state: Workspace, catalog: Catalog) -> tuple[int, int]:
 
     layout = workspace_layout(state, catalog)
     return layout.panel_width, layout.panel_capacity(state.key)
-
-
-def _action_line_map(lines: list) -> dict[str, list[int]]:
-    """Map each semantic inspector target to every rendered line it occupies."""
-    result: dict[str, list[int]] = {}
-    for index, line in enumerate(lines):
-        actions = dict.fromkeys(
-            action for _, _, action in line
-            if action and not action.startswith("option:")
-        )
-        for action in actions:
-            result.setdefault(action, []).append(index)
-    return result
 
 
 def detail_targets(state: Workspace, catalog: Catalog) -> list[tuple[int, str]]:
@@ -64,7 +52,7 @@ def reveal_detail_selection(
     lines = detail_lines(state.key, row, catalog, layout.panel_width)
     capacity = layout.panel_capacity(state.key)
     action = targets[state.detail_selected][1]
-    occupied = _action_line_map(lines).get(action, [targets[state.detail_selected][0]])
+    occupied = action_line_map(lines).get(action, [targets[state.detail_selected][0]])
     first_visible = state.detail_scroll
     last_visible = state.detail_scroll + capacity - 1
 
@@ -100,7 +88,7 @@ def select_visible_detail_target(state: Workspace, catalog: Catalog) -> None:
     if not targets:
         state.detail_selected = -1
         return
-    action_lines = _action_line_map(lines)
+    action_lines = action_line_map(lines)
     first, last = state.detail_scroll, state.detail_scroll + capacity - 1
     visible = [
         index
