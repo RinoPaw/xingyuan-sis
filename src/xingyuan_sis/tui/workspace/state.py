@@ -107,9 +107,8 @@ class Workspace:
     query: str = ""
     selected: int = 0
     roster_scroll: int = 0
-    # A deletion leaves one real empty slot in the roster until the user moves
-    # away from it. The integer is the insertion index between remaining rows:
-    # up selects index-1, down selects index.
+    # A deletion keeps only a logical insertion point between remaining rows:
+    # up selects index-1, down selects index. It never occupies a rendered row.
     roster_gap: int | None = None
     focus: FocusArea = FocusArea.ROSTER
     content_panel: ContentPanel = ContentPanel.ROSTER
@@ -130,11 +129,9 @@ class Workspace:
         rows = catalog.rows(self.key, self.view, self.query) if self.key != "data" else []
         if self.roster_gap is None:
             self.selected = min(max(0, self.selected), max(0, len(rows) - 1))
-            display_count = len(rows)
         else:
             self.roster_gap = min(max(0, self.roster_gap), len(rows))
-            display_count = len(rows) + 1
-        self.roster_scroll = min(max(0, self.roster_scroll), max(0, display_count - 1))
+        self.roster_scroll = min(max(0, self.roster_scroll), max(0, len(rows) - 1))
         return rows
 
     def current(self, catalog: Catalog) -> dict[str, Any] | None:
@@ -149,7 +146,7 @@ class Workspace:
         self.roster_gap = None
 
     def leave_roster_gap(self, index: int) -> None:
-        """Keep the deleted record's visual position without selecting a neighbor."""
+        """Remember the deleted record's position without selecting a neighbor."""
         self.roster_gap = max(0, index)
         self.detail_scroll = 0
         self.detail_selected = 0
