@@ -26,9 +26,9 @@
 - SQLite / `sqlite3`
 - Tkinter / `ttk` 图形界面
 - 自绘 ANSI 终端交互
-- TerminalTextEffects（TUI 名册局部增删动效）
+- 本地 ANSI 名册增删动效（Print / Burn）
 
-除 TerminalTextEffects 外，业务、持久化、CLI、基础终端界面和 Tkinter GUI 均使用 Python 标准库。
+运行时除 Python 标准库外不依赖第三方包；名册 Print / Burn 的状态机由 TerminalTextEffects 0.15.0 的效果实现移植并针对单行名册重写，许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 快速开始
 
@@ -247,6 +247,7 @@ python -m unittest discover -s tests -v
 - [演示数据来源](docs/demo-data-sources.md)
 - [设计原则](docs/design-principles.md)
 - [参与开发](CONTRIBUTING.md)
+- [第三方许可说明](THIRD_PARTY_NOTICES.md)
 
 ## 项目结构
 
@@ -267,5 +268,6 @@ xingyuan-sis/
 ├── tests/
 ├── docs/
 ├── CONTRIBUTING.md
+├── THIRD_PARTY_NOTICES.md
 └── pyproject.toml
 ```

@@ -1,21 +1,27 @@
-"""Student roster animations driven by committed create/delete mutations."""
+"""Student roster animations driven by committed create/delete mutations.
+
+The local print/burn progression is adapted from TerminalTextEffects 0.15's
+Print and Burn effects for a single fixed roster row. See THIRD_PARTY_NOTICES.md.
+"""
 from __future__ import annotations
 
 from copy import copy
 from dataclasses import dataclass
 from itertools import chain
-import os
-
-from terminaltexteffects.effects.effect_burn import Burn
-from terminaltexteffects.effects.effect_print import Print
-from terminaltexteffects.utils import colorterm
 
 from .. import animation, screen
 from .data import Catalog
 from .roster import roster_row_body
 from .state import FocusArea, Workspace
 
-_EFFECTS = {"print": Print, "burn": Burn}
+_PRINT_STEP = 3
+_BURN_SPREAD_CELLS = 3
+_BURN_STAGES = (
+    ("original", screen._DECORATIVE_GOLD),
+    ("*", screen._TEXT_DANGER),
+    ("·", screen._DECORATIVE_GOLD),
+    ("'", screen._TEXT_SECONDARY),
+)
 
 
 @dataclass(frozen=True)
@@ -30,74 +36,149 @@ class RosterEffectSnapshot:
     text: str
 
 
-def _one_line(frame: str) -> str:
-    return frame.partition("\n")[0]
+@dataclass(frozen=True)
+class _Glyph:
+    symbol: str
+    column: int
+    width: int
 
 
-def _effect(kind: str, text: str, width: int):
-    """Create the official TTE effect constrained to one roster row."""
-    source = screen._TEXT_PRIMARY + text + screen._RESET if kind == "burn" else text
-    effect = _EFFECTS[kind](source)
-    terminal = effect.terminal_config
-    terminal.canvas_width = width
-    terminal.canvas_height = 1
-    terminal.ignore_terminal_dimensions = True
-    terminal.frame_rate = 0
-    terminal.no_color = os.environ.get("NO_COLOR") is not None
-
-    if kind == "burn":
-        # Input color makes real spaces part of TTE's graph. Their visual
-        # adaptation happens after TTE advances the official Burn scene.
-        terminal.existing_color_handling = "dynamic"
-        effect.effect_config.smoke_chance = 0.0
-
-    return effect
+def _glyphs(text: str, width: int) -> tuple[_Glyph, ...]:
+    """Split text into fixed terminal cells without breaking wide glyphs."""
+    glyphs: list[_Glyph] = []
+    column = 0
+    for symbol in text:
+        symbol_width = max(1, screen._display_width(symbol))
+        if column + symbol_width > width:
+            break
+        glyphs.append(_Glyph(symbol, column, symbol_width))
+        column += symbol_width
+    return tuple(glyphs)
 
 
-def _burn_frame(iterator, width: int) -> str:
-    """Project TTE's Burn state onto a roster-row surface.
+def _styled(symbol: str, style: str | None) -> str:
+    return screen._ansi(symbol, style) if style else symbol
 
-    Text cells use the official Burn glyph verbatim. Originally blank cells
-    remain blank and expose TTE's fire color as background only while their
-    official ``burn`` scene is active.
-    """
+
+def _render_glyphs(
+    glyphs: tuple[_Glyph, ...],
+    width: int,
+    appearance,
+) -> str:
+    """Render transformed glyphs while preserving their original cell geometry."""
     chunks: list[str] = []
-    cursor = 1
-    for character in sorted(iterator.terminal.get_characters(), key=lambda item: item.input_coord.column):
-        column = character.input_coord.column
-        if column > cursor:
-            chunks.append(" " * (column - cursor))
+    cursor = 0
+    for index, glyph in enumerate(glyphs):
+        if glyph.column > cursor:
+            chunks.append(" " * (glyph.column - cursor))
 
-        visual = character.animation.current_character_visual
-        input_width = max(1, screen._display_width(character.input_symbol))
-        if character.input_symbol == " ":
-            scene = character.animation.active_scene
-            color = visual._fg_color_code if scene is not None and scene.scene_id == "burn" else None
-            shown = f"{colorterm.bg(color)} {screen._RESET}" if color is not None else " "
-            shown_width = 1
-        else:
-            shown = visual.formatted_symbol
-            shown_width = screen._display_width(visual.symbol)
+        symbol, style = appearance(index, glyph)
+        symbol = screen._clip_cells(symbol, glyph.width)
+        shown_width = screen._display_width(symbol)
+        chunks.append(_styled(symbol, style))
+        if shown_width < glyph.width:
+            chunks.append(" " * (glyph.width - shown_width))
+        cursor = glyph.column + glyph.width
 
-        chunks.append(shown)
-        if shown_width < input_width:
-            chunks.append(" " * (input_width - shown_width))
-        cursor = column + input_width
-
-    if cursor <= width:
-        chunks.append(" " * (width - cursor + 1))
+    if cursor < width:
+        chunks.append(" " * (width - cursor))
     return "".join(chunks)
 
 
-def _frames(kind: str, text: str, width: int):
-    effect = _effect(kind, text, width)
-    if kind == "print":
-        yield from (_one_line(frame) for frame in effect)
+def _print_frames(text: str, width: int):
+    """Reveal one roster row with a light print-head sweep.
+
+    The original TTE Print effect types characters in order behind a print head.
+    A roster row does not need carriage-return or block-head machinery, so this
+    adaptation keeps the ordered reveal and replaces the heavy block animation
+    with one thin cursor.
+    """
+    glyphs = _glyphs(text, width)
+    if not glyphs:
+        yield " " * width
         return
 
-    iterator = iter(effect)
-    for _ in iterator:
-        yield _burn_frame(iterator, width)
+    for end in range(_PRINT_STEP, len(glyphs) + _PRINT_STEP, _PRINT_STEP):
+        end = min(end, len(glyphs))
+
+        def appearance(index: int, glyph: _Glyph) -> tuple[str, str | None]:
+            if index < end:
+                return glyph.symbol, screen._TEXT_PRIMARY
+            return " " * glyph.width, None
+
+        frame = _render_glyphs(glyphs, width, appearance)
+        if end < len(glyphs):
+            cursor_column = glyphs[end - 1].column + glyphs[end - 1].width
+            if cursor_column < width:
+                cursor = _styled("▏", screen._TEXT_ACCENT)
+                frame = (
+                    screen._clip_cells(frame, cursor_column)
+                    + cursor
+                    + " " * max(0, width - cursor_column - 1)
+                )
+        yield frame
+
+    yield _render_glyphs(
+        glyphs,
+        width,
+        lambda _index, glyph: (glyph.symbol, screen._TEXT_PRIMARY),
+    )
+
+
+def _burn_ignition_frames(glyphs: tuple[_Glyph, ...]) -> dict[int, int]:
+    """Assign a deterministic spreading ignition time to each non-space glyph."""
+    burnable = [index for index, glyph in enumerate(glyphs) if not glyph.symbol.isspace()]
+    if not burnable:
+        return {}
+
+    seed = burnable[len(burnable) // 3]
+    seed_column = glyphs[seed].column
+    ignition: dict[int, int] = {}
+    for index in burnable:
+        glyph = glyphs[index]
+        distance = abs(glyph.column - seed_column) // _BURN_SPREAD_CELLS
+        # Small deterministic jitter keeps the front from looking like a ruler.
+        jitter = (glyph.column * 17 + ord(glyph.symbol[0]) * 7) % 3
+        ignition[index] = distance + jitter
+    return ignition
+
+
+def _burn_frames(text: str, width: int):
+    """Consume one roster row into sparse embers instead of solid block fire."""
+    glyphs = _glyphs(text, width)
+    ignition = _burn_ignition_frames(glyphs)
+    if not ignition:
+        yield " " * width
+        return
+
+    last_frame = max(ignition.values()) + len(_BURN_STAGES)
+    for tick in range(last_frame + 1):
+
+        def appearance(index: int, glyph: _Glyph) -> tuple[str, str | None]:
+            if glyph.symbol.isspace():
+                return " " * glyph.width, None
+
+            age = tick - ignition[index]
+            if age < 0:
+                return glyph.symbol, screen._TEXT_PRIMARY
+            if age >= len(_BURN_STAGES):
+                return " " * glyph.width, None
+
+            symbol, style = _BURN_STAGES[age]
+            if symbol == "original":
+                symbol = glyph.symbol
+            return symbol, style
+
+        yield _render_glyphs(glyphs, width, appearance)
+
+
+def _frames(kind: str, text: str, width: int):
+    if kind == "print":
+        yield from _print_frames(text, width)
+    elif kind == "burn":
+        yield from _burn_frames(text, width)
+    else:
+        raise ValueError(f"unknown roster effect: {kind}")
 
 
 def capture_student_roster_effect(
