@@ -81,14 +81,35 @@ def _use_student_number_as_password(catalog: Catalog, student_no: object) -> Non
     catalog.initial_password = None
 
 
+def _play_student_mutation(
+    state: Workspace,
+    catalog: Catalog,
+    record_id: int,
+    kind: str,
+) -> str:
+    """Run the visual consequence of a student mutation and return any failure notice."""
+    from .roster_effects import play_student_roster_effect
+
+    previous_notice = state.notice
+    if play_student_roster_effect(state, catalog, record_id, kind):
+        state.notice = previous_notice
+        return ""
+    failure = state.notice
+    state.notice = previous_notice
+    return failure
+
+
 def apply_form(state: Workspace, catalog: Catalog) -> int | None:
-    """Apply the current transaction and return a created record id, if any."""
+    """Apply one transaction; mutation effects belong to the mutation itself."""
     catalog.require_write()
     form = state.form
     if form is None:
         return None
 
     record_id: int | None = None
+    deleting_position: int | None = None
+    effect_failure = ""
+
     if form.mode == "create":
         values = {field.key: form.values.get(field.key) for field in form.fields}
         record_id = catalog.save(state.key, values)
@@ -111,6 +132,14 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
         _use_student_number_as_password(catalog, no)
         state.notice = "已重置密码为学号；学生下次登录必须修改密码。"
     elif form.mode == "delete":
+        if state.key == "students":
+            deleting_position = state.selected
+            effect_failure = _play_student_mutation(
+                state,
+                catalog,
+                int(form.original["id"]),
+                "burn",
+            )
         catalog.delete(state.key, form.original)
         state.notice = "记录已删除。"
     elif form.mode == "seed":
@@ -140,18 +169,32 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
 
     state.form = None
     state.field_session = None
+
+    created_visible = bool(
+        form.mode == "create"
+        and record_id is not None
+        and any(row["id"] == record_id for row in state.rows(catalog))
+    )
     if form.mode == "delete":
-        if state.key != "data":
-            state.rows(catalog)
-        state.restore_focus_context(form.return_to)
-    elif form.mode == "create" and record_id is not None and any(
-        row["id"] == record_id for row in state.rows(catalog)
-    ):
+        if state.key == "students" and deleting_position is not None:
+            rows = state.rows(catalog)
+            state.leave_roster_gap(min(deleting_position, len(rows)))
+        else:
+            if state.key != "data":
+                state.rows(catalog)
+            state.restore_focus_context(form.return_to)
+    elif created_visible:
         state.set_focus(FocusArea.INSPECTOR)
         state.detail_scroll, state.detail_selected = 0, 0
     else:
         state.set_focus(FocusArea.DASHBOARD if state.key == "data" else FocusArea.ROSTER)
         state.detail_scroll, state.detail_selected = 0, 0
+
+    if state.key == "students" and form.mode == "create" and record_id is not None and created_visible:
+        effect_failure = _play_student_mutation(state, catalog, record_id, "print")
+
+    if effect_failure:
+        state.notice = f"{state.notice} {effect_failure}"
 
     return record_id
 
