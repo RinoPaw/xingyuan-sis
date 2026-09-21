@@ -50,7 +50,7 @@ def metric_pair(label: str, value: object) -> str:
 
 
 def panel_heading(text: str, focused: bool) -> str:
-    marker = "▌ " if focused else "  "
+    marker = "▌ " if focused else ""
     style = screen._BOLD + (screen._TEXT_ACCENT if focused else screen._TEXT_PRIMARY)
     return screen._ansi(marker + text, style)
 
