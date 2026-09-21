@@ -107,6 +107,10 @@ class Workspace:
     query: str = ""
     selected: int = 0
     roster_scroll: int = 0
+    # A deletion leaves one real empty slot in the roster until the user moves
+    # away from it. The integer is the insertion index between remaining rows:
+    # up selects index-1, down selects index.
+    roster_gap: int | None = None
     focus: FocusArea = FocusArea.ROSTER
     content_panel: ContentPanel = ContentPanel.ROSTER
     detail_scroll: int = 0
@@ -124,13 +128,32 @@ class Workspace:
 
     def rows(self, catalog: Catalog) -> list[dict[str, Any]]:
         rows = catalog.rows(self.key, self.view, self.query) if self.key != "data" else []
-        self.selected = min(max(0, self.selected), max(0, len(rows) - 1))
-        self.roster_scroll = min(max(0, self.roster_scroll), max(0, len(rows) - 1))
+        if self.roster_gap is None:
+            self.selected = min(max(0, self.selected), max(0, len(rows) - 1))
+            display_count = len(rows)
+        else:
+            self.roster_gap = min(max(0, self.roster_gap), len(rows))
+            display_count = len(rows) + 1
+        self.roster_scroll = min(max(0, self.roster_scroll), max(0, display_count - 1))
         return rows
 
     def current(self, catalog: Catalog) -> dict[str, Any] | None:
         rows = self.rows(catalog)
+        if self.roster_gap is not None:
+            return None
         return rows[self.selected] if rows else None
+
+    def select_row(self, index: int) -> None:
+        """Select a real roster record and leave any deletion gap behind."""
+        self.selected = max(0, index)
+        self.roster_gap = None
+
+    def leave_roster_gap(self, index: int) -> None:
+        """Keep the deleted record's visual position without selecting a neighbor."""
+        self.roster_gap = max(0, index)
+        self.detail_scroll = 0
+        self.detail_selected = 0
+        self.set_focus(FocusArea.ROSTER)
 
     def set_focus(self, area: FocusArea) -> None:
         """Move keyboard focus while keeping the content-panel invariant."""
@@ -173,6 +196,7 @@ class Workspace:
 
     def switch(self, key: str) -> None:
         self.key, self.view, self.query, self.selected, self.roster_scroll = key, 0, "", 0, 0
+        self.roster_gap = None
         self.focus = FocusArea.DASHBOARD if key == "data" else FocusArea.ROSTER
         self.content_panel = ContentPanel.ROSTER
         self.detail_scroll, self.detail_selected = 0, 0
