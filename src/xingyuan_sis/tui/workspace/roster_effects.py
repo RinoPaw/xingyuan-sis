@@ -1,9 +1,8 @@
-"""Transient effects for mutations that enter or leave the student roster."""
+"""Transient TerminalTextEffects animations for student roster mutations."""
 from __future__ import annotations
 
 from collections.abc import Iterator
 import os
-import random
 import sys
 import time
 
@@ -13,128 +12,106 @@ from .roster import roster_row_body
 from .state import FocusArea, Workspace
 
 _FRAME_INTERVAL = 1 / 60
+_BURN_BLANK = "\u00a0"
 
 
 def _one_line(frame: str) -> str:
-    """Extract the single-row canvas embedded into the roster."""
+    """Extract the embedded one-row canvas and restore invisible burn blanks."""
     lines = frame.splitlines()
-    return lines[0] if lines else ""
+    return (lines[0] if lines else "").replace(_BURN_BLANK, " ")
 
 
-def _tte_frames(kind: str, text: str) -> Iterator[str]:
-    """Yield the real TerminalTextEffects animation without owning the terminal."""
-    if kind == "print":
-        from terminaltexteffects.effects.effect_print import Print
-
-        effect = Print(text)
-        # One character per animation step keeps a single roster row visibly
-        # printable without turning a short name into an instant flash.
-        effect.effect_config.print_speed = 1
-    elif kind == "burn":
-        from terminaltexteffects.effects.effect_burn import Burn
-
-        effect = Burn(text)
-        # Smoke needs vertical canvas space. The embedded roster effect owns one
-        # row, so keep the actual ignition/burn sequence and suppress clipped
-        # particles rather than letting them overwrite neighboring students.
-        effect.effect_config.smoke_chance = 0.0
-    else:
-        raise ValueError(f"未知名册特效：{kind}")
-
+def _configure_terminal(effect) -> None:
+    """Keep TTE responsible for the effect while Xingyuan owns the screen."""
     effect.terminal_config.canvas_width = -1
     effect.terminal_config.canvas_height = 1
     effect.terminal_config.ignore_terminal_dimensions = True
     effect.terminal_config.frame_rate = 0
     effect.terminal_config.no_color = os.environ.get("NO_COLOR") is not None
+
+
+def _print_frames(text: str) -> Iterator[str]:
+    """Use the Print showroom configuration verbatim."""
+    from terminaltexteffects import Color, Gradient, easing
+    from terminaltexteffects.effects.effect_print import Print
+
+    effect = Print(text)
+    config = effect.effect_config
+    config.final_gradient_stops = (
+        Color("#02b8bd"),
+        Color("#c1f0e3"),
+        Color("#00ffa0"),
+    )
+    config.final_gradient_steps = 12
+    config.final_gradient_direction = Gradient.Direction.DIAGONAL
+    config.print_head_return_speed = 1.25
+    config.print_speed = 1
+    config.print_head_easing = easing.in_out_quad
+    _configure_terminal(effect)
     yield from effect
 
 
-def _print_fallback_frames(text: str) -> Iterator[str]:
-    """Small dependency-free Print fallback for an already-running old venv."""
-    chars = list(text)
-    for index, char in enumerate(chars):
-        head_width = max(1, screen._display_width(char))
-        yield "".join(chars[:index]) + "█" * head_width
-    yield text
+def _burn_frames(text: str) -> Iterator[str]:
+    """Use TTE Burn, but ignite the complete roster row from its centre."""
+    from terminaltexteffects import Color, Gradient
+    from terminaltexteffects.effects.effect_burn import Burn
 
-
-def _burn_fallback_frames(text: str) -> Iterator[str]:
-    """Dependency-free row-local burn used only when TTE is unavailable."""
-    chars = list(text)
-    burnable = [index for index, char in enumerate(chars) if not char.isspace()]
-    if not burnable:
-        yield ""
-        return
-
-    # Stable but irregular ignition order; each character progresses through a
-    # flame-like glyph/color sequence before disappearing.
-    seed = sum((index + 1) * ord(char) for index, char in enumerate(chars))
-    random.Random(seed).shuffle(burnable)
-    ignition = {index: order for order, index in enumerate(burnable)}
-    symbols = ("█", "▓", "▒", "░", "·")
-    colors = (
-        "\x1b[38;5;255m",
-        "\x1b[38;5;226m",
-        "\x1b[38;5;208m",
-        "\x1b[38;5;196m",
-        "\x1b[38;5;88m",
+    effect = Burn(text)
+    config = effect.effect_config
+    config.starting_color = Color("#837373")
+    config.burn_colors = (
+        Color("#ffffff"),
+        Color("#fff75d"),
+        Color("#fe650d"),
+        Color("#8a003c"),
+        Color("#510100"),
     )
-    color_enabled = os.environ.get("NO_COLOR") is None
+    # The showroom example uses smoke=0.2. Smoke rises into adjacent terminal
+    # rows, which would overwrite neighbouring students, so the embedded
+    # one-row version intentionally keeps only the official ignition/burn.
+    config.smoke_chance = 0.0
+    config.final_gradient_stops = (Color("#00c3ff"), Color("#ffff1c"))
+    config.final_gradient_steps = 12
+    config.final_gradient_direction = Gradient.Direction.VERTICAL
+    _configure_terminal(effect)
 
-    for frame_index in range(len(burnable) + len(symbols) + 1):
-        parts: list[str] = []
-        for index, char in enumerate(chars):
-            order = ignition.get(index)
-            if order is None:
-                parts.append(char)
-                continue
-            stage = frame_index - order
-            if stage < 0:
-                if color_enabled:
-                    parts.append(screen._TEXT_PRIMARY)
-                parts.append(char)
-            elif stage < len(symbols):
-                if color_enabled:
-                    parts.append(colors[stage])
-                parts.append(symbols[stage] * max(1, screen._display_width(char)))
-            else:
-                parts.append(" " * max(1, screen._display_width(char)))
-        yield "".join(parts)
+    iterator = iter(effect)
+    # Burn's stock Prim tree chooses a random origin. Reorder the already-built
+    # official ignition sequence by terminal-cell distance from the row centre,
+    # so the same Burn scenes spread outwards from the middle in both directions.
+    centre = (iterator.terminal.canvas.text_left + iterator.terminal.canvas.text_right) / 2
+    iterator.algo.char_link_order.sort(
+        key=lambda character: abs(character.input_coord.column - centre)
+    )
+    yield from iterator
 
 
 def _frames(kind: str, text: str) -> Iterator[str]:
-    """Prefer TTE itself, but never silently lose the requested animation."""
-    try:
-        yield from _tte_frames(kind, text)
-        return
-    except Exception:
-        # A source checkout can still be running inside a venv created before
-        # terminaltexteffects became a project dependency. The mutation must
-        # remain usable and visibly animated in that state.
-        pass
-
     if kind == "print":
-        yield from _print_fallback_frames(text)
+        yield from _print_frames(text)
     elif kind == "burn":
-        yield from _burn_fallback_frames(text)
+        yield from _burn_frames(text)
     else:
         raise ValueError(f"未知名册特效：{kind}")
+
+
+def _burn_canvas(text: str, width: int) -> str:
+    """Make every terminal cell burnable, including visually blank cells."""
+    padded = screen._pad_cells(screen._clip_cells(text, width), width)
+    return padded.replace(" ", _BURN_BLANK)
 
 
 def _surface() -> str:
     return (screen._SURFACE_DEFAULT + screen._TEXT_PRIMARY) if os.environ.get("NO_COLOR") is None else ""
 
 
-def _draw_body(x: int, y: int, width: int, raw: str) -> None:
-    """Replace only the body cells of one roster row."""
+def _draw_row(x: int, y: int, width: int, raw: str) -> None:
+    """Replace exactly one roster-row span without disturbing neighbouring rows."""
     surface = _surface()
     shown = screen._clip_cells(_one_line(raw), width)
     if os.environ.get("NO_COLOR") is not None:
         shown = screen._ANSI_RE.sub("", shown)
     elif surface:
-        # TTE frames contain resets of their own. Reapply Xingyuan's page
-        # surface after each one so the animated row never punches holes in the
-        # TUI background.
         shown = shown.replace(screen._RESET, screen._RESET + surface)
     remaining = max(0, width - screen._display_width(shown))
     sys.stdout.write(
@@ -149,33 +126,13 @@ def _draw_body(x: int, y: int, width: int, raw: str) -> None:
     sys.stdout.flush()
 
 
-def _clear_roster_marker(x: int, y: int) -> None:
-    """A confirmed delete immediately stops presenting the record as selected."""
-    surface = _surface()
-    sys.stdout.write(
-        f"\x1b[{y};{x}H"
-        + screen._RESET
-        + surface
-        + "  "
-        + screen._RESET
-        + surface
-    )
-    sys.stdout.flush()
-
-
 def play_student_roster_effect(
     state: Workspace,
     catalog: Catalog,
     record_id: int,
     kind: str,
 ) -> bool:
-    """Animate exactly one student row while preserving the owning panel's focus.
-
-    ``print`` runs after a create commit and leaves the inspector focused while
-    the new weak-context row appears at its actual sorted position. ``burn``
-    runs before the delete commit; focus moves to the roster, its record marker
-    disappears immediately, and the row burns away before becoming a gap.
-    """
+    """Animate one student entry using TTE while preserving workspace semantics."""
     if state.key != "students":
         return False
 
@@ -195,9 +152,6 @@ def play_student_roster_effect(
 
     from .view import render
 
-    # The delete confirmation panel is no longer the visible owner after the
-    # user confirms it. Temporarily detach the Form while measuring the normal
-    # split roster; apply_form still receives the same Form afterwards.
     form = state.form
     if kind == "burn":
         state.form = None
@@ -211,39 +165,39 @@ def play_student_roster_effect(
         return False
 
     body_width = region.width - 2
-    text = roster_row_body(state, catalog, index, body_width).rstrip()
-    if not text:
+    body = roster_row_body(state, catalog, index, body_width)
+    if not body.strip():
         return False
 
-    body_x = region.x + 2  # HitRegion coordinates are already terminal/1-based.
+    body_x = region.x + 2
     y = region.y
     try:
         screen._paint(frame.lines)
         if kind == "print":
-            # The new row exists in layout immediately, but its body starts
-            # blank and is introduced by Print while the inspector keeps focus.
-            _draw_body(body_x, y, body_width, "")
-        else:
-            # Deletion focus belongs to the empty slot, not to the record that
-            # is about to disappear. Burn only the record body itself.
-            _clear_roster_marker(region.x, y)
+            text = body.rstrip()
+            _draw_row(body_x, y, body_width, "")
+            for raw in _frames("print", text):
+                _draw_row(body_x, y, body_width, raw)
+                time.sleep(_FRAME_INTERVAL)
+            # Let the normal renderer restore canonical weak-context styling on
+            # the next interaction frame; the animation itself keeps TTE color.
+            return True
 
-        for raw in _frames(kind, text):
-            _draw_body(body_x, y, body_width, raw)
+        # Burn owns the complete rendered student row, marker gutter included.
+        # Spaces become NBSP only inside TTE so every cell participates while
+        # remaining visually blank until its flame scene reaches that cell.
+        text = _burn_canvas("  " + body, region.width)
+        _draw_row(region.x, y, region.width, _BURN_BLANK * region.width)
+        for raw in _frames("burn", text):
+            _draw_row(region.x, y, region.width, raw)
             time.sleep(_FRAME_INTERVAL)
-
-        if kind == "burn":
-            _draw_body(body_x, y, body_width, "")
-        else:
-            _draw_body(body_x, y, body_width, text)
+        _draw_row(region.x, y, region.width, "")
+        return True
     except Exception:
-        # Effects are decoration; never strand a confirmed save/delete because
-        # a terminal rejects cursor movement or a third-party effect changes.
+        # Animation is decorative and must never prevent the confirmed mutation.
         if kind == "print":
             try:
-                _draw_body(body_x, y, body_width, text)
+                _draw_row(body_x, y, body_width, body.rstrip())
             except Exception:
                 pass
         return False
-
-    return True
