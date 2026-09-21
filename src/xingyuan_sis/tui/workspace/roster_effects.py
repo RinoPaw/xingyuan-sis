@@ -77,7 +77,7 @@ def _burn_frame(iterator, width: int) -> str:
             shown_width = 1
         else:
             shown = visual.formatted_symbol
-            shown_width = visual.cell_width
+            shown_width = screen._display_width(visual.symbol)
 
         chunks.append(shown)
         if shown_width < input_width:
