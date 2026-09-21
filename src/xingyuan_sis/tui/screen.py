@@ -146,6 +146,26 @@ def _clip_cells(text: str, width: int) -> str:
     return "".join(result)
 
 
+def _paint_region(x: int, y: int, width: int, text: str) -> None:
+    """Paint one fixed-width terminal region using the application's page surface."""
+    surface = _PAGE_STYLE if os.environ.get("NO_COLOR") is None else ""
+    shown = _clip_cells(text, width)
+    if os.environ.get("NO_COLOR") is not None:
+        shown = _ANSI_RE.sub("", shown)
+    elif surface:
+        shown = shown.replace(_RESET, _RESET + surface)
+    shown = _pad_cells(shown, width)
+    sys.stdout.write(
+        f"\x1b[{y};{x}H"
+        + _RESET
+        + surface
+        + shown
+        + _RESET
+        + surface
+    )
+    sys.stdout.flush()
+
+
 def _paint(lines: Sequence[str], previous: Sequence[str] = ()) -> None:
     if sys.stdout.isatty():
         # Absolute row positions work even when the terminal disables ONLCR.
