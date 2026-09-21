@@ -11,13 +11,18 @@ from .dashboard import render_dashboard
 from .data import ACADEMICS, COLLECTIONS, Catalog
 from .detail import lines as generic_lines
 from .editor import render_editor
-from .inspector import Line, action_targets, layout_lines, render_inspector
+from .inspector import (
+    Line,
+    action_targets,
+    empty_inspector_width,
+    layout_lines,
+    render_inspector,
+)
 from .roster import render_roster as _roster
 from .state import ContentPanel, FocusArea, Workspace
 from .student_inspector import lines as student_lines
 
 
-_EMPTY_INSPECTOR_WIDTH = 18
 _RECORD_INSPECTOR_MIN_WIDTH = 28
 _RECORD_INSPECTOR_MAX_WIDTH = 42
 
@@ -48,15 +53,12 @@ def detail_targets(key: str, row, catalog: Catalog, width: int):
 def _preferred_inspector_width(state: Workspace, catalog: Catalog) -> int:
     """Own the one semantic width decision for the right-hand workspace panel."""
     if state.form is not None:
-        # Transaction fields already adapt internally between inline and stacked
-        # controls. Give that editor its stable working width and let its own
-        # geometry handle narrower terminals.
+        # Transaction fields adapt internally between inline and stacked controls.
         return _RECORD_INSPECTOR_MIN_WIDTH
 
     row = state.current(catalog) if state.key != "data" else None
     if row is None:
-        # Empty archive states contain only a heading and one short status line.
-        return _EMPTY_INSPECTOR_WIDTH
+        return empty_inspector_width(state, catalog)
 
     longest = max(
         screen._display_width("".join(text for text, _, _ in line))
