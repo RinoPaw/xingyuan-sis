@@ -10,7 +10,6 @@ from .data import Catalog
 from .events import interact
 from .field_session import cancel as cancel_field_session, edit_current
 from .forms import apply_form, read_search
-from .roster_effects import play_student_roster_effect
 from .state import ContentPanel, FieldSession, FieldSessionOwner, FocusArea, Form, Workspace
 
 
@@ -51,35 +50,7 @@ def run(
                 except KeyboardInterrupt:
                     state.notice = "已取消输入。"
             elif event[0] == "save":
-                form = state.form
-                mode = form.mode if form is not None else ""
-                deleting_id = (
-                    int(form.original["id"])
-                    if state.key == "students"
-                    and form is not None
-                    and form.mode == "delete"
-                    and form.original is not None
-                    else None
-                )
-                deleting_position = state.selected if deleting_id is not None else None
-
-                if deleting_id is not None:
-                    # Burn owns the selected roster row while the record still
-                    # exists. Confirmation then commits the deletion underneath it.
-                    play_student_roster_effect(state, catalog, deleting_id, "burn")
-
-                created_id = apply_form(state, catalog)
-                if state.key == "students" and mode == "delete" and deleting_position is not None:
-                    # Preserve only the deleted record's logical position. The
-                    # rendered roster closes up immediately and no neighbor is
-                    # current until the user explicitly presses up/down.
-                    rows = state.rows(catalog)
-                    state.leave_roster_gap(min(deleting_position, len(rows)))
-                elif state.key == "students" and mode == "create" and created_id is not None:
-                    # apply_form has already converted the draft into the normal
-                    # inspector and left focus there. Print only introduces the
-                    # new row at its real sorted position on the left.
-                    play_student_roster_effect(state, catalog, created_id, "print")
+                apply_form(state, catalog)
             elif event[0] == "refresh":
                 row = state.current(catalog)
                 catalog.refresh()
