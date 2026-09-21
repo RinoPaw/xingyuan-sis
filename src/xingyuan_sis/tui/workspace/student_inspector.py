@@ -8,7 +8,7 @@ from ..view_common import safe
 from .birth_date_editor import projected as projected_birth_date
 from .data import Catalog
 from .inspector import Line, Segment, expand_options, field_segment
-from .presentation import project_record
+from .presentation import display_semantic_fields, project_record
 from .state import Workspace
 from .student_layout import StudentFieldRow, rows as layout_rows
 
@@ -34,7 +34,7 @@ def lines(
     catalog: Catalog,
     state: Workspace | None = None,
 ) -> list[Line]:
-    """Describe the student archive once; editing never changes its target graph."""
+    """Describe the student archive in user-facing semantic rows."""
     session = state.field_session if state else None
     student_session = session if session is not None and not session.anchor_key.startswith("related:") else None
     values = catalog.project("students", project_record(row, student_session))
@@ -72,15 +72,20 @@ def lines(
             ))
             return line
 
-        for index, key in enumerate(spec.keys):
+        if spec.keys == ("age",):
+            line.append(field("age", _age(values)))
+            return line
+
+        if spec.keys == ("enrollment_year",):
+            value = values.get("enrollment_year")
+            line.append(field("enrollment_year", "—" if value in {None, ""} else f"{value}级"))
+            return line
+
+        parts = display_semantic_fields(catalog, "students", values, spec.keys)
+        for index, (key, text) in enumerate(parts):
             if index:
                 line.append((" · ", screen._TEXT_SECONDARY, ""))
-            if key == "age":
-                line.append(field(key, _age(values)))
-            elif key == "enrollment_year":
-                line.append(field(key, f"{safe(values.get(key))}级"))
-            else:
-                line.append(field(key))
+            line.append(field(key, text))
         return line
 
     result: list[Line] = [field_row(spec) for spec in layout_rows("main")]
