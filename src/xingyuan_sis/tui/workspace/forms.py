@@ -94,13 +94,16 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
         record_id = catalog.save(state.key, values)
         if state.key == "students":
             _use_student_number_as_password(catalog, form.values["student_no"])
+        state.roster_gap = None
         rows = state.rows(catalog)
-        state.selected = next((i for i, row in enumerate(rows) if row["id"] == record_id), state.selected)
+        created_index = next((i for i, row in enumerate(rows) if row["id"] == record_id), None)
+        if created_index is not None:
+            state.select_row(created_index)
         state.notice = (
             "已保存。学生初始密码为学号，首次登录必须修改。"
-            if state.key == "students" and any(row["id"] == record_id for row in rows)
+            if state.key == "students" and created_index is not None
             else "已保存。"
-            if any(row["id"] == record_id for row in rows)
+            if created_index is not None
             else "已保存；这条记录不符合当前筛选条件。"
         )
     elif form.mode == "reset-password":
@@ -185,5 +188,6 @@ def read_search(state: Workspace, catalog: Catalog) -> None:
             state.notice = f"未完成：{exc}"
             return
     state.query, state.selected, state.roster_scroll = raw, 0, 0
+    state.roster_gap = None
     state.detail_scroll, state.detail_selected = 0, 0
     state.notice = f"搜索：{raw}" if raw else "已显示全部记录。"
