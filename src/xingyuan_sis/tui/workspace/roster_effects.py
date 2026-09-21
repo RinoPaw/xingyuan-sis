@@ -52,7 +52,7 @@ def _print_frames(text: str) -> Iterator[str]:
 
 
 def _burn_frames(text: str) -> Iterator[str]:
-    """Use TTE Burn, but ignite the complete roster row from its centre."""
+    """Use the showroom Burn configuration with TTE's native random origin."""
     from terminaltexteffects import Color, Gradient
     from terminaltexteffects.effects.effect_burn import Burn
 
@@ -66,24 +66,19 @@ def _burn_frames(text: str) -> Iterator[str]:
         Color("#8a003c"),
         Color("#510100"),
     )
-    # The showroom example uses smoke=0.2. Smoke rises into adjacent terminal
-    # rows, which would overwrite neighbouring students, so the embedded
-    # one-row version intentionally keeps only the official ignition/burn.
+    # The showroom Burn emits smoke above its source. Embedded in a one-row
+    # roster entry that would overwrite neighbouring students, so only smoke is
+    # disabled; ignition order and burn scenes remain the stock TTE effect.
     config.smoke_chance = 0.0
     config.final_gradient_stops = (Color("#00c3ff"), Color("#ffff1c"))
     config.final_gradient_steps = 12
     config.final_gradient_direction = Gradient.Direction.VERTICAL
     _configure_terminal(effect)
 
-    iterator = iter(effect)
-    # Burn's stock Prim tree chooses a random origin. Reorder the already-built
-    # official ignition sequence by terminal-cell distance from the row centre,
-    # so the same Burn scenes spread outwards from the middle in both directions.
-    centre = (iterator.terminal.canvas.text_left + iterator.terminal.canvas.text_right) / 2
-    iterator.algo.char_link_order.sort(
-        key=lambda character: abs(character.input_coord.column - centre)
-    )
-    yield from iterator
+    # BurnIterator builds PrimsSimple without a starting character. TTE then
+    # chooses a random coordinate itself. Because blank roster cells are NBSP
+    # inside this private canvas, every cell can participate in the same graph.
+    yield from effect
 
 
 def _frames(kind: str, text: str) -> Iterator[str]:
@@ -124,6 +119,15 @@ def _draw_row(x: int, y: int, width: int, raw: str) -> None:
         + surface
     )
     sys.stdout.flush()
+
+
+def _effect_failure_notice(state: Workspace, kind: str, error: Exception) -> None:
+    """Never hide a broken optional animation behind a successful mutation."""
+    if isinstance(error, ModuleNotFoundError) and error.name == "terminaltexteffects":
+        state.notice = "特效依赖未安装：请重新执行 python -m pip install -e ."
+        return
+    label = "Burn" if kind == "burn" else "Print"
+    state.notice = f"{label} 特效未播放：{error}"
 
 
 def play_student_roster_effect(
@@ -175,29 +179,37 @@ def play_student_roster_effect(
         screen._paint(frame.lines)
         if kind == "print":
             text = body.rstrip()
-            _draw_row(body_x, y, body_width, "")
-            for raw in _frames("print", text):
+            frames = iter(_frames("print", text))
+            first = next(frames, None)
+            if first is None:
+                return False
+            _draw_row(body_x, y, body_width, first)
+            time.sleep(_FRAME_INTERVAL)
+            for raw in frames:
                 _draw_row(body_x, y, body_width, raw)
                 time.sleep(_FRAME_INTERVAL)
-            # Let the normal renderer restore canonical weak-context styling on
-            # the next interaction frame; the animation itself keeps TTE color.
             return True
 
-        # Burn owns the complete rendered student row, marker gutter included.
-        # Spaces become NBSP only inside TTE so every cell participates while
-        # remaining visually blank until its flame scene reaches that cell.
+        # Prime TTE before touching the visible row. If the dependency or effect
+        # initialization fails, the original record remains intact instead of
+        # mysteriously turning into a blank line before the delete is committed.
         text = _burn_canvas("  " + body, region.width)
-        _draw_row(region.x, y, region.width, _BURN_BLANK * region.width)
-        for raw in _frames("burn", text):
+        frames = iter(_frames("burn", text))
+        first = next(frames, None)
+        if first is None:
+            return False
+
+        _draw_row(region.x, y, region.width, first)
+        time.sleep(_FRAME_INTERVAL)
+        for raw in frames:
             _draw_row(region.x, y, region.width, raw)
             time.sleep(_FRAME_INTERVAL)
+
+        # Burn itself finishes on TTE's final-gradient text. Clear the row only
+        # after the complete effect; apply_form immediately deletes the record
+        # and the next normal render closes the list with no visible gap.
         _draw_row(region.x, y, region.width, "")
         return True
-    except Exception:
-        # Animation is decorative and must never prevent the confirmed mutation.
-        if kind == "print":
-            try:
-                _draw_row(body_x, y, body_width, body.rstrip())
-            except Exception:
-                pass
+    except Exception as error:
+        _effect_failure_notice(state, kind, error)
         return False
