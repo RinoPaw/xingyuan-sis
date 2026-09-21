@@ -57,9 +57,9 @@ def _effect(kind: str, text: str, width: int):
 def _burn_frame(iterator, width: int) -> str:
     """Project TTE's Burn state onto a roster-row surface.
 
-    Text cells use the official Burn glyph verbatim. Cells that were originally
-    blank use the same current fire color as a background, so the row surface
-    burns without inventing visible placeholder characters.
+    Text cells use the official Burn glyph verbatim. Originally blank cells
+    remain blank and expose TTE's fire color as background only while their
+    official ``burn`` scene is active.
     """
     chunks: list[str] = []
     cursor = 1
@@ -71,7 +71,8 @@ def _burn_frame(iterator, width: int) -> str:
         visual = character.animation.current_character_visual
         input_width = max(1, screen._display_width(character.input_symbol))
         if character.input_symbol == " ":
-            color = visual._fg_color_code
+            scene = character.animation.active_scene
+            color = visual._fg_color_code if scene is not None and scene.scene_id == "burn" else None
             shown = f"{colorterm.bg(color)} {screen._RESET}" if color is not None else " "
             shown_width = 1
         else:
