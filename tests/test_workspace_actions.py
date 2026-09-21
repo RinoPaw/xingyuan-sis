@@ -22,7 +22,7 @@ class WorkspaceActionTests(unittest.TestCase):
         seed_demo(self.db)
         self.catalog = Catalog(self.db)
 
-    def test_record_commands_use_toolbar_and_archive_action_slots(self):
+    def test_record_commands_are_the_toolbar_and_footer_source(self):
         state = workspace.Workspace("students")
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             frame = workspace_view.render(state, self.catalog)
@@ -38,11 +38,11 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertIn("Esc 返回", footer)
         self.assertIn("/ 搜索", footer)
         self.assertIn("A 增加", footer)
-        self.assertNotIn("D 删除", footer)
+        self.assertIn("D 删除", footer)
         self.assertNotIn("E 编辑", footer)
         self.assertFalse(any(region.y == 35 for region in frame.regions))
 
-    def test_archive_delete_and_create_save_share_the_bottom_action_slot(self):
+    def test_create_save_is_archive_local_but_browse_delete_stays_in_toolbar(self):
         state = workspace.Workspace(
             "students",
             focus=workspace.FocusArea.INSPECTOR,
@@ -57,28 +57,31 @@ class WorkspaceActionTests(unittest.TestCase):
             creating = workspace_view.render(state, self.catalog)
         save = next(region for region in creating.regions if region.action == "save")
 
-        self.assertEqual((delete.x, delete.y), (save.x, save.y))
-        self.assertEqual(delete.y, 34)
+        self.assertLess(delete.y, save.y)
+        self.assertEqual(save.y, 34)
+        self.assertFalse(any(
+            region.action == "delete" and region.y == save.y
+            for region in browsing.regions
+        ))
 
-    def test_archive_delete_button_opens_the_delete_transaction_for_current_record(self):
-        state = workspace.Workspace(
-            "students",
-            selected=15,
-            focus=workspace.FocusArea.INSPECTOR,
-            content_panel=workspace.ContentPanel.INSPECTOR,
-        )
-        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
-            frame = workspace_view.render(state, self.catalog)
-        delete = next(region for region in frame.regions if region.action == "delete")
+    def test_toolbar_enter_invokes_the_same_delete_command(self):
+        state = workspace.Workspace("students", selected=15)
+        selected_at_delete: list[int] = []
 
-        with patch.object(keys, "_read_key", side_effect=[keys.MouseClick(delete.x, delete.y), "back", "refresh"]), \
-             patch.object(screen, "_paint"), patch.object(
-                 screen, "_terminal_size", return_value=os.terminal_size((120, 35))
-             ), patch.object(workspace_events, "open_form") as open_form:
+        def capture(_state, _catalog, action):
+            if action == "delete":
+                selected_at_delete.append(_state.selected)
+
+        with patch.object(
+            keys, "_read_key",
+            side_effect=["focus", "focus", "right", "right", "select", "refresh"],
+        ), patch.object(screen, "_paint"), patch.object(
+            screen, "_terminal_size", return_value=os.terminal_size((120, 35))
+        ), patch.object(workspace_events, "open_form", side_effect=capture):
             event = workspace_events.interact(state, self.catalog)
 
         self.assertEqual(event, ("refresh", 0))
-        open_form.assert_called_once_with(state, self.catalog, "delete")
+        self.assertEqual(selected_at_delete, [15])
         self.assertEqual(state.selected, 15)
 
     def test_toolbar_focus_keeps_current_record_as_weak_context_only(self):
