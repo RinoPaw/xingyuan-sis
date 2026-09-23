@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from .database import connect
-
 
 DEPARTMENTS = (
     ("SCI", "自然科学学院"),
@@ -38,7 +36,7 @@ CLASSES = (
     ("ELE2601", "元素工程2601班", "ELE", 2026),
     ("ELE2501", "元素工程2501班", "ELE", 2025),
     ("ELE2401", "元素工程2401班", "ELE", 2024),
-    ("EEE2601", "电气工程2601班", "EEE", 2026),
+    ("EEE2601", "元素工程2601班", "EEE", 2026),
     ("EEE2401", "电气工程2401班", "EEE", 2024),
     ("EEE2301", "电气工程2301班", "EEE", 2023),
     ("MEC2601", "机械工程2601班", "MEC", 2026),
@@ -348,116 +346,7 @@ class SeedResult:
 
 
 def seed_demo(db_path: Path | str | None = None, *, reset: bool = False) -> SeedResult:
-    """Populate a database with the canonical Xingyuan demo dataset."""
+    """Compatibility entry point for the service-owned demo seed operation."""
+    from .service import XingyuanService
 
-    with connect(db_path) as connection:
-        if not reset and _has_business_data(connection):
-            raise ValueError("数据库中已有数据；如需重建演示数据，请使用 --reset")
-
-        if reset:
-            _clear_business_data(connection)
-
-        connection.executemany(
-            "INSERT INTO departments(code, name) VALUES (?, ?)", DEPARTMENTS
-        )
-        connection.executemany(
-            """
-            INSERT INTO majors(code, name, department_id)
-            VALUES (?, ?, (SELECT id FROM departments WHERE code = ?))
-            """,
-            MAJORS,
-        )
-        connection.executemany(
-            """
-            INSERT INTO classes(code, name, major_id, enrollment_year)
-            VALUES (?, ?, (SELECT id FROM majors WHERE code = ?), ?)
-            """,
-            CLASSES,
-        )
-        connection.executemany(
-            "INSERT INTO species_families(name) VALUES (?)",
-            SPECIES_FAMILIES,
-        )
-        connection.executemany(
-            """
-            INSERT INTO species_branches(name, family_id)
-            VALUES (?, (SELECT id FROM species_families WHERE name = ?))
-            """,
-            SPECIES_BRANCHES,
-        )
-        connection.executemany(
-            """
-            INSERT INTO students(
-                student_no, name, species_branch_id, gender, birth_date, age,
-                enrollment_year, class_id, status,
-                primary_element, primary_affinity, contact, dormitory, notes
-            ) VALUES (
-                ?, ?,
-                (
-                    SELECT b.id
-                    FROM species_branches AS b
-                    JOIN species_families AS f ON f.id = b.family_id
-                    WHERE f.name = ? AND b.name = ?
-                ),
-                ?, ?, ?, ?,
-                (SELECT id FROM classes WHERE code = ?),
-                ?, ?, ?, ?, ?, ?
-            )
-            """,
-            STUDENTS,
-        )
-        connection.executemany(
-            """
-            INSERT INTO courses(course_code, name, department_id, credits, hours)
-            VALUES (?, ?, (SELECT id FROM departments WHERE code = ?), ?, ?)
-            """,
-            COURSES,
-        )
-        connection.executemany(
-            """
-            INSERT INTO enrollments(student_id, course_id, semester, score)
-            VALUES (
-                (SELECT id FROM students WHERE student_no = ?),
-                (SELECT id FROM courses WHERE course_code = ?),
-                ?, ?
-            )
-            """,
-            ENROLLMENTS,
-        )
-
-    return SeedResult(
-        departments=len(DEPARTMENTS),
-        majors=len(MAJORS),
-        classes=len(CLASSES),
-        species_families=len(SPECIES_FAMILIES),
-        species_branches=len(SPECIES_BRANCHES),
-        students=len(STUDENTS),
-        courses=len(COURSES),
-        enrollments=len(ENROLLMENTS),
-    )
-
-
-def _has_business_data(connection) -> bool:
-    tables = (
-        "departments", "majors", "classes", "species_families",
-        "species_branches", "students", "courses", "enrollments",
-    )
-    return any(
-        connection.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone() is not None
-        for table in tables
-    )
-
-
-def _clear_business_data(connection) -> None:
-    for table in (
-        "announcements", "enrollments", "students", "species_branches", "species_families",
-        "classes", "majors", "courses", "departments",
-    ):
-        connection.execute(f"DELETE FROM {table}")
-    connection.execute(
-        "DELETE FROM sqlite_sequence WHERE name IN (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (
-            "departments", "majors", "classes", "species_families",
-            "species_branches", "students", "courses", "enrollments", "announcements",
-        ),
-    )
+    return XingyuanService(db_path).seed_demo(reset=reset)
