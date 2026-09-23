@@ -128,14 +128,18 @@ def move_detail_selection(state: Workspace, catalog: Catalog, direction: str) ->
 
 
 def _page_roster(state: Workspace, catalog: Catalog, direction: str) -> None:
+    from .roster import roster_window
+
     rows = state.rows(catalog)
     if not rows:
         return
+    state.reconcile_roster(len(rows))
     capacity = WorkspaceLayout.measure().roster_capacity(state.key)
     state.resolve_roster_gap(len(rows), direction, capacity)
     maximum = max(0, len(rows) - capacity)
     delta = capacity if direction == "page_down" else -capacity
-    first = min(max(0, state.roster_scroll + delta), maximum)
+    current_first = roster_window(state, len(rows), capacity)
+    first = min(max(0, current_first + delta), maximum)
     state.roster_scroll = first
     last = min(len(rows) - 1, first + capacity - 1)
     state.selected = min(max(state.selected, first), last)
@@ -197,6 +201,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
 
     previous: list[str] = []
     while True:
+        state.reconcile_roster(len(state.rows(catalog)))
         frame = render(state, catalog)
         if frame.lines != previous:
             screen._paint(frame.lines, previous)
