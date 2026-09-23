@@ -34,6 +34,8 @@ SQLite
 
 UI 不写 SQL；Repository 不依赖 UI；业务校验进入 Service / Schema；SQL 进入 Repository；跨层需求沿现有方向扩展。
 
+依赖方向不要求把一个语义操作拆成多次 CRUD。一个 application mutation 如果要求原子性，例如 seed / reset / 批量导入，Service 只发起一次语义操作，Repository 在一个事务中完成持久化。不得为了“复用现有 CRUD”牺牲事务边界。
+
 ## 3. 单一权威实现
 
 | 概念 | 权威实现 |
@@ -235,3 +237,4 @@ final Line[]
 8. 是否为了旧测试保留无语义 wrapper？
 9. 是否把演示数据事实写成长期业务限制？
 10. 文档是否描述当前真实实现？
+11. 是否为了分层或复用，把一个应当原子的 mutation 拆成了多个独立事务？
