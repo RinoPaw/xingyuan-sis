@@ -210,10 +210,10 @@ def write_session(identity: Identity, db_path: Path | str | None = None) -> None
         "version": 1,
         "username": identity.username,
         "role": identity.role,
+        "database": str(_resolved_db_path(db_path)),
     }
     if identity.is_student:
         payload["student_no"] = identity.student_no
-        payload["database"] = str(_resolved_db_path(db_path))
     payload["signature"] = _session_signature(payload)
     _write_json(session_path(), payload)
 
@@ -233,14 +233,14 @@ def read_session(db_path: Path | str | None = None) -> Identity | None:
         return None
     if not isinstance(signature, str) or not hmac.compare_digest(signature, expected_signature):
         return None
+    if payload.get("database") != str(_resolved_db_path(db_path)):
+        return None
 
     username = str(payload.get("username", ""))
     role = str(payload.get("role", ""))
     if role == "admin":
         return Identity(ADMIN_USERNAME, "admin") if username == ADMIN_USERNAME and has_admin() else None
     if role != "student":
-        return None
-    if payload.get("database") != str(_resolved_db_path(db_path)):
         return None
     student_no = str(payload.get("student_no", ""))
     if not student_no or username != student_no:
