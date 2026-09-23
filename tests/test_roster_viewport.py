@@ -63,6 +63,18 @@ class RosterViewportTests(unittest.TestCase):
             before,
         )
 
+    def test_interaction_reconciles_selection_after_navigation(self):
+        size = (120, 42)
+        row_count = len(self.catalog.records["students"])
+        state = workspace.Workspace("students", selected=row_count - 1)
+
+        with patch.object(keys, "_read_key", side_effect=["down", "back"]), \
+             patch.object(screen, "_paint"), \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
+            workspace_events.interact(state, self.catalog)
+
+        self.assertEqual(state.selected, row_count - 1)
+
 
 if __name__ == "__main__":
     unittest.main()
