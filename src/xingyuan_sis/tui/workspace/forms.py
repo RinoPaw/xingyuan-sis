@@ -141,6 +141,9 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
     state.form = None
     state.field_session = None
 
+    if form.mode in {"create", "delete", "seed", "import"}:
+        state.reconcile_roster(len(state.rows(catalog)))
+
     created_visible = bool(
         form.mode == "create"
         and record_id is not None
@@ -151,8 +154,6 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
             rows = state.rows(catalog)
             state.leave_roster_gap(min(deleting_position, len(rows)))
         else:
-            if state.key != "data":
-                state.rows(catalog)
             state.restore_focus_context(form.return_to)
     elif created_visible:
         state.set_focus(FocusArea.INSPECTOR)
