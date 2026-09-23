@@ -3,8 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from ..auth import DEMO_STUDENT_PASSWORD, provision_demo_passwords
-from ..seed_data import seed_demo
+from ..auth import DEMO_STUDENT_PASSWORD
 from ..service import XingyuanService
 from .common import print_fields
 
@@ -23,8 +22,7 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
         )
         return 0
     if args.action == "seed":
-        result = seed_demo(service.db_path, reset=args.reset)
-        provision_demo_passwords(service.db_path)
+        result = service.seed_demo(reset=args.reset)
         print(
             "✓ 演示数据已写入："
             f"学院 {result.departments}，专业 {result.majors}，班级 {result.classes}，"
