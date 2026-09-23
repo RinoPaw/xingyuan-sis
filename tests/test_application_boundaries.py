@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from xingyuan_sis.auth import (
+    DEMO_STUDENT_PASSWORD,
     authenticate,
     initialize_admin,
     read_session,
@@ -77,6 +78,23 @@ class ApplicationBoundaryTests(unittest.TestCase):
             )
 
         self.assertIsNone(service.student_by_no("123"))
+
+    def test_service_owns_demo_seed_lifecycle_and_credentials(self) -> None:
+        service = XingyuanService(self.db)
+        result = service.seed_demo()
+
+        self.assertGreater(result.students, 0)
+        first = service.list_students()[0]
+        identity = authenticate(self.db, str(first["student_no"]), DEMO_STUDENT_PASSWORD)
+        self.assertIsNotNone(identity)
+        self.assertTrue(identity.must_change_password)
+
+        with self.assertRaisesRegex(ValueError, "已有数据"):
+            service.seed_demo()
+
+        rebuilt = service.seed_demo(reset=True)
+        self.assertEqual(rebuilt.students, result.students)
+        self.assertEqual(len(service.list_students()), result.students)
 
 
 if __name__ == "__main__":
