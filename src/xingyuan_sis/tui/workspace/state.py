@@ -126,19 +126,23 @@ class Workspace:
             self.focus = FocusArea.DASHBOARD
 
     def rows(self, catalog: Catalog) -> list[dict[str, Any]]:
-        rows = catalog.rows(self.key, self.view, self.query) if self.key != "data" else []
+        """Return the current roster projection without mutating interaction state."""
+        return catalog.rows(self.key, self.view, self.query) if self.key != "data" else []
+
+    def reconcile_roster(self, row_count: int) -> None:
+        """Normalize roster interaction state after an explicit state/data mutation."""
+        row_count = max(0, row_count)
         if self.roster_gap is None:
-            self.selected = min(max(0, self.selected), max(0, len(rows) - 1))
+            self.selected = min(max(0, self.selected), max(0, row_count - 1))
         else:
-            self.roster_gap = min(max(0, self.roster_gap), len(rows))
-        self.roster_scroll = min(max(0, self.roster_scroll), max(0, len(rows) - 1))
-        return rows
+            self.roster_gap = min(max(0, self.roster_gap), row_count)
+        self.roster_scroll = min(max(0, self.roster_scroll), max(0, row_count - 1))
 
     def current(self, catalog: Catalog) -> dict[str, Any] | None:
         rows = self.rows(catalog)
-        if self.roster_gap is not None:
+        if self.roster_gap is not None or not 0 <= self.selected < len(rows):
             return None
-        return rows[self.selected] if rows else None
+        return rows[self.selected]
 
     def select_row(self, index: int) -> None:
         """Select a real roster record and leave any deletion gap behind."""
@@ -253,17 +257,20 @@ class Workspace:
             self.detail_scroll, self.detail_selected, self.action_selected,
         ))
         self.switch(key)
-        self.selected = next((i for i, row in enumerate(self.rows(catalog))
+        rows = self.rows(catalog)
+        self.selected = next((i for i, row in enumerate(rows)
                               if str(row["id"]) == identifier), 0)
+        self.reconcile_roster(len(rows))
 
     def restore(self, catalog: Catalog) -> None:
         location = self.history.pop()
         self.switch(location.key)
         self.view, self.query = location.view, location.query
-        self.selected = next((i for i, row in enumerate(self.rows(catalog))
+        rows = self.rows(catalog)
+        self.selected = next((i for i, row in enumerate(rows)
                               if row["id"] == location.record_id), location.selected)
         self.roster_scroll = location.roster_scroll
         self.focus, self.content_panel = location.focus, location.content_panel
         self.detail_scroll, self.detail_selected = location.detail_scroll, location.detail_selected
         self.action_selected = location.action_selected
-        self.rows(catalog)
+        self.reconcile_roster(len(rows))
