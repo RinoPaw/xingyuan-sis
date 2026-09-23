@@ -13,11 +13,11 @@ if TYPE_CHECKING:
 
 
 def roster_window(state: Workspace, row_count: int, capacity: int) -> int:
+    """Return the visible roster start without mutating Workspace state."""
     anchor = state.selected
     if state.roster_gap is not None:
         anchor = min(state.roster_gap, max(0, row_count - 1))
-    state.roster_scroll = visible_start(anchor, row_count, capacity, state.roster_scroll)
-    return state.roster_scroll
+    return visible_start(anchor, row_count, capacity, state.roster_scroll)
 
 
 def _fit_columns(
