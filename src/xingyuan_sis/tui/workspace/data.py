@@ -53,13 +53,14 @@ COLLECTIONS = {
 ACADEMICS = ("departments", "majors", "classes")
 
 
-_STUDENT_ENUMS: dict[str, tuple[str, ...]] = {
+# TUI-owned starting vocabulary. These values are picker defaults, not domain
+# enums: Service/Schema accept other text, and persisted values are appended to
+# the picker below so existing data always remains editable.
+_STUDENT_PICKER_DEFAULTS: dict[str, tuple[str, ...]] = {
     "status": ("在读", "休学", "保留学籍"),
     "gender": ("男", "女"),
     "primary_element": ("风", "水", "火", "雷", "岩", "光"),
     "primary_affinity": ("A", "B", "C"),
-    # Kept for CLI/legacy callers; the TUI exposes the address as three fields.
-    "dormitory": (),
 }
 _STUDENT_CLASS_FIELDS = (
     Field("major_code", "专业"),
@@ -314,12 +315,12 @@ class Catalog:
         if field is None:
             return None
 
-        if key == "students" and field_key in _STUDENT_ENUMS:
+        if key == "students" and field_key in _STUDENT_PICKER_DEFAULTS:
             options = [] if field.required else [(None, "未指定")]
-            enum_values = dict.fromkeys((*_STUDENT_ENUMS[field_key], *(
+            picker_values = dict.fromkeys((*_STUDENT_PICKER_DEFAULTS[field_key], *(
                 row[field_key] for row in self.records["students"] if row.get(field_key)
             )))
-            return options + [(value, value) for value in enum_values]
+            return options + [(value, value) for value in picker_values]
 
         if key == "students" and field_key == "family":
             return [(row["name"], row["name"]) for row in self.species_families]
