@@ -4,7 +4,7 @@ from pathlib import Path
 import sqlite3
 from typing import Any
 
-from .auth import hash_password, provision_demo_passwords, reset_student_password as reset_password
+from .auth import DEMO_STUDENT_PASSWORD, hash_password, reset_student_password as reset_password
 from .csv_io import ImportResult, export_students_csv, import_students_csv
 from .reports import summary
 from .repository import Repository
@@ -459,13 +459,141 @@ class XingyuanService:
     def stats(self) -> dict[str, Any]:
         return summary(self.db_path)
 
-    def seed_demo(self, *, reset: bool = False):
-        """Populate the demo campus through the application service boundary."""
-        from .seed_data import seed_demo
+    def _has_business_data(self) -> bool:
+        return any((
+            self.list_departments(),
+            self.list_majors(),
+            self.list_classes(),
+            self.list_species_families(),
+            self.list_species_branches(),
+            self.list_students(),
+            self.list_courses(),
+            self.list_enrollments(),
+            self.list_announcements(),
+        ))
 
-        result = seed_demo(self.db_path, reset=reset)
-        provision_demo_passwords(self.db_path)
-        return result
+    def _clear_business_data(self) -> None:
+        for row in self.list_announcements():
+            self.delete_announcement(int(row["id"]))
+        for row in self.list_enrollments():
+            self.delete_grade(
+                student_no=str(row["student_no"]),
+                course_code=str(row["course_code"]),
+                semester=str(row["semester"]),
+            )
+        for row in self.list_students():
+            self.delete_student_by_no(str(row["student_no"]))
+        for row in self.list_courses():
+            self.delete_course_by_code(str(row["course_code"]))
+        for row in self.list_classes():
+            self.delete_class_by_code(str(row["code"]))
+        for row in self.list_majors():
+            self.delete_major_by_code(str(row["code"]))
+        for row in self.list_species_branches():
+            self.delete_species_branch_by_name(
+                str(row["name"]),
+                family=str(row["family_name"]),
+            )
+        for row in self.list_species_families():
+            self.delete_species_family_by_name(str(row["name"]))
+        for row in self.list_departments():
+            self.delete_department_by_code(str(row["code"]))
+
+    def seed_demo(self, *, reset: bool = False):
+        """Populate the canonical demo campus through the normal service/repository path."""
+        from .seed_data import (
+            CLASSES,
+            COURSES,
+            DEPARTMENTS,
+            ENROLLMENTS,
+            MAJORS,
+            SPECIES_BRANCHES,
+            SPECIES_FAMILIES,
+            STUDENTS,
+            SeedResult,
+        )
+
+        if self._has_business_data():
+            if not reset:
+                raise ValueError("数据库中已有数据；如需重建演示数据，请使用 --reset")
+            self._clear_business_data()
+
+        for code, name in DEPARTMENTS:
+            self.create_department(code=code, name=name)
+        for code, name, department_code in MAJORS:
+            self.create_major(code=code, name=name, department_code=department_code)
+        for code, name, major_code, enrollment_year in CLASSES:
+            self.create_class(
+                code=code,
+                name=name,
+                major_code=major_code,
+                enrollment_year=enrollment_year,
+            )
+        for (name,) in SPECIES_FAMILIES:
+            self.create_species_family(name=name)
+        for name, family in SPECIES_BRANCHES:
+            self.create_species_branch(name=name, family=family)
+        for (
+            student_no,
+            name,
+            family,
+            branch,
+            gender,
+            birth_date,
+            age,
+            enrollment_year,
+            class_code,
+            status,
+            primary_element,
+            primary_affinity,
+            contact,
+            dormitory,
+            notes,
+        ) in STUDENTS:
+            self.create_student(
+                student_no=str(student_no),
+                name=str(name),
+                family=str(family),
+                branch=str(branch),
+                gender=None if gender is None else str(gender),
+                birth_date=None if birth_date is None else str(birth_date),
+                age=None if age is None else int(age),
+                enrollment_year=int(enrollment_year),
+                class_code=None if class_code is None else str(class_code),
+                status=str(status),
+                primary_element=None if primary_element is None else str(primary_element),
+                primary_affinity=None if primary_affinity is None else str(primary_affinity),
+                contact=None if contact is None else str(contact),
+                dormitory=None if dormitory is None else str(dormitory),
+                notes=None if notes is None else str(notes),
+                initial_password=DEMO_STUDENT_PASSWORD,
+            )
+        for course_code, name, department_code, credits, hours in COURSES:
+            self.create_course(
+                course_code=course_code,
+                name=name,
+                department_code=department_code,
+                credits=float(credits),
+                hours=int(hours),
+            )
+        for student_no, course_code, semester, score in ENROLLMENTS:
+            self.add_grade(
+                student_no=str(student_no),
+                course_code=str(course_code),
+                semester=str(semester),
+                score=None if score is None else float(score),
+            )
+
+        return SeedResult(
+            departments=len(DEPARTMENTS),
+            majors=len(MAJORS),
+            classes=len(CLASSES),
+            species_families=len(SPECIES_FAMILIES),
+            species_branches=len(SPECIES_BRANCHES),
+            students=len(STUDENTS),
+            courses=len(COURSES),
+            enrollments=len(ENROLLMENTS),
+        )
 
     def export_students(self, path: Path | str) -> int:
         return export_students_csv(path, self.list_students())
