@@ -4,7 +4,7 @@ from pathlib import Path
 import sqlite3
 from typing import Any
 
-from .auth import generate_initial_password, hash_password
+from .auth import hash_password, provision_demo_passwords, reset_student_password as reset_password
 from .csv_io import ImportResult, export_students_csv, import_students_csv
 from .reports import summary
 from .repository import Repository
@@ -250,8 +250,8 @@ class XingyuanService:
 
     # ----- students -------------------------------------------------------
     def register_student(self, **values: Any) -> tuple[int, str]:
-        """Create a student and login credentials in the same database insert."""
-        password = generate_initial_password()
+        """Create a student and first-login credentials in one database insert."""
+        password = str(values.get("student_no", "")).strip()
         return self.create_student(**values, initial_password=password), password
 
     def create_student(
@@ -339,6 +339,9 @@ class XingyuanService:
     def delete_student_by_no(self, student_no: str) -> None:
         row = self._require(self.student_by_no(student_no), f"找不到学生：{student_no}")
         self.repository.delete_student(int(row["id"]))
+
+    def reset_student_password(self, student_no: str, password: str | None = None) -> str:
+        return reset_password(self.db_path, student_no, password)
 
     # ----- class announcements -------------------------------------------
     def list_announcements(self, student_no: str | None = None) -> list[sqlite3.Row]:
@@ -455,6 +458,14 @@ class XingyuanService:
     # ----- data -----------------------------------------------------------
     def stats(self) -> dict[str, Any]:
         return summary(self.db_path)
+
+    def seed_demo(self, *, reset: bool = False):
+        """Populate the demo campus through the application service boundary."""
+        from .seed_data import seed_demo
+
+        result = seed_demo(self.db_path, reset=reset)
+        provision_demo_passwords(self.db_path)
+        return result
 
     def export_students(self, path: Path | str) -> int:
         return export_students_csv(path, self.list_students())
