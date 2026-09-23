@@ -533,6 +533,7 @@ def commit(state: Workspace, catalog: Catalog) -> None:
         return
 
     rows = state.rows(catalog)
+    state.reconcile_roster(len(rows))
     state.selected = next((i for i, row in enumerate(rows) if row["id"] == record_id), state.selected)
     state.notice = (
         "已保存。"
