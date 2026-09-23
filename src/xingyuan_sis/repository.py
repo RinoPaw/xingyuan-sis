@@ -516,6 +516,117 @@ class Repository:
     def delete_enrollment(self, enrollment_id: int) -> None:
         self._execute("DELETE FROM enrollments WHERE id = ?", (enrollment_id,))
 
+    def seed_demo(
+        self,
+        *,
+        departments: Iterable[tuple[object, ...]],
+        majors: Iterable[tuple[object, ...]],
+        classes: Iterable[tuple[object, ...]],
+        species_families: Iterable[tuple[object, ...]],
+        species_branches: Iterable[tuple[object, ...]],
+        students: Iterable[tuple[object, ...]],
+        courses: Iterable[tuple[object, ...]],
+        enrollments: Iterable[tuple[object, ...]],
+        student_password_hash: str,
+        reset: bool = False,
+    ) -> None:
+        """Persist the canonical demo dataset as one SQLite transaction."""
+        with connect(self.db_path) as connection:
+            business_tables = (
+                "departments", "majors", "classes", "species_families",
+                "species_branches", "students", "courses", "enrollments", "announcements",
+            )
+            has_business_data = any(
+                connection.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone() is not None
+                for table in business_tables
+            )
+            if has_business_data and not reset:
+                raise ValueError("数据库中已有数据；如需重建演示数据，请使用 --reset")
+
+            if reset:
+                for table in (
+                    "announcements", "enrollments", "students", "species_branches",
+                    "species_families", "classes", "majors", "courses", "departments",
+                ):
+                    connection.execute(f"DELETE FROM {table}")
+                connection.execute(
+                    "DELETE FROM sqlite_sequence WHERE name IN (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        "departments", "majors", "classes", "species_families",
+                        "species_branches", "students", "courses", "enrollments", "announcements",
+                    ),
+                )
+
+            connection.executemany(
+                "INSERT INTO departments(code, name) VALUES (?, ?)",
+                departments,
+            )
+            connection.executemany(
+                """
+                INSERT INTO majors(code, name, department_id)
+                VALUES (?, ?, (SELECT id FROM departments WHERE code = ?))
+                """,
+                majors,
+            )
+            connection.executemany(
+                """
+                INSERT INTO classes(code, name, major_id, enrollment_year)
+                VALUES (?, ?, (SELECT id FROM majors WHERE code = ?), ?)
+                """,
+                classes,
+            )
+            connection.executemany(
+                "INSERT INTO species_families(name) VALUES (?)",
+                species_families,
+            )
+            connection.executemany(
+                """
+                INSERT INTO species_branches(name, family_id)
+                VALUES (?, (SELECT id FROM species_families WHERE name = ?))
+                """,
+                species_branches,
+            )
+            connection.executemany(
+                """
+                INSERT INTO students(
+                    student_no, name, species_branch_id, gender, birth_date, age,
+                    enrollment_year, class_id, status,
+                    primary_element, primary_affinity, contact, dormitory, notes,
+                    password_hash
+                ) VALUES (
+                    ?, ?,
+                    (
+                        SELECT b.id
+                        FROM species_branches AS b
+                        JOIN species_families AS f ON f.id = b.family_id
+                        WHERE f.name = ? AND b.name = ?
+                    ),
+                    ?, ?, ?, ?,
+                    (SELECT id FROM classes WHERE code = ?),
+                    ?, ?, ?, ?, ?, ?, ?
+                )
+                """,
+                (tuple(student) + (student_password_hash,) for student in students),
+            )
+            connection.executemany(
+                """
+                INSERT INTO courses(course_code, name, department_id, credits, hours)
+                VALUES (?, ?, (SELECT id FROM departments WHERE code = ?), ?, ?)
+                """,
+                courses,
+            )
+            connection.executemany(
+                """
+                INSERT INTO enrollments(student_id, course_id, semester, score)
+                VALUES (
+                    (SELECT id FROM students WHERE student_no = ?),
+                    (SELECT id FROM courses WHERE course_code = ?),
+                    ?, ?
+                )
+                """,
+                enrollments,
+            )
+
 
 def _blank_to_none(value: str | None) -> str | None:
     if value is None:
