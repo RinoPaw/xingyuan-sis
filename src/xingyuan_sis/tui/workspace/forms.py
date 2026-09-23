@@ -72,15 +72,6 @@ def move_form_position(state: Workspace, direction: str) -> None:
         form.position = min(len(form.fields) - 1, form.position + 1)
 
 
-def _use_student_number_as_password(catalog: Catalog, student_no: object) -> None:
-    """Apply the TUI's predictable first-login credential policy."""
-    from ...auth import reset_student_password
-
-    no = str(student_no).strip()
-    reset_student_password(catalog.service.db_path, no, no)
-    catalog.initial_password = None
-
-
 def apply_form(state: Workspace, catalog: Catalog) -> int | None:
     """Apply one transaction; visual effects are consequences of committed mutations."""
     catalog.require_write()
@@ -97,8 +88,6 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
     if form.mode == "create":
         values = {field.key: form.values.get(field.key) for field in form.fields}
         record_id = catalog.save(state.key, values)
-        if state.key == "students":
-            _use_student_number_as_password(catalog, form.values["student_no"])
         state.roster_gap = None
         rows = state.rows(catalog)
         created_index = next((i for i, row in enumerate(rows) if row["id"] == record_id), None)
@@ -112,8 +101,9 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
             else "已保存；这条记录不符合当前筛选条件。"
         )
     elif form.mode == "reset-password":
-        no = form.original["student_no"]
-        _use_student_number_as_password(catalog, no)
+        no = str(form.original["student_no"]).strip()
+        catalog.service.reset_student_password(no, no)
+        catalog.initial_password = None
         state.notice = "已重置密码为学号；学生下次登录必须修改密码。"
     elif form.mode == "delete":
         if state.key == "students":
@@ -130,13 +120,11 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
         catalog.delete(state.key, form.original)
         state.notice = "记录已删除。"
     elif form.mode == "seed":
-        from ...auth import DEMO_STUDENT_PASSWORD, provision_demo_passwords
-        from ...seed_data import seed_demo
+        from ...auth import DEMO_STUDENT_PASSWORD
 
         if any(catalog.records.values()):
             raise ValueError("已有校园记录，请使用空数据库体验演示校园。")
-        seed_demo(catalog.service.db_path)
-        provision_demo_passwords(catalog.service.db_path)
+        catalog.service.seed_demo()
         catalog.refresh()
         state.notice = f"演示校园已就绪；学生初始密码为 {DEMO_STUDENT_PASSWORD}。"
     else:
@@ -146,8 +134,6 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
             state.notice = f"已导出 {count} 名学生至 {path}"
         else:
             result = catalog.service.import_students(path)
-            for student_no, _ in result.credentials:
-                _use_student_number_as_password(catalog, student_no)
             catalog.refresh()
             state.notice = f"已导入 {result.imported} 名学生；{len(result.errors)} 行未导入。"
             state.report = result.errors
