@@ -122,8 +122,6 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
     elif form.mode == "seed":
         from ...auth import DEMO_STUDENT_PASSWORD
 
-        if any(catalog.records.values()):
-            raise ValueError("已有校园记录，请使用空数据库体验演示校园。")
         catalog.service.seed_demo()
         catalog.refresh()
         state.notice = f"演示校园已就绪；学生初始密码为 {DEMO_STUDENT_PASSWORD}。"
