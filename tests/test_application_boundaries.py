@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import sqlite3
 from tempfile import TemporaryDirectory
 import unittest
 
@@ -95,6 +96,27 @@ class ApplicationBoundaryTests(unittest.TestCase):
         rebuilt = service.seed_demo(reset=True)
         self.assertEqual(rebuilt.students, result.students)
         self.assertEqual(len(service.list_students()), result.students)
+
+    def test_seed_reset_rolls_back_as_one_transaction(self) -> None:
+        service = XingyuanService(self.db)
+        service.create_department(code="OLD", name="原有学院")
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            service.repository.seed_demo(
+                departments=(("NEW", "新学院"), ("NEW", "重复学院")),
+                majors=(),
+                classes=(),
+                species_families=(),
+                species_branches=(),
+                students=(),
+                courses=(),
+                enrollments=(),
+                student_password_hash="unused",
+                reset=True,
+            )
+
+        self.assertIsNotNone(service.department_by_code("OLD"))
+        self.assertIsNone(service.department_by_code("NEW"))
 
 
 if __name__ == "__main__":
