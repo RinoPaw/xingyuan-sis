@@ -38,19 +38,30 @@ class RosterViewportTests(unittest.TestCase):
         self.assertEqual(state.selected, 32)
         self.assertEqual(state.roster_scroll, 0)
 
-    def test_viewport_moves_only_after_selection_crosses_an_edge(self):
+    def test_render_calculates_visible_window_without_writing_scroll(self):
         size = (120, 42)
-        state = workspace.Workspace("students", selected=30, roster_scroll=1)
+        state = workspace.Workspace("students", selected=0, roster_scroll=1)
 
-        state.selected = 29
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
-            workspace_view.render(state, self.catalog)
+            frame = workspace_view.render(state, self.catalog)
+
         self.assertEqual(state.roster_scroll, 1)
+        self.assertTrue(any(region.action == "row:0" for region in frame.regions))
 
-        state.selected = 0
+    def test_rows_current_and_render_do_not_reconcile_workspace_state(self):
+        size = (120, 42)
+        state = workspace.Workspace("students", selected=10**6, roster_scroll=10**6)
+        before = (state.selected, state.roster_scroll, state.roster_gap)
+
+        state.rows(self.catalog)
+        self.assertIsNone(state.current(self.catalog))
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
             workspace_view.render(state, self.catalog)
-        self.assertEqual(state.roster_scroll, 0)
+
+        self.assertEqual(
+            (state.selected, state.roster_scroll, state.roster_gap),
+            before,
+        )
 
 
 if __name__ == "__main__":
