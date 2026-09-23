@@ -58,6 +58,8 @@ UI 不写 SQL；Repository 不依赖 UI；业务校验进入 Service / Schema；
 
 出现第二套实现时，默认动作是合并或删除，而不是增加同步代码。
 
+读取投影与渲染必须无副作用。`Workspace.rows()`、`Workspace.current()` 和 render 路径只读取事实，不借读取之名修正 `selected / roster_gap / roster_scroll`。当搜索、导航、刷新或数据 mutation 可能使名册状态失效时，由对应事件 / 事务边界显式调用 `reconcile_roster()`；这样“谁改变了 Workspace”始终可追踪。
+
 ## 4. Field 不因编辑改变身份
 
 档案字段必须区分：
@@ -217,6 +219,7 @@ final Line[]
 - 必须验证已有记录没有保存按钮和 Form edit；
 - 鼠标 / 键盘等价行为比较最终状态；
 - 最终几何测试同时约束绘制、命中区和方向导航；
+- `rows / current / render` 测试必须验证读取不会修改 Workspace 状态；
 - seed 测试不绑定偶然数据位置。
 
 ## 13. CI 原则
@@ -238,3 +241,4 @@ final Line[]
 9. 是否把演示数据事实写成长期业务限制？
 10. 文档是否描述当前真实实现？
 11. 是否为了分层或复用，把一个应当原子的 mutation 拆成了多个独立事务？
+12. 是否有 rows / current / render 一类读取路径顺手修改 Workspace 状态？
