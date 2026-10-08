@@ -9,6 +9,7 @@ from ..text_edit import TextBuffer, input_mode, read_event
 from .birth_date_editor import BIRTH_DATE_FIELDS, BIRTH_DATE_KEYS, canonical as birth_canonical
 from .birth_date_editor import options as birth_options, parts as birth_parts, projected as projected_birth_date
 from .data import COLLECTIONS, Catalog
+from .picker import prepare_candidates
 from .presentation import project_record
 from .state import FieldSession, FieldSessionOwner, FocusArea, Workspace
 
@@ -195,6 +196,7 @@ def _open_options(state: Workspace, catalog: Catalog) -> bool:
                  if value == session.values.get(session.active_key)),
                 0,
             )
+            prepare_candidates(session)
             state.notice = ""
             return True
 
@@ -216,6 +218,7 @@ def _open_options(state: Workspace, catalog: Catalog) -> bool:
          if value == session.values.get(session.active_key)),
         0,
     )
+    prepare_candidates(session)
     state.notice = ""
     return True
 
