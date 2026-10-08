@@ -65,13 +65,13 @@ def navigate(
 ) -> tuple[int, str, int]:
     """Single authority for portal focus and selection transitions.
 
-    Tab traverses primary menu choices and leaves an entered secondary region.
-    Only Enter or Right on a primary item enters its secondary menu.
+    Tab advances within the current menu level (wrapping at the end).
+    Enter or Right enters a submenu; Esc returns to its parent level.
     """
     items = secondary_items(identity, selected)
     if key == "focus":
-        if focus == "secondary":
-            return selected, "primary", secondary
+        if focus == "secondary" and items:
+            return selected, "secondary", (secondary + 1) % len(items)
         return (selected + 1) % len(PRIMARY_LABELS), "primary", secondary
 
     if focus == "primary":
