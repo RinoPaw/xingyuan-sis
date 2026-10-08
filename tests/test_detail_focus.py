@@ -46,6 +46,25 @@ class DetailFocusTests(unittest.TestCase):
         self.assertNotIn("阅读中", plain)
         self.assertTrue(any(screen._SURFACE_SELECTED in line for line in detail.lines))
 
+    def test_render_does_not_reconcile_detail_selection_or_scroll(self):
+        for collection in ("students", "courses", "grades"):
+            for size in ((120, 35), (30, 12)):
+                with self.subTest(collection=collection, size=size):
+                    state = workspace.Workspace(
+                        collection,
+                        focus=workspace.FocusArea.INSPECTOR,
+                        content_panel=workspace.ContentPanel.INSPECTOR,
+                        detail_selected=10_000,
+                        detail_scroll=10_000,
+                    )
+                    before = dict(vars(state))
+                    with patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
+                        first = workspace_view.render(state, self.catalog)
+                        second = workspace_view.render(state, self.catalog)
+                    self.assertEqual(vars(state), before)
+                    self.assertEqual(first.lines, second.lines)
+                    self.assertEqual(first.regions, second.regions)
+
     def test_selected_marker_sits_beside_the_specific_inspector_field(self):
         state = workspace.Workspace(
             "students",
