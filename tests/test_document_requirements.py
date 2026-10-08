@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from xingyuan_sis import basic_ui, terminal_ui
-from xingyuan_sis.auth import (
+from xingyuan_sis.auth import INITIAL_STUDENT_PASSWORD, (
     Identity, authenticate, change_password, initialize_admin, read_session, write_session,
 )
 from xingyuan_sis.database import connect, initialize_database
@@ -59,7 +59,7 @@ class DocumentRequirementTests(unittest.TestCase):
         record_id, password = self.service.register_student(**self.student_values())
         identity = authenticate(self.db, "00990001", password)
         self.assertTrue(identity.must_change_password)
-        with self.assertRaisesRegex(ValueError, "不能与当前密码相同"):
+        with self.assertRaisesRegex(ValueError, "密码至少需要 8 个字符"):
             change_password(self.db, identity, password)
         with connect(self.db) as connection:
             row = connection.execute("SELECT password_hash FROM students WHERE id = ?", (record_id,)).fetchone()
@@ -108,7 +108,7 @@ class DocumentRequirementTests(unittest.TestCase):
         forms.open_form(state, catalog, "create")
         state.form.values.update(self.student_values())
         forms.apply_form(state, catalog)
-        identity = authenticate(self.db, "00990001", "00990001")
+        identity = authenticate(self.db, "00990001", INITIAL_STUDENT_PASSWORD)
         self.assertIsNotNone(identity)
         self.assertTrue(identity.must_change_password)
         self.assertEqual(state.focus, FocusArea.INSPECTOR)
