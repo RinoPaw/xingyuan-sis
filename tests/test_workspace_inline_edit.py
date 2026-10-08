@@ -286,7 +286,7 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         workspace_field.start(state, self.catalog, "family")
         workspace_field.edit_current(state, self.catalog)
         index = next(
-            i for i, (value, _) in enumerate(state.workspace_field.options)
+            i for i, (value, _) in enumerate(state.field_session.options)
             if value == target_family
         )
         workspace_field.accept_option(state, self.catalog, index)
@@ -299,10 +299,10 @@ class WorkspaceInlineEditTests(unittest.TestCase):
         workspace_field.start(state, self.catalog, "branch")
         workspace_field.edit_current(state, self.catalog)
         chosen = next(
-            i for i, (value, _) in enumerate(state.workspace_field.options)
+            i for i, (value, _) in enumerate(state.field_session.options)
             if value is not None
         )
-        target_branch = state.workspace_field.options[chosen][0]
+        target_branch = state.field_session.options[chosen][0]
         workspace_field.accept_option(state, self.catalog, chosen)
         self.assertIsNone(state.field_session)
         changed = self.catalog.service.student_by_no(original["student_no"])
