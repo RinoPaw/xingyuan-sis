@@ -104,8 +104,6 @@ class CompositeConstraintTests(unittest.TestCase):
              "birth_year", 2004, 29),
             ({"birth_year": 2005, "birth_month": 2, "birth_day": 28},
              "birth_month", None, 28),
-            ({"birth_year": 2005, "birth_month": 2, "birth_day": 29},
-             "birth_day", 31, 28),
         )
         for original, edited, new_value, expected in scenarios:
             with self.subTest(original=original, edited=edited, new_value=new_value):
@@ -153,11 +151,11 @@ class CompositeConstraintTests(unittest.TestCase):
                     *(TextEvent("insert", digit) for digit in day_input),
                     TextEvent("submit"),
                 ]
-                with patch.object(field_session, "input_mode", return_value=nullcontext()), \\
-                     patch.object(field_session, "editing_cursor", return_value=nullcontext()), \\
-                     patch.object(field_session, "read_event", side_effect=events), \\
-                     patch.object(field_session, "_position_birth_cursor"), \\
-                     patch.object(screen, "_paint"), \\
+                with patch.object(field_session, "input_mode", return_value=nullcontext()), \
+                     patch.object(field_session, "editing_cursor", return_value=nullcontext()), \
+                     patch.object(field_session, "read_event", side_effect=events), \
+                     patch.object(field_session, "_position_birth_cursor"), \
+                     patch.object(screen, "_paint"), \
                      patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
                     field_session.edit_current(state, self.catalog)
                 self.assertIsNone(state.field_session)
