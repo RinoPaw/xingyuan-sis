@@ -92,12 +92,12 @@ def _breadcrumb(state: Workspace) -> list[tuple[str, str]]:
 
 def _render_actions(board: Board, state: Workspace, catalog: Catalog, x: int, y: int, width: int) -> None:
     commands = toolbar_commands(catalog, state.key)
-    state.action_selected = min(max(0, state.action_selected), max(0, len(commands) - 1))
+    selected_index = min(max(0, state.action_selected), max(0, len(commands) - 1))
     first = 0
     if state.focus is FocusArea.TOOLBAR:
-        while first < state.action_selected and sum(
+        while first < selected_index and sum(
             screen._display_width(command.label) + 6
-            for command in commands[first:state.action_selected + 1]
+            for command in commands[first:selected_index + 1]
         ) > width:
             first += 1
     for index in range(first, len(commands)):
@@ -111,7 +111,7 @@ def _render_actions(board: Board, state: Workspace, catalog: Catalog, x: int, y:
             y,
             shown,
             command.action,
-            selected=state.focus is FocusArea.TOOLBAR and state.action_selected == index,
+            selected=state.focus is FocusArea.TOOLBAR and selected_index == index,
         )
         width -= needed
 
