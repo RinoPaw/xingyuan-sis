@@ -74,6 +74,12 @@ class PickerCandidateTests(unittest.TestCase):
                         field_session.start_form(state, self.catalog, index)
                     field_session.edit_current(state, self.catalog)
                     self.assertIsNotNone(state.field_session.options)
+                    # An intentionally unprepared picker must never be repaired
+                    # by painting; normalization belongs to the edit event.
+                    active = state.field_session.active_key
+                    current = state.field_session.values.get(active)
+                    state.field_session.options.insert(0, (current, "原值"))
+                    state.field_session.option_index = 1
                     original_session = deepcopy(state.field_session)
                     original_form = deepcopy(state.form)
                     with patch.object(screen, "_terminal_size", return_value=os.terminal_size(dimensions)):
