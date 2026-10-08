@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from .. import screen, theme
@@ -224,6 +225,19 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
     field_x = x + geometry.control_offset
     field_width = geometry.control_available
     capacity = max(1, bottom - content_row)
+    if capacity < geometry.row_height:
+        # One available content line cannot contain a two-row stacked field.
+        # Keep the selected control reachable instead of rendering no field.
+        control_offset = min(width - 1, max(_SELECTION_GUTTER, width // 2))
+        geometry = replace(
+            geometry,
+            stacked=False,
+            label_width=max(0, control_offset - _SELECTION_GUTTER),
+            marker_offset=max(0, control_offset - _SELECTION_GUTTER),
+            control_offset=control_offset,
+            control_available=max(1, width - control_offset),
+            row_height=1,
+        )
     visible = _visible_entries(entries, selected_entry, capacity, geometry.row_height)
 
     for (kind, index, payload), row_offset in visible:
