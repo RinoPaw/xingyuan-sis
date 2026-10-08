@@ -429,8 +429,10 @@ class PortalLayoutTests(unittest.TestCase):
                 preferences["identity"] = identity
                 preferences["portal_selected"] = 2
                 preferences["portal_focus"] = "secondary"
+                preferences["portal_secondary"] = {1: 7, 2: 2}
                 return "logout"
             self.assertNotIn("identity", preferences)
+            self.assertNotIn("portal_secondary", preferences)
             self.assertEqual(preferences["portal_selected"], 0)
             self.assertEqual(preferences["portal_focus"], "primary")
             return None
@@ -445,6 +447,38 @@ class PortalLayoutTests(unittest.TestCase):
 
         clear.assert_called_once_with()
         self.assertEqual(len(calls), 2)
+
+    def test_breadcrumb_navigation_resolves_parent_from_menu_sections(self) -> None:
+        identity = Identity("Administrator", "admin")
+        for path, target in (
+            ("", 0),
+            ("教务", 1),
+            ("教务 / 班级", 1),
+            ("个人中心 / 个人数据", 2),
+            ("不存在的菜单", 0),
+        ):
+            calls = []
+
+            def portal_session(db_path, *, selected, preferences):
+                calls.append(selected)
+                if len(calls) == 1:
+                    preferences["identity"] = identity
+                    preferences["portal_selected"] = 2
+                    preferences["portal_focus"] = "secondary"
+                    return "profile-data"
+                self.assertEqual(preferences["portal_selected"], target)
+                self.assertEqual(preferences["portal_focus"], "primary")
+                return None
+
+            with self.subTest(path=path), \
+                 patch("sys.stdin.isatty", return_value=True), \
+                 patch("sys.stdout.isatty", return_value=True), \
+                 patch.object(app.screen, "_terminal_session", return_value=nullcontext()), \
+                 patch.object(app, "_portal_home", side_effect=portal_session), \
+                 patch.object(app, "_execute_portal_action", side_effect=screen.NavigateTo(path)):
+                app.run()
+
+            self.assertEqual(len(calls), 2)
 
     def test_extreme_narrow_width_hides_preview_but_entered_menu_still_renders(self) -> None:
         identity = Identity("Administrator", "admin")
