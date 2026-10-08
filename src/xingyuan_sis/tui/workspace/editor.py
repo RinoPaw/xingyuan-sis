@@ -108,11 +108,6 @@ def _render_form_heading(
     board.put(x, y, panel_heading(heading, True), width=width)
 
 
-def _render_form_action(board: Board, mode: str, x: int, y: int) -> None:
-    label = "执行" if mode in {"import", "export"} else "保存"
-    board.button(x, y, label, "save")
-
-
 def _entry_height(kind: str, row_height: int) -> int:
     return row_height if kind == "field" else 1
 
@@ -153,8 +148,7 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
     heading_row = layout.panel_heading_row(state.key)
     status_row = heading_row + 1
     content_row = max(layout.panel_content_row(state.key), status_row + 1)
-    action_row = board.height - 2
-    bottom = action_row
+    bottom = board.height - 2 if form.mode in CONFIRMATION_MODES else board.height - 1
 
     if form.mode in CONFIRMATION_MODES:
         content = confirmation_content(catalog, state.key, form)
@@ -207,6 +201,11 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
                     entries.append(("empty", 0, "暂无其他候选项"))
                     selected_entry = len(entries) - 1
 
+    entries.append(("gap", -1, None))
+    entries.append(("save", len(form.fields), "执行" if form.mode in {"import", "export"} else "保存"))
+    if form.position == len(form.fields):
+        selected_entry = len(entries) - 1
+
     geometry = form_field_geometry(form.fields, width)
     marker_x = x + geometry.marker_offset
     field_x = x + geometry.control_offset
@@ -229,6 +228,11 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
 
     for (kind, index, payload), row_offset in visible:
         y = content_row + row_offset
+        if kind == "gap":
+            continue
+        if kind == "save":
+            board.button(x, y, str(payload), "save", selected=form.position == index)
+            continue
         if kind == "option":
             selected = session is not None and index == session.option_index
             marker = "> " if selected else "  "
@@ -330,4 +334,3 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
             width_for_field,
         )
 
-    _render_form_action(board, form.mode, x, action_row)

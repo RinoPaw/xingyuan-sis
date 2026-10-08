@@ -102,7 +102,7 @@ def _footer(state: Workspace, catalog: Catalog, width: int) -> str:
             return theme.footer(
                 width,
                 command_hints=("Tab 下一项", FORM_SAVE.hint),
-                enter="编辑",
+                enter="保存" if state.form.position == len(state.form.fields) else "编辑",
                 escape="取消",
             )
         return theme.footer(width, enter="确认", escape="取消")

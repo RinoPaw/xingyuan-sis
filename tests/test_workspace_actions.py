@@ -41,7 +41,7 @@ class WorkspaceActionTests(unittest.TestCase):
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             creating = workspace_view.render(state, self.catalog)
         save = next(region for region in creating.regions if region.action == "save")
-        self.assertEqual(save.y, 34)
+        self.assertLess(save.y, 34)
 
     def test_create_student_commits_and_focuses_saved_record_without_animation(self):
         state = workspace.Workspace("students")

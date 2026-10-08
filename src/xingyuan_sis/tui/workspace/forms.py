@@ -64,16 +64,17 @@ def move_form_position(state: Workspace, direction: str) -> None:
     form = state.form
     if form is None or not form.fields:
         return
+    last = len(form.fields)  # Save follows the fields as an actual choice.
     if direction == "focus":
-        form.position = (form.position + 1) % len(form.fields)
+        form.position = (form.position + 1) % (last + 1)
     elif direction == "home":
         form.position = 0
     elif direction == "end":
-        form.position = len(form.fields) - 1
+        form.position = last
     elif direction == "up":
         form.position = max(0, form.position - 1)
     elif direction == "down":
-        form.position = min(len(form.fields) - 1, form.position + 1)
+        form.position = min(last, form.position + 1)
 
 
 def apply_form(state: Workspace, catalog: Catalog) -> int | None:

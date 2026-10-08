@@ -316,7 +316,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                         return "save", 0
                     cancel_form(state)
                 continue
-            if key == "save" or (key == "select" and not form.fields):
+            if key == "save" or (key == "select" and form.position == len(form.fields)):
                 return "save", 0
             if key == "select" and form.fields:
                 start_form_field_session(state, catalog)
