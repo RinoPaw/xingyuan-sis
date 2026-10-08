@@ -16,8 +16,9 @@ def project_record(
     values = dict(row)
     if session is None:
         return values
+    source = session.values if session.preview_values is None else session.preview_values
     for field in session.fields:
-        values[field.key] = session.values.get(field.key)
+        values[field.key] = source.get(field.key)
     return values
 
 
