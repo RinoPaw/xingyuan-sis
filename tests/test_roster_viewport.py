@@ -51,7 +51,7 @@ class RosterViewportTests(unittest.TestCase):
     def test_rows_current_and_render_do_not_reconcile_workspace_state(self):
         size = (120, 42)
         state = workspace.Workspace("students", selected=10**6, roster_scroll=10**6)
-        before = (state.selected, state.roster_scroll, state.roster_gap)
+        before = (state.selected, state.roster_scroll)
 
         state.rows(self.catalog)
         self.assertIsNone(state.current(self.catalog))
@@ -59,7 +59,7 @@ class RosterViewportTests(unittest.TestCase):
             workspace_view.render(state, self.catalog)
 
         self.assertEqual(
-            (state.selected, state.roster_scroll, state.roster_gap),
+            (state.selected, state.roster_scroll),
             before,
         )
 

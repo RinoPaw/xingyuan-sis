@@ -155,7 +155,6 @@ def _page_roster(state: Workspace, catalog: Catalog, direction: str) -> None:
         return
     state.reconcile_roster(len(rows))
     capacity = WorkspaceLayout.measure().roster_capacity(state.key)
-    state.resolve_roster_gap(len(rows), direction, capacity)
     maximum = max(0, len(rows) - capacity)
     delta = capacity if direction == "page_down" else -capacity
     current_first = roster_window(state, len(rows), capacity)
@@ -387,10 +386,6 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             else:
                 _page_roster(state, catalog, key)
         elif key in {"up", "down", "home", "end"}:
-            if state.focus is FocusArea.ROSTER and state.resolve_roster_gap(
-                len(state.rows(catalog)), key
-            ):
-                continue
             amount = -1 if key == "up" else 1
             if wheel and state.key != "data":
                 if wheel_over_details:
@@ -443,14 +438,12 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 state.switch(ACADEMICS[index])
             elif state.key != "data" and index < len(COLLECTIONS[state.key].views):
                 state.view, state.selected, state.roster_scroll = index, 0, 0
-                state.roster_gap = None
                 state.detail_scroll, state.detail_selected = 0, 0
         elif key == "search" and "search" in {command.action for command in commands}:
             state.focus_content()
             return "search", 0
         elif key == "reset-search":
             state.query, state.selected, state.roster_scroll = "", 0, 0
-            state.roster_gap = None
             state.detail_scroll, state.detail_selected = 0, 0
         elif key == "refresh":
             return "refresh", 0

@@ -74,19 +74,18 @@ def move_form_position(state: Workspace, direction: str) -> None:
 
 
 def apply_form(state: Workspace, catalog: Catalog) -> int | None:
-    """Apply one transaction; visual effects are consequences of committed mutations."""
+    """Persist one transaction, then reconcile its selection and focus."""
     catalog.require_write()
     form = state.form
     if form is None:
         return None
 
     record_id: int | None = None
-    deleting_position: int | None = None
+    deleting_position = state.selected
 
     if form.mode == "create":
         values = {field.key: form.values.get(field.key) for field in form.fields}
         record_id = catalog.save(state.key, values)
-        state.roster_gap = None
         rows = state.rows(catalog)
         created_index = next((i for i, row in enumerate(rows) if row["id"] == record_id), None)
         if created_index is not None:
@@ -104,8 +103,6 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
         catalog.initial_password = None
         state.notice = f"已重置密码为 {INITIAL_STUDENT_PASSWORD}；学生下次登录必须修改密码。"
     elif form.mode == "delete":
-        if state.key == "students":
-            deleting_position = state.selected
         catalog.delete(state.key, form.original)
         state.notice = "记录已删除。"
     elif form.mode == "seed":
@@ -137,11 +134,12 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
         and any(row["id"] == record_id for row in state.rows(catalog))
     )
     if form.mode == "delete":
-        if state.key == "students" and deleting_position is not None:
-            rows = state.rows(catalog)
-            state.leave_roster_gap(min(deleting_position, len(rows)))
-        else:
-            state.restore_focus_context(form.return_to)
+        # The next item now occupies the deleted row's position. At the end
+        # of the roster, select the previous one; an empty roster has none.
+        rows = state.rows(catalog)
+        state.select_row(min(deleting_position, max(0, len(rows) - 1)))
+        state.detail_scroll, state.detail_selected = 0, 0
+        state.set_focus(FocusArea.ROSTER)
     elif created_visible:
         state.set_focus(FocusArea.INSPECTOR)
         state.detail_scroll, state.detail_selected = 0, 0
@@ -184,6 +182,5 @@ def read_search(state: Workspace, catalog: Catalog) -> None:
             state.notice = f"未完成：{exc}"
             return
     state.query, state.selected, state.roster_scroll = raw, 0, 0
-    state.roster_gap = None
     state.detail_scroll, state.detail_selected = 0, 0
     state.notice = f"搜索：{raw}" if raw else "已显示全部记录。"

@@ -55,11 +55,10 @@ def run(
                 row = state.current(catalog)
                 catalog.refresh()
                 rows = state.rows(catalog)
-                if state.roster_gap is None:
-                    state.selected = next(
-                        (i for i, record in enumerate(rows) if row and record["id"] == row["id"]),
-                        0,
-                    )
+                state.selected = next(
+                    (i for i, record in enumerate(rows) if row and record["id"] == row["id"]),
+                    0,
+                )
                 state.reconcile_roster(len(rows))
                 state.notice = "已刷新。"
         except KeyboardInterrupt:

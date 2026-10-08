@@ -142,58 +142,85 @@ class WorkspaceActionTests(unittest.TestCase):
             detail_selected=5,
         )
         original = state.current(self.catalog)
+        successor = state.rows(self.catalog)[5]
         workspace_forms.open_form(state, self.catalog, "delete")
         workspace_forms.apply_form(state, self.catalog)
 
         self.assertIsNone(self.catalog.service.student_by_no(original["student_no"]))
         self.assertEqual(state.focus, workspace.FocusArea.ROSTER)
         self.assertEqual(state.content_panel, workspace.ContentPanel.ROSTER)
-        self.assertEqual(state.roster_gap, 4)
+        self.assertEqual(state.selected, 4)
+        self.assertEqual(state.current(self.catalog)["id"], successor["id"])
         self.assertEqual(state.detail_scroll, 0)
         self.assertEqual(state.detail_selected, 0)
 
-    def test_deleted_student_can_leave_an_empty_slot_until_up_or_down_selects_a_neighbor(self):
+    def test_deleting_middle_student_selects_next_and_keeps_arrow_navigation(self):
         state = workspace.Workspace("students", selected=4)
-        original = state.current(self.catalog)
+        before = state.rows(self.catalog)
+        deleted, successor, predecessor = before[4], before[5], before[3]
         workspace_forms.open_form(state, self.catalog, "delete")
         workspace_forms.apply_form(state, self.catalog)
-        rows = state.rows(self.catalog)
-        state.leave_roster_gap(4)
 
-        self.assertIsNone(self.catalog.service.student_by_no(original["student_no"]))
-        self.assertIsNone(state.current(self.catalog))
-        self.assertEqual(state.roster_gap, 4)
+        self.assertIsNone(self.catalog.service.student_by_no(deleted["student_no"]))
+        self.assertEqual(state.selected, 4)
+        self.assertEqual(state.current(self.catalog)["id"], successor["id"])
         self.assertEqual(state.focus, workspace.FocusArea.ROSTER)
 
         with patch.object(keys, "_read_key", side_effect=["up", "refresh"]), \
-             patch.object(screen, "_paint"), patch.object(
-                 screen, "_terminal_size", return_value=os.terminal_size((120, 35))
-             ):
+             patch.object(screen, "_paint"), \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             workspace_events.interact(state, self.catalog)
-        self.assertIsNone(state.roster_gap)
-        self.assertEqual(state.current(self.catalog)["id"], rows[3]["id"])
+        self.assertEqual(state.current(self.catalog)["id"], predecessor["id"])
 
-        state.leave_roster_gap(4)
         with patch.object(keys, "_read_key", side_effect=["down", "refresh"]), \
-             patch.object(screen, "_paint"), patch.object(
-                 screen, "_terminal_size", return_value=os.terminal_size((120, 35))
-             ):
+             patch.object(screen, "_paint"), \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             workspace_events.interact(state, self.catalog)
-        self.assertIsNone(state.roster_gap)
-        self.assertEqual(state.current(self.catalog)["id"], rows[4]["id"])
+        self.assertEqual(state.current(self.catalog)["id"], successor["id"])
 
-    def test_return_to_roster_resolves_gap_to_the_next_student(self):
-        state = workspace.Workspace("students", selected=4)
-        rows = state.rows(self.catalog)
-        state.leave_roster_gap(4)
-        self.assertIsNone(state.current(self.catalog))
+    def test_deleting_final_student_selects_previous(self):
+        rows = self.catalog.rows("students")
+        state = workspace.Workspace("students", selected=len(rows) - 1)
+        workspace_forms.open_form(state, self.catalog, "delete")
+        workspace_forms.apply_form(state, self.catalog)
 
-        state.set_focus(workspace.FocusArea.INSPECTOR)
-        state.focus_roster()
-
+        self.assertEqual(state.selected, len(rows) - 2)
+        self.assertEqual(state.current(self.catalog)["id"], rows[-2]["id"])
         self.assertEqual(state.focus, workspace.FocusArea.ROSTER)
-        self.assertIsNone(state.roster_gap)
-        self.assertEqual(state.current(self.catalog)["id"], rows[4]["id"])
+
+    def test_deleting_only_visible_student_leaves_no_selection(self):
+        student = self.catalog.rows("students")[0]
+        state = workspace.Workspace("students", query=f"--no {student['student_no']}")
+        self.assertEqual(len(state.rows(self.catalog)), 1)
+        workspace_forms.open_form(state, self.catalog, "delete")
+        workspace_forms.apply_form(state, self.catalog)
+
+        self.assertFalse(state.rows(self.catalog))
+        self.assertIsNone(state.current(self.catalog))
+        self.assertEqual(state.selected, 0)
+        self.assertEqual(state.focus, workspace.FocusArea.ROSTER)
+
+    def test_deleting_other_collection_also_selects_next(self):
+        rows = self.catalog.rows("grades")
+        self.assertGreater(len(rows), 1)
+        state = workspace.Workspace("grades")
+        workspace_forms.open_form(state, self.catalog, "delete")
+        workspace_forms.apply_form(state, self.catalog)
+
+        self.assertEqual(state.selected, 0)
+        self.assertEqual(state.current(self.catalog)["id"], rows[1]["id"])
+        self.assertEqual(state.focus, workspace.FocusArea.ROSTER)
+
+    def test_failed_delete_keeps_form_and_selection(self):
+        state = workspace.Workspace("students", selected=4)
+        original = state.current(self.catalog)
+        workspace_forms.open_form(state, self.catalog, "delete")
+        with patch.object(self.catalog, "delete", side_effect=ValueError("删除失败")):
+            with self.assertRaisesRegex(ValueError, "删除失败"):
+                workspace_forms.apply_form(state, self.catalog)
+        self.assertIsNotNone(state.form)
+        self.assertEqual(state.selected, 4)
+        self.assertEqual(state.current(self.catalog)["id"], original["id"])
 
     def test_wide_delete_keeps_roster_and_replaces_inspector_with_aligned_panel(self):
         state = workspace.Workspace("students", selected=1)

@@ -11,7 +11,6 @@ class _State:
     key = "students"
     selected = 0
     roster_scroll = 0
-    roster_gap = None
     focus = FocusArea.ROSTER
     form = None
     query = ""

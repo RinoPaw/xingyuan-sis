@@ -104,9 +104,6 @@ class Workspace:
     query: str = ""
     selected: int = 0
     roster_scroll: int = 0
-    # A deletion keeps only a logical insertion point between remaining rows:
-    # up selects index-1, down selects index. It never occupies a rendered row.
-    roster_gap: int | None = None
     focus: FocusArea = FocusArea.ROSTER
     content_panel: ContentPanel = ContentPanel.ROSTER
     detail_scroll: int = 0
@@ -128,70 +125,18 @@ class Workspace:
     def reconcile_roster(self, row_count: int) -> None:
         """Normalize roster interaction state after an explicit state/data mutation."""
         row_count = max(0, row_count)
-        if self.roster_gap is None:
-            self.selected = min(max(0, self.selected), max(0, row_count - 1))
-        else:
-            self.roster_gap = min(max(0, self.roster_gap), row_count)
+        self.selected = min(max(0, self.selected), max(0, row_count - 1))
         self.roster_scroll = min(max(0, self.roster_scroll), max(0, row_count - 1))
 
     def current(self, catalog: Catalog) -> dict[str, Any] | None:
         rows = self.rows(catalog)
-        if self.roster_gap is not None or not 0 <= self.selected < len(rows):
+        if not 0 <= self.selected < len(rows):
             return None
         return rows[self.selected]
 
     def select_row(self, index: int) -> None:
-        """Select a real roster record and leave any deletion gap behind."""
+        """Select a real roster record."""
         self.selected = max(0, index)
-        self.roster_gap = None
-
-    def leave_roster_gap(self, index: int) -> None:
-        """Remember the deleted record's position without selecting a neighbor."""
-        self.roster_gap = max(0, index)
-        self.detail_scroll = 0
-        self.detail_selected = 0
-        self.set_focus(FocusArea.ROSTER)
-
-    def resume_roster_gap(self) -> bool:
-        """Resume browsing at the record immediately below a deletion gap."""
-        if self.roster_gap is None:
-            return False
-        self.select_row(self.roster_gap)
-        self.detail_scroll = 0
-        self.detail_selected = 0
-        return True
-
-    def resolve_roster_gap(
-        self,
-        row_count: int,
-        direction: str,
-        page_size: int = 1,
-    ) -> bool:
-        """Resolve keyboard navigation away from a deleted record's logical position."""
-        gap = self.roster_gap
-        if gap is None:
-            return False
-
-        if direction == "up":
-            target = gap - 1 if gap > 0 else None
-        elif direction == "down":
-            target = gap if gap < row_count else None
-        elif direction == "home":
-            target = 0 if row_count else None
-        elif direction == "end":
-            target = row_count - 1 if row_count else None
-        elif direction == "page_up":
-            target = max(0, gap - page_size) if row_count else None
-        elif direction == "page_down":
-            target = min(row_count - 1, gap + page_size - 1) if row_count else None
-        else:
-            raise ValueError(f"未知花名册导航：{direction}")
-
-        if target is not None:
-            self.select_row(target)
-            self.detail_scroll = 0
-            self.detail_selected = 0
-        return True
 
     def set_focus(self, area: FocusArea) -> None:
         """Move keyboard focus while keeping the content-panel invariant."""
@@ -202,8 +147,7 @@ class Workspace:
             self.content_panel = ContentPanel.INSPECTOR
 
     def focus_roster(self) -> None:
-        """Return to record selection, resolving any deleted-row gap."""
-        self.resume_roster_gap()
+        """Return to record selection."""
         self.set_focus(FocusArea.ROSTER)
 
     def focus_content(self) -> None:
@@ -235,7 +179,6 @@ class Workspace:
 
     def switch(self, key: str) -> None:
         self.key, self.view, self.query, self.selected, self.roster_scroll = key, 0, "", 0, 0
-        self.roster_gap = None
         self.focus = FocusArea.DASHBOARD if key == "data" else FocusArea.ROSTER
         self.content_panel = ContentPanel.ROSTER
         self.detail_scroll, self.detail_selected = 0, 0

@@ -184,15 +184,7 @@ def directional_target(lines: list[Line], current: str, direction: str) -> str |
 def empty_inspector_content(state: Workspace, catalog: Catalog) -> tuple[str, str, str, str]:
     """Return the one semantic definition used to size and render an empty archive."""
     heading = "档案"
-    message = (
-        "当前未选择学生"
-        if state.key == "students" and state.roster_gap is not None
-        else "没有匹配的记录"
-        if state.query
-        else "暂无记录"
-    )
-    if state.roster_gap is not None:
-        return heading, message, "", ""
+    message = "没有匹配的记录" if state.query else "暂无记录"
     if state.query:
         return heading, message, "清除搜索", "reset-search"
     if not catalog.read_only:

@@ -50,8 +50,10 @@ class WorkspaceFlowTests(unittest.TestCase):
         )
         self.assertEqual(state.form.mode, "delete")
         self.assertEqual(state.form.original["id"], original["id"])
+        successor = state.rows(self.catalog)[18]
         forms.apply_form(state, self.catalog)
         self.assertIsNone(self.catalog.service.student_by_no(original["student_no"]))
+        self.assertEqual(state.current(self.catalog)["id"], successor["id"])
 
     def test_tab_cycles_only_existing_content_panels_and_preserves_record_scroll(self):
         state = Workspace("students", selected=40, roster_scroll=30)

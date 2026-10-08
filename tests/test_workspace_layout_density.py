@@ -19,6 +19,7 @@ class WorkspaceLayoutDensityTests(unittest.TestCase):
         self.temp = TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         db = Path(self.temp.name) / "test.db"
+        self.db = db
         initialize_database(db)
         seed_demo(db)
         self.catalog = Catalog(db)
@@ -45,14 +46,14 @@ class WorkspaceLayoutDensityTests(unittest.TestCase):
         self.assertLessEqual(width, 42)
 
     def test_empty_student_inspector_releases_unused_width_to_roster(self):
-        state = Workspace("students")
-        state.leave_roster_gap(0)
+        empty_db = self.db.with_name("empty.db")
+        initialize_database(empty_db)
+        empty_catalog = Catalog(empty_db)
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((160, 35))):
-            layout = workspace_layout(state, self.catalog)
-        self.assertEqual(layout.inspector_width, 16)
-        self.assertEqual(layout.panel_width, 16)
-        self.assertGreaterEqual(layout.split_x, 139)
-        self.assertLessEqual(layout.split_x, 140)
+            layout = workspace_layout(Workspace("students"), empty_catalog)
+        self.assertLess(layout.inspector_width, 28)
+        self.assertEqual(layout.panel_width, layout.inspector_width)
+        self.assertGreater(layout.split_x, 128)
 
     def test_class_relationship_uses_major_and_local_number_once(self):
         row = next(row for row in self.catalog.rows("students") if row.get("class_code"))
