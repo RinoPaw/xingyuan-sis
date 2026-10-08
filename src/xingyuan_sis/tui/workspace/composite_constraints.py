@@ -1,4 +1,4 @@
-"""Dependent values in composite fields are normalized at input boundaries."""
+"""Normalize composite values only when their available domain changes."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,9 +8,11 @@ from typing import Any, Callable, Mapping, MutableMapping
 @dataclass(frozen=True)
 class Dependency:
     field: str
-    policy: str  # "clear" or "clamp"
+    policy: str  # "clear" for selection changes, "clamp" for numeric bounds
 
 
+# Domain dependencies belong to the data model, not to input-event branches.
+# Unrelated fields (for example element and affinity) have no dependency edge.
 _RULES: dict[tuple[str, str], tuple[Dependency, ...]] = {
     ("students", "family"): (Dependency("branch", "clear"),),
     ("students", "major_code"): (Dependency("class_number", "clear"),),
@@ -21,48 +23,64 @@ _RULES: dict[tuple[str, str], tuple[Dependency, ...]] = {
     ("students", "dorm_building"): (Dependency("dorm_room", "clear"),),
     ("students", "birth_year"): (Dependency("birth_day", "clamp"),),
     ("students", "birth_month"): (Dependency("birth_day", "clamp"),),
-    ("students", "birth_day"): (Dependency("birth_day", "clamp"),),
 }
+
+Domain = Callable[[str, Mapping[str, Any]], list[tuple[Any, str]] | None]
+
+
+def clamp_to_domain(value: Any, domain: list[tuple[Any, str]] | None) -> Any:
+    """Constrain a *confirmed* numeric value to the nearest allowed number."""
+    if value is None:
+        return None
+    allowed = [choice for choice, _ in domain or () if type(choice) is int]
+    if not allowed:
+        return value
+    try:
+        numeric = int(value)
+    except (TypeError, ValueError):
+        return value
+    if numeric in allowed:
+        return numeric
+    return min(allowed, key=lambda choice: (abs(choice - numeric), choice))
 
 
 def reconcile(
     collection: str,
-    changed_field: str,
-    previous: Any,
+    before: Mapping[str, Any],
     values: MutableMapping[str, Any],
-    options_for: Callable[[str, Mapping[str, Any]], list[tuple[Any, str]] | None],
+    options_for: Domain,
 ) -> set[str]:
-    """Clear obsolete child selections or clamp values into the new domain.
+    """Recheck a child only if a changed parent actually changes its domain.
 
-    Parent changes invalidate their child selection even if two parents happen
-    to admit the same label. Numeric constraints preserve the nearest valid
-    value instead of discarding it.
+    Compare possible *values*, not labels or parent identities. Thus changing
+    an independent field triggers no normalization, and changing a parent
+    whose child choices remain identical leaves that child untouched.
     """
-    if previous == values.get(changed_field):
-        return set()
     changed: set[str] = set()
-    for dependency in _RULES.get((collection, changed_field), ()):
-        old = values.get(dependency.field)
-        if old is None:
-            continue
-        if dependency.policy == "clear":
-            new: Any = None
-        else:
-            options = options_for(dependency.field, values)
-            allowed = [value for value, _ in options or () if type(value) is int]
-            if not allowed:
+    # A normalized intermediate field can change domains farther downstream.
+    for _ in range(1 + len(_RULES)):
+        progress = False
+        for (owner, parent), dependencies in _RULES.items():
+            if owner != collection or before.get(parent) == values.get(parent):
                 continue
-            try:
-                numeric = int(old)
-            except (TypeError, ValueError):
-                new = None
-            else:
-                # A valid masked value such as "09" needs no rewrite just
-                # because its underlying option domain was recomputed.
-                new = old if numeric in allowed else min(
-                    allowed, key=lambda value: (abs(value - numeric), value)
+            for dependency in dependencies:
+                old_domain = options_for(dependency.field, before)
+                new_domain = options_for(dependency.field, values)
+                old_choices = tuple(value for value, _ in old_domain or ())
+                new_choices = tuple(value for value, _ in new_domain or ())
+                if old_choices == new_choices:
+                    continue
+                current = values.get(dependency.field)
+                if current is None:
+                    continue
+                normalized = (
+                    None if dependency.policy == "clear"
+                    else clamp_to_domain(current, new_domain)
                 )
-        if new != old:
-            values[dependency.field] = new
-            changed.add(dependency.field)
+                if current != normalized:
+                    values[dependency.field] = normalized
+                    changed.add(dependency.field)
+                    progress = True
+        if not progress:
+            break
     return changed
