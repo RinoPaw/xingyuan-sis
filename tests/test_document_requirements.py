@@ -130,8 +130,14 @@ class DocumentRequirementTests(unittest.TestCase):
         self.assertIsNone(self.service.student_by_no("00990002"))
         exported = self.root / "export.csv"
         self.service.export_students(exported)
-        self.assertNotIn(password, exported.read_text(encoding="utf-8-sig"))
-        self.assertNotIn("password", exported.read_text(encoding="utf-8-sig"))
+        exported_text = exported.read_text(encoding="utf-8-sig")
+        header = exported_text.splitlines()[0].split(",")
+        self.assertNotIn("password_hash", header)
+        self.assertNotIn("password", header)
+        self.assertNotIn("must_change_password", header)
+        # An initial password may coincidentally equal the student number.
+        if password != no:
+            self.assertNotIn(password, exported_text)
 
     def test_announcements_persist_and_follow_the_students_current_class(self):
         classes = self.service.list_classes()
