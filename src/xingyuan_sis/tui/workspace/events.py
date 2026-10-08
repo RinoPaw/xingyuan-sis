@@ -127,6 +127,26 @@ def move_detail_selection(state: Workspace, catalog: Catalog, direction: str) ->
     reveal_detail_selection(state, catalog)
 
 
+def _move_roster_selection(state: Workspace, catalog: Catalog, direction: str) -> None:
+    """Move the selection and persist the visible roster window at its edge."""
+    from .roster import roster_window
+
+    rows = state.rows(catalog)
+    capacity = WorkspaceLayout.measure().roster_capacity(state.key)
+    first = roster_window(state, len(rows), capacity)
+    if direction == "home":
+        target = 0
+    elif direction == "end":
+        target = len(rows) - 1
+    else:
+        target = state.selected + (-1 if direction == "up" else 1)
+
+    state.selected = min(max(0, target), max(0, len(rows) - 1))
+    state.roster_scroll = visible_start(state.selected, len(rows), capacity, first)
+    state.detail_scroll = 0
+    state.detail_selected = 0
+
+
 def _page_roster(state: Workspace, catalog: Catalog, direction: str) -> None:
     from .roster import roster_window
 
@@ -443,22 +463,7 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 elif key == "end":
                     state.detail_scroll = 10**6
             else:
-                from .roster import roster_window
-
-                rows = state.rows(catalog)
-                capacity = WorkspaceLayout.measure().roster_capacity(state.key)
-                first = roster_window(state, len(rows), capacity)
-                state.selected += amount
-                if key == "home":
-                    state.selected = 0
-                elif key == "end":
-                    state.selected = len(rows) - 1
-                state.selected = min(max(0, state.selected), max(0, len(rows) - 1))
-                # Persist the viewport that was actually displayed. Otherwise
-                # navigation re-anchors to a stale roster_scroll on the next paint.
-                state.roster_scroll = visible_start(state.selected, len(rows), capacity, first)
-                state.detail_scroll = 0
-                state.detail_selected = 0
+                _move_roster_selection(state, catalog, key)
         elif (isinstance(key, str) and key.startswith("view:")) or key in {"1", "2", "3", "4"}:
             state.focus_content()
             index = int(key.split(":")[1]) if key.startswith("view:") else int(key) - 1
