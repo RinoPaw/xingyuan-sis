@@ -47,8 +47,7 @@ def _fit_columns(
     if not columns:
         return []
 
-    separators = len(columns) - 1
-    usable = max(1, available - separators)
+    # On extremely narrow terminals, omit trailing columns before shrinking\n    # the remaining ones below the width required by their headings.\n    while len(columns) > 1 and (\n        sum(screen._display_width(column[1]) for column in columns)\n        + len(columns) - 1 > available\n    ):\n        columns.pop()\n\n    separators = len(columns) - 1\n    usable = max(1, available - separators)
     widths = [column[2] for column in columns]
     shortage = max(0, sum(widths) - usable)
 
@@ -77,7 +76,7 @@ def _fit_columns(
         shortage -= 1
 
     return [
-        [key, label, max(1, width)]
+        [key, label, max(1, min(width, usable))]
         for (key, label, _natural, _target), width in zip(columns, widths)
     ]
 
