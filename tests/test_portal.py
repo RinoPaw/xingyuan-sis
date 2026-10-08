@@ -17,7 +17,7 @@ class PortalLayoutTests(unittest.TestCase):
         self.assertIn("首页", text)
         self.assertIn("教务", text)
         self.assertIn("个人中心", text)
-        self.assertIn("退出登录", text)
+        self.assertNotIn("退出登录", text)
         self.assertIn("星原学生信息系统", text)
         self.assertIn("公告", text)
         self.assertIn("暂无公告", text)
@@ -123,7 +123,6 @@ class PortalLayoutTests(unittest.TestCase):
             (1, "secondary", {1: 0}),
             (2, "primary", {2: 0}),
             (2, "secondary", {2: 0}),
-            (3, "primary", {}),
         )
         footers: list[str] = []
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((100, 24))):
@@ -150,8 +149,7 @@ class PortalLayoutTests(unittest.TestCase):
                 )
                 self.assertEqual(navigate(0, "primary", 0, "focus"), (1, "primary", 0))
                 self.assertEqual(navigate(1, "primary", 0, "focus"), (2, "primary", 0))
-                self.assertEqual(navigate(2, "primary", 0, "focus"), (3, "primary", 0))
-                self.assertEqual(navigate(3, "primary", 0, "focus"), (0, "primary", 0))
+                self.assertEqual(navigate(2, "primary", 0, "focus"), (0, "primary", 0))
                 self.assertEqual(navigate(1, "primary", 1, "select"), (1, "secondary", 1))
                 self.assertEqual(navigate(1, "primary", 1, "right"), (1, "secondary", 1))
                 for parent in (1, 2):
@@ -182,7 +180,7 @@ class PortalLayoutTests(unittest.TestCase):
             service_type.return_value.stats.return_value = {}
             service_type.return_value.list_announcements.return_value = []
             self.assertIsNone(app._portal_home(None, selected=0, preferences=preferences))
-        self.assertEqual(preferences["portal_selected"], 3)
+        self.assertEqual(preferences["portal_selected"], 0)
         self.assertEqual(preferences["portal_focus"], "primary")
         self.assertEqual(preferences["portal_secondary"].get(1, 0), 0)
 
@@ -254,30 +252,44 @@ class PortalLayoutTests(unittest.TestCase):
             self.assertIsNone(app._portal_home(None, selected=0, preferences=preferences))
         self.assertFalse(preferences["animate"])
 
-    def test_logout_is_an_explicit_action_not_a_right_arrow_destination(self) -> None:
-        identity = Identity("Administrator", "admin")
-        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((100, 24))):
-            frame = portal.frame(identity, 3, "primary", {}, {}, 0, animate=False)
-        text = "\n".join(screen._ANSI_RE.sub("", line) for line in frame.lines)
-        self.assertIn("Enter 退出当前账户", text)
-        self.assertNotIn("→ 退出当前账户", text)
+    def test_logout_is_a_profile_action_for_both_roles(self) -> None:
+        for identity in (
+            Identity("Administrator", "admin"),
+            Identity("20260001", "student", "20260001"),
+        ):
+            with self.subTest(role=identity.role):
+                items = portal.secondary_items(identity, 2)
+                self.assertEqual(items[-1], portal.MenuItem("退出登录", "logout"))
+                preferences: dict[str, object] = {
+                    "identity": identity,
+                    "portal_selected": 2,
+                    "portal_focus": "primary",
+                    "portal_secondary": {2: len(items) - 1},
+                    "animate": False,
+                }
+                with patch("xingyuan_sis.service.XingyuanService") as service_type, \
+                     patch.object(app.screen, "_clear"), patch.object(app.screen, "_paint"), \
+                     patch.object(app.screen, "_terminal_size", return_value=os.terminal_size((100, 24))), \
+                     patch.object(app.keys, "_mouse_tracking", return_value=nullcontext()), \
+                     patch.object(app.keys, "_read_key", side_effect=["select", "select"]):
+                    service_type.return_value.stats.return_value = {}
+                    service_type.return_value.list_announcements.return_value = []
+                    self.assertEqual(
+                        app._portal_home(None, selected=2, preferences=preferences),
+                        "logout",
+                    )
+                self.assertEqual(preferences["portal_selected"], 2)
+                self.assertEqual(preferences["portal_focus"], "secondary")
 
-        preferences: dict[str, object] = {
-            "identity": identity,
-            "portal_selected": 3,
-            "portal_focus": "primary",
-            "animate": False,
-        }
-        with patch("xingyuan_sis.service.XingyuanService") as service_type, \
-             patch.object(app.screen, "_clear"), \
-             patch.object(app.screen, "_paint"), \
-             patch.object(app.screen, "_terminal_size", return_value=os.terminal_size((100, 24))), \
-             patch.object(app.keys, "_mouse_tracking", return_value=nullcontext()), \
-             patch.object(app.keys, "_read_key", side_effect=["right", "back"]) as read_key:
-            service_type.return_value.stats.return_value = {}
-            service_type.return_value.list_announcements.return_value = []
-            self.assertIsNone(app._portal_home(None, selected=3, preferences=preferences))
-        self.assertEqual(read_key.call_count, 2)
+    def test_profile_logout_is_visible_and_clickable_in_wide_and_narrow_layouts(self) -> None:
+        identity = Identity("Administrator", "admin")
+        for size in ((100, 24), (26, 18)):
+            with self.subTest(size=size), \
+                 patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
+                frame = portal.frame(identity, 2, "secondary", {2: 2}, {}, 0, animate=False)
+                text = "\n".join(screen._ANSI_RE.sub("", line) for line in frame.lines)
+                self.assertIn("退出登录", text)
+                self.assertTrue(any(region.action == "secondary:2" for region in frame.regions))
 
     def test_extreme_narrow_width_hides_preview_but_entered_menu_still_renders(self) -> None:
         identity = Identity("Administrator", "admin")
@@ -297,7 +309,7 @@ class PortalLayoutTests(unittest.TestCase):
     def test_student_and_admin_share_primary_navigation_but_not_admin_operations(self) -> None:
         admin = Identity("Administrator", "admin")
         student = Identity("20260001", "student", "20260001")
-        self.assertEqual(portal.PRIMARY_LABELS, ("首页", "教务", "个人中心", "退出登录"))
+        self.assertEqual(portal.PRIMARY_LABELS, ("首页", "教务", "个人中心"))
         self.assertGreater(len(portal.secondary_items(admin, 1)), 1)
         self.assertEqual(
             [item.label for item in portal.secondary_items(student, 1)],
@@ -305,7 +317,7 @@ class PortalLayoutTests(unittest.TestCase):
         )
         self.assertEqual(
             [item.label for item in portal.secondary_items(student, 2)],
-            ["个人数据", "修改密码"],
+            ["个人数据", "修改密码", "退出登录"],
         )
 
 
