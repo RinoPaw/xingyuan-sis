@@ -110,65 +110,28 @@ def _portal_home(
                 elif action:
                     key = action
 
-            if key == "focus":
-                selected, focus, next_secondary = portal.next_tab_target(
-                    identity, selected, focus, secondary
-                )
-                if focus == "secondary":
-                    secondary_selected[selected] = next_secondary
+            if focus == "primary" and selected == 0:
+                key = resolve_shortcut(key, (portal.TOGGLE_ANIMATION,))
+            if key == portal.TOGGLE_ANIMATION.action and focus == "primary":
+                preferences["animate"] = not animate
                 continue
-
-            if focus == "primary":
-                if selected == 0:
-                    key = resolve_shortcut(key, (portal.TOGGLE_ANIMATION,))
-                if key == "up":
-                    selected = (selected - 1) % len(portal.PRIMARY_LABELS)
-                elif key == "down":
-                    selected = (selected + 1) % len(portal.PRIMARY_LABELS)
-                elif key == "home":
-                    selected = 0
-                elif key == "end":
-                    selected = len(portal.PRIMARY_LABELS) - 1
-                elif key in tuple("1234"):
-                    selected = int(key) - 1
-                elif key == portal.TOGGLE_ANIMATION.action:
-                    preferences["animate"] = not animate
-                elif key == "select":
-                    if selected == 3:
-                        return "logout"
-                    if items:
-                        focus = "secondary"
-                elif key == "right" and items:
-                    focus = "secondary"
-                elif key == "back":
-                    return None
-                continue
+            if key == "back" and focus == "primary":
+                return None
+            if key == "select":
+                if focus == "secondary" and items:
+                    return items[secondary].action
+                if focus == "primary" and selected == 3:
+                    return "logout"
 
             terminal = screen._terminal_size()
-            columns = portal.secondary_columns(max(1, terminal.columns - 1), focus, height=terminal.lines)
-            if key == "up":
-                secondary = max(0, secondary - columns)
-            elif key == "down":
-                secondary = min(len(items) - 1, secondary + columns)
-            elif key == "left":
-                if secondary % columns == 0:
-                    focus = "primary"
-                else:
-                    secondary -= 1
-            elif key == "right":
-                next_index = secondary + 1
-                if next_index < len(items) and next_index // columns == secondary // columns:
-                    secondary = next_index
-            elif key == "home":
-                secondary = 0
-            elif key == "end":
-                secondary = max(0, len(items) - 1)
-            elif key == "back":
-                focus = "primary"
-            elif key == "select" and items:
+            columns = portal.secondary_columns(
+                max(1, terminal.columns - 1), focus, height=terminal.lines
+            )
+            selected, focus, secondary = portal.navigate(
+                identity, selected, focus, secondary, key, columns
+            )
+            if focus == "secondary":
                 secondary_selected[selected] = secondary
-                return items[secondary].action
-            secondary_selected[selected] = secondary
 
 
 def _workspace(db_path: Path | str | None, key: str) -> None:
