@@ -10,7 +10,6 @@ class Command:
     action: str
     label: str
     shortcut: str | None = None
-    toolbar: bool = True
 
     @property
     def hint(self) -> str:
