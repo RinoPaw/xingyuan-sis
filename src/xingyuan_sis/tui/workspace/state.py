@@ -71,6 +71,8 @@ class FieldSession:
     active: int = 0
     options: list[tuple[Any, str]] | None = None
     option_index: int = 0
+    # Unconfirmed masked text is previewed without modifying confirmed values.
+    preview_values: dict[str, Any] | None = None
 
     @property
     def field(self) -> Field:
