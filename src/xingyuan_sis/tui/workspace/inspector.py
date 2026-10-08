@@ -260,10 +260,8 @@ def render_inspector(
     else:
         targets = action_targets(lines)
         if targets and state.detail_selected >= 0:
-            state.detail_selected = min(state.detail_selected, len(targets) - 1)
-            target_line, selected_action = targets[state.detail_selected]
-        elif not targets:
-            state.detail_selected = -1
+            selected_index = min(state.detail_selected, len(targets) - 1)
+            target_line, selected_action = targets[selected_index]
 
     spans = action_line_map(lines, include_options=True)
     occupied = spans.get(selected_action, [target_line]) if selected_action else [target_line]
@@ -271,15 +269,15 @@ def render_inspector(
         target_line = occupied[0]
 
     max_scroll = max(0, len(lines) - capacity)
-    state.detail_scroll = min(max(0, state.detail_scroll), max_scroll)
+    scroll = min(max(0, state.detail_scroll), max_scroll)
     if session is not None or (focused and selected_action):
-        first_visible = state.detail_scroll
-        last_visible = state.detail_scroll + capacity - 1
+        first_visible = scroll
+        last_visible = scroll + capacity - 1
         if not any(first_visible <= line <= last_visible for line in occupied):
             target_line = occupied[-1] if occupied[-1] < first_visible else occupied[0]
-            state.detail_scroll = visible_start(target_line, len(lines), capacity, state.detail_scroll)
+            scroll = visible_start(target_line, len(lines), capacity, scroll)
 
-    visible = lines[state.detail_scroll:state.detail_scroll + capacity]
+    visible = lines[scroll:scroll + capacity]
     show_selection_marker = session is None or session.options is not None
     for offset_in_view, segments in enumerate(visible):
         y = top + offset_in_view
