@@ -325,6 +325,20 @@ class XingyuanService:
         if is_complete_birth_date(effective_birth_date):
             values["age"] = None
 
+        if "family" in values and "branch" not in values and values["family"] != row["family"]:
+            # A changed parent invalidates a child only when the effective
+            # set of allowed branch values changes, never just its order.
+            branches = self.list_species_branches()
+            old_domain = {
+                item["name"] for item in branches
+                if item["family_name"] == row["family"]
+            }
+            new_domain = {
+                item["name"] for item in branches
+                if item["family_name"] == values["family"]
+            }
+            if old_domain != new_domain:
+                values["branch"] = None
         if "family" in values or "branch" in values:
             family = values.pop("family", row["family"])
             branch = values.pop("branch", row["branch"])

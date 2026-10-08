@@ -109,7 +109,7 @@ class CliBasicAcceptanceTests(unittest.TestCase):
     def test_cli_add_student_without_branch_uses_database_null(self):
         code, out, error = self.cli(
             "stu", "add", "--no", "29990191", "--name", "空支系学生",
-            "--family", self.family, "--year", "2026", answers=[""],
+            "--family", self.family, "--year", "2026", answers=[],
         )
         self.assertEqual((code, error), (0, ""), out + error)
         row = self.service.student_by_no("29990191")
@@ -148,6 +148,37 @@ class CliBasicAcceptanceTests(unittest.TestCase):
                 self.assertNotEqual(code, 0)
                 self.assertIn("操作失败", error)
                 self.assertIsNone(self.service.student_by_no(student_no))
+
+    def test_cli_explicit_no_branch_flag_and_family_change(self):
+        no = self.sample["student_no"]
+        old_family = self.sample["family"]
+        old_domain = {
+            row["name"] for row in self.service.list_species_branches()
+            if row["family_name"] == old_family
+        }
+        next_family = next(
+            row["name"] for row in self.service.list_species_families()
+            if row["name"] != old_family and {
+                branch["name"] for branch in self.service.list_species_branches()
+                if branch["family_name"] == row["name"]
+            } != old_domain
+        )
+        code, out, error = self.cli("stu", "edit", no, "--family", next_family)
+        self.assertEqual((code, error), (0, ""), out + error)
+        changed = self.service.student_by_no(no)
+        self.assertEqual(changed["family"], next_family)
+        self.assertIsNone(changed["branch"])
+        code, out, error = self.cli("stu", "edit", no, "--no-branch")
+        self.assertEqual((code, error), (0, ""), out + error)
+        self.assertIsNone(self.service.student_by_no(no)["branch"])
+
+    def test_cli_branch_clear_flag_is_exclusive_with_branch_choice(self):
+        from xingyuan_sis.cli.parser import build_parser
+        with redirect_stderr(StringIO()), self.assertRaises(SystemExit) as caught:
+            build_parser().parse_args(
+                ["stu", "edit", "20000001", "--branch", "灰狼", "--no-branch"]
+            )
+        self.assertEqual(caught.exception.code, 2)
 
     def test_cli_identity_fields_immutable_and_failed_update_atomic(self):
         no = self.sample["student_no"]
@@ -302,7 +333,7 @@ class CliBasicAcceptanceTests(unittest.TestCase):
         self.assertIsNotNone(self.service.student_by_no("29990195"))
 
     def test_basic_menu_can_browse_and_return_to_main(self):
-        code, out, err = self.basic(["1", "2", self.sample["student_no"], "", "0", "0"])
+        code, out, err = self.basic(["1", "2", self.sample["student_no"], "q", "0", "0"])
         self.assertEqual((code, err), (0, ""), out + err)
         self.assertIn(self.sample["name"], out)
         self.assertIn("首页 / 学生", out)

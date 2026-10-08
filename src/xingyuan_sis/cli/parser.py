@@ -156,7 +156,9 @@ def _student_add_options(parser: argparse.ArgumentParser) -> None:
 
 def _student_edit_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--family")
-    parser.add_argument("--branch")
+    branch_group = parser.add_mutually_exclusive_group()
+    branch_group.add_argument("--branch")
+    branch_group.add_argument("--no-branch", action="store_true", help="将支系设为未指定")
     parser.add_argument("--year", dest="enrollment_year", type=int)
     class_group = parser.add_mutually_exclusive_group()
     class_group.add_argument("--class", dest="class_code")

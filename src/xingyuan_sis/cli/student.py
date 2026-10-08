@@ -112,7 +112,7 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
         print_fields(
             (
                 ("学号", row["student_no"]), ("姓名", row["name"]),
-                ("族系", f"{row['family']} · {row['branch']}"), ("性别", row["gender"]),
+                ("族系", f"{row['family']} · {row['branch'] or '未指定'}"), ("性别", row["gender"]),
                 ("年龄", _display_age(row)), ("出生日期", row["birth_date"]),
                 ("入学年份", row["enrollment_year"]),
                 ("学院", row["department_name"]), ("专业", row["major_name"]),
@@ -136,7 +136,7 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
         student_no = prompt("学号", args.student_no, required=True)
         name = prompt("姓名", args.name, required=True)
         family = prompt("族系", args.family, required=True)
-        branch = prompt("支系", args.branch)
+        branch = prompt("支系", args.branch) if interactive else args.branch
         year = prompt_int("入学年份", args.enrollment_year, required=True)
         optional: dict[str, Any] = {
             "class_code": args.class_code,
@@ -162,7 +162,7 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
             optional["dormitory"] = prompt("宿舍")
             optional["notes"] = prompt("备注")
         _, initial_password = service.register_student(
-            student_no=str(student_no), name=str(name), family=str(family), branch=str(branch),
+            student_no=str(student_no), name=str(name), family=str(family), branch=branch,
             enrollment_year=int(year), **optional,
         )
         print(f"✓ 已创建 {name} ({student_no})")
@@ -196,6 +196,8 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
             "notes": args.notes,
         }
         values.update({key: value for key, value in mapping.items() if value is not None})
+        if args.no_branch:
+            values["branch"] = None
         if args.class_code is not None:
             values["class_code"] = args.class_code
         elif args.no_class:
@@ -204,7 +206,7 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
         if not values:
             fields = (
                 ("family", "族系", row["family"], False),
-                ("branch", "支系", row["branch"], False),
+                ("branch", "支系", row["branch"], True),
                 ("enrollment_year", "入学年份", row["enrollment_year"], False),
                 ("class_code", "班级编号", row["class_code"], True),
                 ("gender", "性别", row["gender"], True),
