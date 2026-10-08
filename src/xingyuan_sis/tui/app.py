@@ -201,6 +201,7 @@ def run(db_path: Path | str | None = None) -> None:
                 if choice == "logout":
                     clear_session()
                     preferences.pop("identity", None)
+                    preferences.pop("portal_secondary", None)
                     preferences["portal_selected"] = 0
                     preferences["portal_focus"] = "primary"
                     selected = 0
@@ -211,10 +212,12 @@ def run(db_path: Path | str | None = None) -> None:
                     updated = _execute_portal_action(choice, db_path, identity)
                     preferences["identity"] = updated
                 except screen.NavigateTo as navigation:
-                    if not navigation.path:
-                        preferences["portal_selected"] = 0
-                    elif navigation.path.startswith("教务"):
-                        preferences["portal_selected"] = 1
+                    ancestor = navigation.path.split(" / ", 1)[0]
+                    preferences["portal_selected"] = next(
+                        (index for index, label in enumerate(portal.PRIMARY_LABELS)
+                         if label == ancestor),
+                        0,
+                    )
                     preferences["portal_focus"] = "primary"
         except (KeyboardInterrupt, EOFError):
             pass
