@@ -41,11 +41,11 @@ class WorkspaceFlowTests(unittest.TestCase):
             **kwargs,
         )
 
-    def test_delete_selected_student_through_toolbar_without_mouse(self):
+    def test_delete_selected_student_by_shortcut_without_mouse(self):
         state = Workspace("students", selected=17)
         original = state.current(self.catalog).copy()
         self.assertEqual(
-            self.interact(state, ["focus", "focus", "right", "right", "select", "select"], (120, 35)),
+            self.interact(state, ["d", "select"], (120, 35)),
             ("save", 0),
         )
         self.assertEqual(state.form.mode, "delete")
@@ -53,13 +53,12 @@ class WorkspaceFlowTests(unittest.TestCase):
         forms.apply_form(state, self.catalog)
         self.assertIsNone(self.catalog.service.student_by_no(original["student_no"]))
 
-    def test_tab_cycles_roster_inspector_toolbar_and_preserves_record_scroll(self):
+    def test_tab_cycles_only_existing_content_panels_and_preserves_record_scroll(self):
         state = Workspace("students", selected=40, roster_scroll=30)
         self.render(state)
         original = (state.selected, state.roster_scroll)
         for expected in (
             FocusArea.INSPECTOR,
-            FocusArea.TOOLBAR,
             FocusArea.ROSTER,
             FocusArea.INSPECTOR,
         ):
