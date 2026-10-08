@@ -226,6 +226,69 @@ class PortalLayoutTests(unittest.TestCase):
                                     if key == "back" and focus == "secondary":
                                         self.assertEqual((next_primary, next_focus), (primary, "primary"))
 
+    def test_secondary_vertical_navigation_tracks_visible_grid_rows(self) -> None:
+        for identity in (
+            Identity("Administrator", "admin"),
+            Identity("20260001", "student", "20260001"),
+        ):
+            for size in ((100, 24), (58, 18), (26, 18)):
+                for primary in (1, 2):
+                    items = portal.secondary_items(identity, primary)
+                    columns = portal.secondary_columns(
+                        size[0] - 1, "secondary", height=size[1]
+                    )
+                    for selected in range(len(items)):
+                        with self.subTest(
+                            role=identity.role, size=size,
+                            primary=primary, selected=selected,
+                        ), patch.object(
+                            screen, "_terminal_size",
+                            return_value=os.terminal_size(size),
+                        ):
+                            frame = portal.frame(
+                                identity, primary, "secondary",
+                                {primary: selected}, {}, 0, animate=False,
+                            )
+                            positions = {
+                                int(region.action.removeprefix("secondary:")): region
+                                for region in frame.regions
+                                if region.action.startswith("secondary:")
+                            }
+                            self.assertEqual(set(positions), set(range(len(items))))
+                            current = positions[selected]
+                            for direction in ("up", "down"):
+                                candidates = [
+                                    (index, region)
+                                    for index, region in positions.items()
+                                    if (region.y < current.y if direction == "up"
+                                        else region.y > current.y)
+                                ]
+                                if candidates:
+                                    adjacent_y = (
+                                        max(region.y for _, region in candidates)
+                                        if direction == "up"
+                                        else min(region.y for _, region in candidates)
+                                    )
+                                    next_row = [
+                                        (index, region) for index, region in candidates
+                                        if region.y == adjacent_y
+                                    ]
+                                    expected = min(
+                                        next_row,
+                                        key=lambda item: (
+                                            abs(item[1].x - current.x), item[0]
+                                        ),
+                                    )[0]
+                                else:
+                                    expected = selected
+                                result = portal.navigate(
+                                    identity, primary, "secondary",
+                                    selected, direction, columns,
+                                )
+                                self.assertEqual(
+                                    result, (primary, "secondary", expected)
+                                )
+
     def test_portal_tab_is_processed_by_event_loop(self) -> None:
         identity = Identity("Administrator", "admin")
         preferences: dict[str, object] = {
