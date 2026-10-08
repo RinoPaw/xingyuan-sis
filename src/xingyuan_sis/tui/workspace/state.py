@@ -12,16 +12,13 @@ class FocusArea(str, Enum):
 
     ROSTER = "roster"
     INSPECTOR = "inspector"
-    TOOLBAR = "toolbar"
     DASHBOARD = "dashboard"
 
 
 class ContentPanel(str, Enum):
     """The record panel that remains the current content context.
 
-    Wide layouts show both panels, while single-pane layouts render only this
-    panel. Toolbar focus does not change it, so leaving the toolbar returns to
-    the content panel the user came from.
+    Wide layouts show both panels; narrow layouts render only the active panel.
     """
 
     ROSTER = "roster"
@@ -43,7 +40,6 @@ class FocusContext:
     content_panel: ContentPanel
     detail_scroll: int
     detail_selected: int
-    action_selected: int
 
 
 @dataclass
@@ -97,7 +93,6 @@ class Location:
     content_panel: ContentPanel
     detail_scroll: int
     detail_selected: int
-    action_selected: int = 0
 
 
 @dataclass
@@ -114,7 +109,6 @@ class Workspace:
     content_panel: ContentPanel = ContentPanel.ROSTER
     detail_scroll: int = 0
     detail_selected: int = 0
-    action_selected: int = 0
     notice: str = ""
     form: Form | None = None
     field_session: FieldSession | None = None
@@ -206,13 +200,12 @@ class Workspace:
             self.content_panel = ContentPanel.INSPECTOR
 
     def focus_roster(self) -> None:
-        """Enter the roster; leaving the toolbar explicitly resumes any gap."""
-        if self.focus is FocusArea.TOOLBAR:
-            self.resume_roster_gap()
+        """Return to record selection, resolving any deleted-row gap."""
+        self.resume_roster_gap()
         self.set_focus(FocusArea.ROSTER)
 
     def focus_content(self) -> None:
-        """Return from toolbar focus to the content panel it belongs to."""
+        """Restore the active content panel after a transaction."""
         if self.key == "data":
             self.set_focus(FocusArea.DASHBOARD)
         elif self.content_panel is ContentPanel.INSPECTOR:
@@ -227,7 +220,6 @@ class Workspace:
             self.content_panel,
             self.detail_scroll,
             self.detail_selected,
-            self.action_selected,
         )
 
     def restore_focus_context(self, context: FocusContext | None) -> None:
@@ -238,7 +230,6 @@ class Workspace:
         self.content_panel = context.content_panel
         self.detail_scroll = context.detail_scroll
         self.detail_selected = context.detail_selected
-        self.action_selected = context.action_selected
 
     def switch(self, key: str) -> None:
         self.key, self.view, self.query, self.selected, self.roster_scroll = key, 0, "", 0, 0
@@ -247,14 +238,13 @@ class Workspace:
         self.content_panel = ContentPanel.ROSTER
         self.detail_scroll, self.detail_selected = 0, 0
         self.form, self.field_session = None, None
-        self.action_selected = 0
 
     def visit(self, key: str, identifier: str, catalog: Catalog) -> None:
         row = self.current(catalog)
         self.history.append(Location(
             self.key, self.view, self.query, self.selected, self.roster_scroll,
             row["id"] if row else None, self.focus, self.content_panel,
-            self.detail_scroll, self.detail_selected, self.action_selected,
+            self.detail_scroll, self.detail_selected,
         ))
         self.switch(key)
         rows = self.rows(catalog)
@@ -272,5 +262,4 @@ class Workspace:
         self.roster_scroll = location.roster_scroll
         self.focus, self.content_panel = location.focus, location.content_panel
         self.detail_scroll, self.detail_selected = location.detail_scroll, location.detail_selected
-        self.action_selected = location.action_selected
         self.reconcile_roster(len(rows))
