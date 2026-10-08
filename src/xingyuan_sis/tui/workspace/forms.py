@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ...auth import INITIAL_STUDENT_PASSWORD
 from ...student_query import parse_student_query
 from ...terminal_input import input_style, read_input
 from .. import screen
@@ -94,7 +95,7 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
         if created_index is not None:
             state.select_row(created_index)
         state.notice = (
-            "已保存。学生初始密码为学号，首次登录必须修改。"
+            f"已保存。学生初始密码为 {INITIAL_STUDENT_PASSWORD}，首次登录必须修改。"
             if state.key == "students" and created_index is not None
             else "已保存。"
             if created_index is not None
@@ -102,9 +103,9 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
         )
     elif form.mode == "reset-password":
         no = str(form.original["student_no"]).strip()
-        catalog.service.reset_student_password(no, no)
+        catalog.service.reset_student_password(no)
         catalog.initial_password = None
-        state.notice = "已重置密码为学号；学生下次登录必须修改密码。"
+        state.notice = f"已重置密码为 {INITIAL_STUDENT_PASSWORD}；学生下次登录必须修改密码。"
     elif form.mode == "delete":
         if state.key == "students":
             deleting_position = state.selected
@@ -120,11 +121,9 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
         catalog.delete(state.key, form.original)
         state.notice = "记录已删除。"
     elif form.mode == "seed":
-        from ...auth import DEMO_STUDENT_PASSWORD
-
         catalog.service.seed_demo()
         catalog.refresh()
-        state.notice = f"演示校园已就绪；学生初始密码为 {DEMO_STUDENT_PASSWORD}。"
+        state.notice = f"演示校园已就绪；学生初始密码为 {INITIAL_STUDENT_PASSWORD}。"
     else:
         path = Path(form.fields[0].parse(form.values.get("path"))).expanduser()
         if form.mode == "export":
