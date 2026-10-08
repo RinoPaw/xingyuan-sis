@@ -137,7 +137,7 @@ class WorkspaceFlowTests(unittest.TestCase):
         self.assertNotIn("更改暂存", body)
         self.assertTrue(any(region.action.startswith("row:") for region in frame.regions))
         self.assertTrue(any(region.action.startswith("field:") for region in frame.regions))
-        self.assertFalse(any(region.action == "save" for region in frame.regions))
+        self.assertTrue(any(region.action == "save" for region in frame.regions))
         self.assertEqual(footer.count("Enter 编辑"), 1)
         self.assertEqual(footer.count("S 保存"), 1)
         self.assertEqual(footer.count("Esc 取消"), 1)
