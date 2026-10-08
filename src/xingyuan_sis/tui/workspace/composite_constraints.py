@@ -53,9 +53,15 @@ def reconcile(
             if not allowed:
                 continue
             try:
-                new = max(min(int(old), max(allowed)), min(allowed))
+                numeric = int(old)
             except (TypeError, ValueError):
                 new = None
+            else:
+                # A valid masked value such as "09" needs no rewrite just
+                # because its underlying option domain was recomputed.
+                new = old if numeric in allowed else min(
+                    allowed, key=lambda value: (abs(value - numeric), value)
+                )
         if new != old:
             values[dependency.field] = new
             changed.add(dependency.field)
