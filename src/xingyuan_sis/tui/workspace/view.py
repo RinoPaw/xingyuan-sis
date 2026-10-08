@@ -105,7 +105,7 @@ def _footer(state: Workspace, catalog: Catalog, width: int) -> str:
         return theme.footer(width, enter="确认", escape="取消")
     hints = tuple(
         command.hint for command in available_commands(catalog, state.key)
-        if command.shortcut and (command.action not in {"import", "seed"} or state.key == "data")
+        if command.shortcut
     )
     return theme.footer(width, items=hints)
 
