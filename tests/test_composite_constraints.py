@@ -187,6 +187,47 @@ class CompositeConstraintTests(unittest.TestCase):
         )
 
 
+    def test_masked_text_remains_unconfirmed_until_enter(self) -> None:
+        student_no = self.catalog.rows("students")[0]["student_no"]
+        self.catalog.service.update_student_by_no(student_no, birth_date="2005-02-28")
+        self.catalog.refresh()
+        state = Workspace("students")
+        field_session.start(state, self.catalog, "birth_date")
+        original_values = dict(state.field_session.values)
+        events = iter((
+            TextEvent("tab"), TextEvent("tab"), TextEvent("clear"),
+            TextEvent("insert", "0"), TextEvent("insert", "9"),
+            TextEvent("submit"),
+        ))
+        reads = 0
+
+        def next_event(_timeout):
+            nonlocal reads
+            self.assertEqual(state.field_session.values, original_values)
+            if reads == 5:
+                self.assertEqual(state.field_session.preview_values["birth_day"], "09")
+                self.assertEqual(
+                    self.catalog.service.student_by_no(student_no)["birth_date"],
+                    "2005-02-28",
+                )
+            reads += 1
+            return next(events)
+
+        with patch.object(field_session, "input_mode", return_value=nullcontext()), \
+             patch.object(field_session, "editing_cursor", return_value=nullcontext()), \
+             patch.object(field_session, "read_event", side_effect=next_event), \
+             patch.object(field_session, "_position_birth_cursor"), \
+             patch.object(screen, "_paint"), \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+            field_session.edit_current(state, self.catalog)
+
+        self.assertEqual(reads, 6)
+        self.assertIsNone(state.field_session)
+        self.assertEqual(
+            self.catalog.service.student_by_no(student_no)["birth_date"],
+            "2005-02-09",
+        )
+
     def test_masked_day_supports_leading_zero_without_early_clamping(self) -> None:
         student_no = self.catalog.rows("students")[0]["student_no"]
         self.catalog.service.update_student_by_no(student_no, birth_date="2005-02-28")
