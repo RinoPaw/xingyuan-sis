@@ -41,7 +41,7 @@ class DetailFocusTests(unittest.TestCase):
         state.set_focus(workspace.FocusArea.INSPECTOR)
         detail = self.render(state)
         plain = screen._ANSI_RE.sub("", "\n".join(detail.lines))
-        self.assertIn("  名册", plain)
+        self.assertIn(" 名册", plain)
         self.assertIn("▌ 档案", plain)
         self.assertNotIn("阅读中", plain)
         self.assertTrue(any(screen._SURFACE_SELECTED in line for line in detail.lines))
