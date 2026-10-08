@@ -198,13 +198,14 @@ def footer(
     width: int,
     *,
     switch_focus: bool = False,
+    tab_label: str = "切换区域",
     command_hints: Sequence[str] = (),
     enter: str | None = "打开",
     escape: str = "返回",
 ) -> str:
     """Render the single visible interaction contract for the current context."""
     required = [
-        *(["[ Tab 切换区域 ]"] if switch_focus else []),
+        *([f"[ Tab {tab_label} ]"] if switch_focus else []),
         "[ 方向键 移动 ]",
         *([f"[ Enter {enter} ]"] if enter is not None else []),
         f"[ Esc {escape} ]",
