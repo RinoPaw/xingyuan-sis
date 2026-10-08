@@ -120,8 +120,6 @@ def _portal_home(
             if key == "select":
                 if focus == "secondary" and items:
                     return items[secondary].action
-                if focus == "primary" and selected == 3:
-                    return "logout"
 
             terminal = screen._terminal_size()
             columns = portal.secondary_columns(
