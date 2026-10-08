@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from .. import screen, theme
 from ..layout import WorkspaceLayout
-from ..view_common import Board, identity, panel_heading, safe
+from ..view_common import Board, panel_heading, safe
 from .data import COLLECTIONS, Catalog
 from .field_geometry import (
     FIELD_GUTTER,
@@ -13,7 +13,7 @@ from .field_geometry import (
     control_width,
     form_field_geometry,
 )
-from .presentation import delete_identity, delete_impacts, display_value, project_record
+from .presentation import CONFIRMATION_MODES, confirmation_content, display_value, project_record
 from .state import FieldSessionOwner
 
 if TYPE_CHECKING:
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 _SELECTION_GUTTER = FIELD_GUTTER
 
 
-def _render_delete_panel(
+def _render_confirmation_panel(
     board: Board,
     state: Workspace,
     catalog: Catalog,
@@ -32,58 +32,56 @@ def _render_delete_panel(
     width: int,
     bottom: int,
 ) -> None:
-    """Compact, risk-first confirmation with explicit keyboard and mouse choices."""
-    form = state.form
-    identity_rows = delete_identity(state.key, form.original)
-    impacts = delete_impacts(catalog, state.key, form.original)
-
-    # Reserve the controls before laying out details. Small terminals must
-    # still expose the destructive choice and a visible cancellation path.
-    label_delete = "确认删除" if width >= 22 else "删除"
-    button_space = screen._display_width(theme.button(label_delete)) + screen._display_width(theme.button("取消")) + 1
-    side_by_side = button_space <= width
+    """Layout all action-only confirmations identically, regardless of width."""
+    content = confirmation_content(catalog, state.key, state.form)
+    confirm_label = content.confirm_label if width >= 22 else content.confirm_label.removeprefix("确认")
+    side_by_side = (
+        screen._display_width(theme.button(confirm_label))
+        + screen._display_width(theme.button("取消")) + 1 <= width
+    )
     action_height = 1 if side_by_side else 2
-    action_top = max(y, bottom - action_height)
-    capacity = max(0, action_top - y)
-
-    # Prefer showing consequences over secondary identifiers on short screens.
+    available = max(0, bottom - y - action_height - 1)
     lines: list[tuple[str, str, str]] = [
-        ("field", identity_rows[0][0], identity_rows[0][1]),
-        ("field", identity_rows[1][0], identity_rows[1][1]),
-        *(("impact", "", text) for text in impacts),
-        ("risk", "", "删除后无法撤销"),
+        *(("field", label, value) for label, value in content.details),
+        *(("note", "", message) for message in content.notes),
+        ("warning", "", content.warning),
     ]
-    if len(lines) > capacity:
-        lines.pop(1)  # Identifier is the first detail to hide under pressure.
-    while len(lines) > capacity and len(lines) > 2:
-        lines.pop(-2)  # Retain the record name and irreversible-risk warning.
-    if len(lines) > capacity:
-        lines = lines[-capacity:] if capacity else []
+    while len(lines) > available and len(lines) > 1:
+        # Drop secondary identifiers and notes before record identity or risk.
+        remove = next((i for i, (kind, _, _) in enumerate(lines) if kind == "field" and i > 0), None)
+        if remove is None:
+            remove = next((i for i, (kind, _, _) in enumerate(lines) if kind == "note"), None)
+        lines.pop(0 if remove is None else remove)
+    if not available:
+        lines.clear()
 
-    label_width = min(max(screen._display_width(label) for label, _ in identity_rows), max(1, width // 2))
+    label_width = min(
+        max((screen._display_width(label) for label, _ in content.details), default=0),
+        max(1, width // 2),
+    )
     value_x = x + label_width + 2
     value_width = max(1, width - label_width - 2)
-    spacious = bottom - y >= len(lines) + action_height + 3
+    line_y = y
+    spare = max(0, available - len(lines))
     for index, (kind, label, value) in enumerate(lines):
-        line_y = y + index + (1 if spacious and index >= 2 else 0)
-        if line_y >= action_top:
-            break
+        if index > 0 and kind in {"note", "warning"} and lines[index - 1][0] == "field" and spare:
+            line_y += 1
+            spare -= 1
         if kind == "field":
             board.put(x, line_y, screen._pad_cells(label, label_width), screen._TEXT_SECONDARY, width=label_width)
             if value_x < x + width:
                 board.put(value_x, line_y, value, screen._TEXT_PRIMARY, width=value_width)
-        elif kind == "impact":
-            board.put(x, line_y, value, screen._TEXT_SECONDARY, width=width)
         else:
-            board.put(x, line_y, value, screen._BOLD + screen._TEXT_DANGER, width=width)
+            style = screen._BOLD + screen._TEXT_DANGER if kind == "warning" else screen._TEXT_SECONDARY
+            board.put(x, line_y, value, style, width=width)
+        line_y += 1
 
-    control_y = min(bottom - action_height, y + len(lines) + (2 if spacious else 1))
-    control_y = max(y, control_y)
-    next_x = board.button(x, control_y, label_delete, "confirm-delete", selected=form.position == 0)
+    control_y = min(bottom - action_height, line_y + 1)
+    next_x = board.button(x, control_y, confirm_label, "confirm-action", selected=state.form.position == 0)
     if side_by_side:
-        board.button(next_x, control_y, "取消", "cancel-delete", selected=form.position == 1)
-    elif control_y + 1 < bottom:
-        board.button(x, control_y + 1, "取消", "cancel-delete", selected=form.position == 1)
+        board.button(next_x, control_y, "取消", "cancel-action", selected=state.form.position == 1)
+    else:
+        board.button(x, control_y + 1, "取消", "cancel-action", selected=state.form.position == 1)
 
 
 def _field_label(field, width: int) -> str:
@@ -111,12 +109,7 @@ def _render_form_heading(
 
 
 def _render_form_action(board: Board, mode: str, x: int, y: int) -> None:
-    label = {
-        "seed": "确认",
-        "reset-password": "确认",
-        "import": "执行",
-        "export": "执行",
-    }.get(mode, "保存")
+    label = "执行" if mode in {"import", "export"} else "保存"
     board.button(x, y, label, "save")
 
 
@@ -163,46 +156,22 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
     action_row = board.height - 2
     bottom = action_row
 
-    titles = {
-        "import": "导入学生 CSV",
-        "export": "导出学生 CSV",
-        "seed": "建立演示校园",
-        "reset-password": "重置学生密码",
-    }
+    if form.mode in CONFIRMATION_MODES:
+        content = confirmation_content(catalog, state.key, form)
+        if form.mode == "delete":
+            board.put(x, heading_row, "▌ " + content.heading, screen._BOLD + screen._TEXT_DANGER, width=width)
+        else:
+            _render_form_heading(board, state, x, heading_row, width, content.heading)
+        _render_confirmation_panel(board, state, catalog, x, content_row, width, bottom)
+        return
+
+    titles = {"import": "导入学生 CSV", "export": "导出学生 CSV"}
     heading = (
         f"新增{COLLECTIONS[state.key].title}"
         if form.mode == "create" and state.key in COLLECTIONS
         else titles.get(form.mode, "档案")
     )
-    if form.mode == "delete":
-        board.put(x, heading_row, "▌ " + "删除" + COLLECTIONS[state.key].title, screen._BOLD + screen._TEXT_DANGER, width=width)
-    else:
-        _render_form_heading(board, state, x, heading_row, width, heading)
-
-    if form.mode == "delete":
-        _render_delete_panel(board, state, catalog, x, content_row, width, bottom)
-        return
-
-    if form.mode in {"seed", "reset-password"}:
-        messages: list[tuple[str, str]] = [
-            ("将写入一组完整的演示数据。", screen._TEXT_PRIMARY),
-            ("仅支持空数据库，已有记录会保留。", screen._TEXT_SECONDARY),
-        ]
-        if form.mode == "reset-password":
-            title, identifier = identity(state.key, form.original)
-            messages = [
-                (f"重置 {title} 的密码？", screen._TEXT_PRIMARY),
-                (identifier, screen._TEXT_SECONDARY),
-                ("密码将恢复为学号；下次登录须改密。", screen._TEXT_SECONDARY),
-            ]
-        capacity = max(1, bottom - content_row)
-        spacing = 2 if capacity >= len(messages) * 2 else 1
-        for index, (message, style) in enumerate(messages[:capacity]):
-            y = content_row + index * spacing
-            if y < bottom:
-                board.put(x, y, message, style, width=width)
-        _render_form_action(board, form.mode, x, action_row)
-        return
+    _render_form_heading(board, state, x, heading_row, width, heading)
 
     if state.notice and status_row < bottom:
         is_error = state.notice.startswith("未完成：")

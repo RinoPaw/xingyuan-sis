@@ -284,8 +284,8 @@ class WorkspaceActionTests(unittest.TestCase):
                 with patch.object(screen, "_terminal_size", return_value=os.terminal_size((width, height))):
                     frame = workspace_view.render(state, self.catalog)
                 plain = [screen._ANSI_RE.sub("", line) for line in frame.lines]
-                confirm = next(region for region in frame.regions if region.action == "confirm-delete")
-                cancel = next(region for region in frame.regions if region.action == "cancel-delete")
+                confirm = next(region for region in frame.regions if region.action == "confirm-action")
+                cancel = next(region for region in frame.regions if region.action == "cancel-action")
                 risk_y = next(i + 1 for i, line in enumerate(plain) if "删除后无法撤销" in line)
                 self.assertGreater(confirm.y, risk_y)
                 self.assertLessEqual(confirm.y - risk_y, 3)
@@ -295,8 +295,8 @@ class WorkspaceActionTests(unittest.TestCase):
 
     def test_delete_mouse_actions_have_distinct_meanings(self):
         for action, event_sequence, expect_save in (
-            ("confirm-delete", None, True),
-            ("cancel-delete", "refresh", False),
+            ("confirm-action", None, True),
+            ("cancel-action", "refresh", False),
         ):
             with self.subTest(action=action):
                 state = workspace.Workspace("students", selected=2)

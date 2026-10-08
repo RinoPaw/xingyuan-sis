@@ -7,6 +7,7 @@ from .. import screen, theme
 from ..layout import WorkspaceLayout
 from ..view_common import Board, metric_summary
 from .commands import FORM_SAVE, available as available_commands
+from .presentation import CONFIRMATION_MODES
 from .dashboard import render_dashboard
 from .data import ACADEMICS, COLLECTIONS, Catalog
 from .detail import lines as generic_lines
@@ -95,7 +96,7 @@ def _footer(state: Workspace, catalog: Catalog, width: int) -> str:
         enter = "选择" if state.field_session.options is not None else "确认"
         return theme.footer(width, enter=enter, escape="取消")
     if state.form is not None:
-        if state.form.mode == "delete":
+        if state.form.mode in CONFIRMATION_MODES:
             return theme.footer(width, enter="选择", escape="取消")
         if state.form.fields:
             return theme.footer(

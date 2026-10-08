@@ -5,6 +5,7 @@ from ..commands import resolve_shortcut
 from ..layout import WorkspaceLayout, visible_start
 from .commands import FORM_SAVE, available as available_commands
 from .data import ACADEMICS, COLLECTIONS, Catalog
+from .presentation import CONFIRMATION_MODES
 from .field_session import (
     accept_option as accept_field_option,
     cancel as cancel_field_session,
@@ -299,10 +300,10 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
 
         if state.form:
             form = state.form
-            if form.mode == "delete":
-                if key == "confirm-delete":
+            if form.mode in CONFIRMATION_MODES:
+                if key == "confirm-action":
                     return "save", 0
-                if key == "cancel-delete":
+                if key == "cancel-action":
                     cancel_form(state)
                 elif key in {"left", "up", "home"}:
                     form.position = 0

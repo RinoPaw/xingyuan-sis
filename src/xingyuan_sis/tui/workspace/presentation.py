@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Mapping
 
 from ..view_common import identity, safe
 from .birth_date_editor import display as display_birth_date
-from .data import Catalog
-from .state import FieldSession
+from .data import COLLECTIONS, Catalog
+from .state import FieldSession, Form
 from .student_layout import STUDENT_FIELD_ROWS
 
 
@@ -102,3 +103,45 @@ def delete_impacts(
             impacts.append(f"同时删除 {notices} 条班级公告")
         return tuple(impacts)
     return ()
+
+CONFIRMATION_MODES = frozenset({"delete", "reset-password", "seed"})
+
+
+@dataclass(frozen=True)
+class ConfirmationContent:
+    """Semantic confirmation details independent of terminal layout."""
+
+    heading: str
+    details: tuple[tuple[str, str], ...]
+    notes: tuple[str, ...]
+    warning: str
+    confirm_label: str
+
+
+def confirmation_content(catalog: Catalog, collection: str, form: Form) -> ConfirmationContent:
+    """Describe every action-only confirmation using its actual effects."""
+    if form.mode == "delete":
+        return ConfirmationContent(
+            heading=f"删除{COLLECTIONS[collection].title}",
+            details=delete_identity(collection, form.original),
+            notes=delete_impacts(catalog, collection, form.original),
+            warning="删除后无法撤销",
+            confirm_label="确认删除",
+        )
+    if form.mode == "reset-password":
+        return ConfirmationContent(
+            heading="重置学生密码",
+            details=delete_identity("students", form.original),
+            notes=("密码重置为学号；原密码立即失效",),
+            warning="下次登录须改密",
+            confirm_label="确认重置",
+        )
+    if form.mode == "seed":
+        return ConfirmationContent(
+            heading="建立演示校园",
+            details=(),
+            notes=("将写入演示学生、课程及选课数据",),
+            warning="仅支持空数据库；不会覆盖已有记录",
+            confirm_label="确认建立",
+        )
+    raise ValueError(f"未知确认操作：{form.mode}")

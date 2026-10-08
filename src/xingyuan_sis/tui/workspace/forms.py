@@ -7,6 +7,7 @@ from ...student_query import parse_student_query
 from ...terminal_input import input_style, read_input
 from .. import screen
 from .data import Catalog, Field
+from .presentation import CONFIRMATION_MODES
 from .state import FocusArea, Form, Workspace
 from .student_layout import order_fields as order_student_fields
 
@@ -27,21 +28,22 @@ def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
         state.notice = "先选择一条记录。"
         return
 
-    return_to = state.capture_focus_context() if mode == "delete" else None
+    return_to = state.capture_focus_context() if mode in CONFIRMATION_MODES else None
     if mode == "create":
         state.form = Form(mode, _create_fields(state, catalog), catalog.defaults(state.key))
     elif mode in {"import", "export"}:
         state.form = Form(mode, (Field("path", "CSV 文件路径", True),), {"path": "data/students.csv"})
-    elif mode == "delete":
-        # Enter should never confirm a destructive action immediately on entry.
+    elif mode in CONFIRMATION_MODES:
+        # All action-only confirmations begin on Cancel to absorb repeat Enter.
         state.form = Form(mode, original=row, return_to=return_to, position=1)
     else:
         state.form = Form(mode, original=row)
 
     state.field_session = None
     state.notice = ""
-    if mode == "delete":
-        state.set_focus(FocusArea.INSPECTOR)
+    if mode in CONFIRMATION_MODES:
+        if state.key != "data":
+            state.set_focus(FocusArea.INSPECTOR)
     else:
         state.focus_content()
         state.detail_scroll = 0
