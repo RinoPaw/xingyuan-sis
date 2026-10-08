@@ -200,21 +200,25 @@ def footer(
     switch_focus: bool = False,
     tab_label: str = "切换区域",
     command_hints: Sequence[str] = (),
+    items: Sequence[str] | None = None,
     enter: str | None = "打开",
     escape: str = "返回",
 ) -> str:
     """Render the single visible interaction contract for the current context."""
-    required = [
-        *([f"[ Tab {tab_label} ]"] if switch_focus else []),
-        "[ 方向键 移动 ]",
-        *([f"[ Enter {enter} ]"] if enter is not None else []),
-        f"[ Esc {escape} ]",
-    ]
-    optional = [f"[ {hint} ]" for hint in command_hints]
-    labels = required + optional
-    while optional and sum(screen._display_width(label) for label in labels) + len(labels) + 1 > width:
-        optional.pop()
+    if items is not None:
+        labels = [f"[ {hint} ]" for hint in items]
+    else:
+        required = [
+            *([f"[ Tab {tab_label} ]"] if switch_focus else []),
+            "[ 方向键 移动 ]",
+            *([f"[ Enter {enter} ]"] if enter is not None else []),
+            f"[ Esc {escape} ]",
+        ]
+        optional = [f"[ {hint} ]" for hint in command_hints]
         labels = required + optional
+        while optional and sum(screen._display_width(label) for label in labels) + len(labels) + 1 > width:
+            optional.pop()
+            labels = required + optional
 
     total = sum(screen._display_width(label) for label in labels)
     if total < width:
@@ -227,6 +231,10 @@ def footer(
             parts.append(screen._ansi(label, _BUTTON))
             parts.append(bar_space(gaps[index + 1]))
         return "".join(parts)
+
+    if items is not None:
+        compact = " · ".join(items)
+        return screen._ansi(screen._clip_cells(compact, width), _BAR_SURFACE)
 
     compact_parts = [*(["Tab"] if switch_focus else []), "↑↓←→"]
     if enter is not None:
