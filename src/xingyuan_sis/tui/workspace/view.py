@@ -6,7 +6,7 @@ from ...database import DB_PATH
 from .. import screen, theme
 from ..layout import WorkspaceLayout
 from ..view_common import Board, metric_summary
-from .commands import FORM_SAVE, toolbar as toolbar_commands
+from .commands import FORM_SAVE, available as available_commands
 from .dashboard import render_dashboard
 from .data import ACADEMICS, COLLECTIONS, Catalog
 from .detail import lines as generic_lines
@@ -90,32 +90,6 @@ def _breadcrumb(state: Workspace) -> list[tuple[str, str]]:
     return [("首页", "navigate:"), (COLLECTIONS[state.key].title if state.key != "data" else "数据", "")]
 
 
-def _render_actions(board: Board, state: Workspace, catalog: Catalog, x: int, y: int, width: int) -> None:
-    commands = toolbar_commands(catalog, state.key)
-    selected_index = min(max(0, state.action_selected), max(0, len(commands) - 1))
-    first = 0
-    if state.focus is FocusArea.TOOLBAR:
-        while first < selected_index and sum(
-            screen._display_width(command.label) + 6
-            for command in commands[first:selected_index + 1]
-        ) > width:
-            first += 1
-    for index in range(first, len(commands)):
-        command = commands[index]
-        shown = f" {command.label} "
-        needed = screen._display_width(shown) + 4
-        if needed > width:
-            break
-        x = board.button(
-            x,
-            y,
-            shown,
-            command.action,
-            selected=state.focus is FocusArea.TOOLBAR and selected_index == index,
-        )
-        width -= needed
-
-
 def _footer(state: Workspace, catalog: Catalog, width: int) -> str:
     if state.field_session is not None:
         enter = "选择" if state.field_session.options is not None else "确认"
@@ -130,11 +104,10 @@ def _footer(state: Workspace, catalog: Catalog, width: int) -> str:
             )
         return theme.footer(width, enter="确认", escape="取消")
     hints = tuple(
-        command.hint
-        for command in toolbar_commands(catalog, state.key)
-        if command.shortcut
+        command.hint for command in available_commands(catalog, state.key)
+        if command.shortcut and (command.action not in {"import", "seed"} or state.key == "data")
     )
-    return theme.footer(width, switch_focus=True, command_hints=hints)
+    return theme.footer(width, items=hints)
 
 
 def _split_divider(board: Board, state: Workspace, layout: WorkspaceLayout) -> None:
@@ -198,8 +171,6 @@ def render(state: Workspace, catalog: Catalog):
         x += screen._display_width(label)
 
     if layout.compact:
-        action_row = layout.action_row
-        _render_actions(board, state, catalog, 0, action_row, width)
         if state.form:
             _render_form_body(board, state, catalog, layout, width)
         elif state.key == "data":
@@ -207,15 +178,6 @@ def render(state: Workspace, catalog: Catalog):
         else:
             _render_record_body(board, state, catalog, layout, width)
     else:
-        action_row = layout.action_row
-        if state.key == "data":
-            noun = "校园概览"
-            board.put(1, action_row, noun, screen._BOLD + screen._TEXT_ACCENT)
-            action_x = max(15, screen._display_width(noun) + 5)
-            _render_actions(board, state, catalog, action_x, action_row, max(0, width - action_x - 1))
-        else:
-            _render_actions(board, state, catalog, 1, action_row, max(0, width - 2))
-
         x = 1
         if state.key == "data":
             metrics = [
@@ -223,24 +185,24 @@ def render(state: Workspace, catalog: Catalog):
                 ("课程", str(len(catalog.records["courses"]))),
                 ("选课", str(len(catalog.records["grades"]))),
             ]
-            board.put(1, action_row + 1, metric_summary(metrics))
+            board.put(1, 2, metric_summary(metrics))
             choices = [
                 (label, None, f"collection:{key}", False)
                 for label, key in (("学生", "students"), ("课程", "courses"), ("成绩", "grades"), ("教务", "departments"))
             ]
-            choice_row = action_row + 2
+            choice_row = 3
         elif state.key in ACADEMICS:
             choices = [
                 (COLLECTIONS[key].noun, len(catalog.records[key]), f"collection:{key}", key == state.key)
                 for key in ACADEMICS
             ]
-            choice_row = action_row + 1
+            choice_row = 2
         else:
             choices = [
                 (label, len(catalog.rows(state.key, i, state.query)), f"view:{i}", i == state.view)
                 for i, label in enumerate(COLLECTIONS[state.key].views)
             ]
-            choice_row = action_row + 1
+            choice_row = 2
 
         labels = theme.view_labels(width - 1, choices)
         for shown, (_, _, action, selected) in zip(labels, choices):
