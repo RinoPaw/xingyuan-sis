@@ -49,25 +49,31 @@ _PROFILE = (
 
 @dataclass(frozen=True)
 class MenuSection:
-    """One primary menu with role-specific child actions."""
+    """Stable section identity, role-specific actions, and presentation metadata."""
 
+    key: str
     label: str
     admin_items: tuple[MenuItem, ...] = ()
     student_items: tuple[MenuItem, ...] = ()
+    admin_description: str = ""
+    student_description: str = ""
 
 
-_SECTIONS = (
-    MenuSection("首页"),
-    MenuSection("教务", _ADMIN_ACADEMIC, _STUDENT_ACADEMIC),
-    MenuSection("个人中心", _PROFILE, _PROFILE),
+SECTIONS = (
+    MenuSection("home", "首页"),
+    MenuSection(
+        "academics", "教务", _ADMIN_ACADEMIC, _STUDENT_ACADEMIC,
+        "增删改查与校园业务管理", "查询校园学生信息",
+    ),
+    MenuSection("profile", "个人中心", _PROFILE, _PROFILE),
 )
-PRIMARY_LABELS = tuple(section.label for section in _SECTIONS)
+PRIMARY_LABELS = tuple(section.label for section in SECTIONS)
 
 
 def secondary_items(identity: Identity, primary: int) -> tuple[MenuItem, ...]:
-    if not 0 <= primary < len(_SECTIONS):
+    if not 0 <= primary < len(SECTIONS):
         return ()
-    section = _SECTIONS[primary]
+    section = SECTIONS[primary]
     return section.admin_items if identity.is_admin else section.student_items
 
 
@@ -167,6 +173,7 @@ def frame(
     terminal = screen._terminal_size()
     width, height = max(1, terminal.columns - 1), max(5, terminal.lines)
     selected = max(0, min(selected, len(PRIMARY_LABELS) - 1))
+    section = SECTIONS[selected]
     items = secondary_items(identity, selected)
     secondary = max(0, min(secondary_selected.get(selected, 0), max(0, len(items) - 1)))
     name = display_name or identity.username
@@ -204,15 +211,15 @@ def frame(
     for y in range(1, height - 1):
         board.put(separator_x, y, "│", screen._BORDER_SUBTLE)
 
-    if selected == 0:
+    if section.key == "home":
         protected = _home_preview(
             board, right_x, content_width, height, identity, name, angle, announcements
         )
         return animation._starlight(board.frame(), width, angle, protected)
 
     description = (
-        "增删改查与校园业务管理" if identity.is_admin else "查询校园学生信息"
-    ) if selected == 1 else f"{name} · {'管理员' if identity.is_admin else identity.student_no}"
+        section.admin_description if identity.is_admin else section.student_description
+    ) or f"{name} · {'管理员' if identity.is_admin else identity.student_no}"
     board.put(right_x, 1, PRIMARY_LABELS[selected], screen._BOLD + screen._TEXT_ACCENT)
     board.put(right_x, 2, description, screen._TEXT_SECONDARY)
     _secondary_grid(
@@ -291,7 +298,7 @@ def _compact_body(
     y = 7
     if y >= height - 1:
         return
-    if selected == 0:
+    if SECTIONS[selected].key == "home":
         board.put(0, y, "星原学生信息系统", screen._BOLD + screen._TEXT_ACCENT)
         if y + 2 < height - 1:
             board.put(0, y + 2, "公告", screen._BOLD + screen._TEXT_PRIMARY)
