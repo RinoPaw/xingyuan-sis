@@ -45,7 +45,7 @@ class WorkspaceFlowTests(unittest.TestCase):
         state = Workspace("students", selected=17)
         original = state.current(self.catalog).copy()
         self.assertEqual(
-            self.interact(state, ["d", "select"], (120, 35)),
+            self.interact(state, ["d", "left", "select"], (120, 35)),
             ("save", 0),
         )
         self.assertEqual(state.form.mode, "delete")

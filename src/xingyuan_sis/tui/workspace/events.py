@@ -299,6 +299,22 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
 
         if state.form:
             form = state.form
+            if form.mode == "delete":
+                if key == "confirm-delete":
+                    return "save", 0
+                if key == "cancel-delete":
+                    cancel_form(state)
+                elif key in {"left", "up", "home"}:
+                    form.position = 0
+                elif key in {"right", "down", "end"}:
+                    form.position = 1
+                elif key == "focus":
+                    form.position = 1 - form.position
+                elif key == "select":
+                    if form.position == 0:
+                        return "save", 0
+                    cancel_form(state)
+                continue
             if key == "save" or (key == "select" and not form.fields):
                 return "save", 0
             if key == "select" and form.fields:

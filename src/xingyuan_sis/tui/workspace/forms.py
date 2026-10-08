@@ -33,7 +33,8 @@ def open_form(state: Workspace, catalog: Catalog, mode: str) -> None:
     elif mode in {"import", "export"}:
         state.form = Form(mode, (Field("path", "CSV 文件路径", True),), {"path": "data/students.csv"})
     elif mode == "delete":
-        state.form = Form(mode, original=row, return_to=return_to)
+        # Enter should never confirm a destructive action immediately on entry.
+        state.form = Form(mode, original=row, return_to=return_to, position=1)
     else:
         state.form = Form(mode, original=row)
 

@@ -13,7 +13,7 @@ from .field_geometry import (
     control_width,
     form_field_geometry,
 )
-from .presentation import delete_impacts, display_value, project_record
+from .presentation import delete_identity, delete_impacts, display_value, project_record
 from .state import FieldSessionOwner
 
 if TYPE_CHECKING:
@@ -32,38 +32,58 @@ def _render_delete_panel(
     width: int,
     bottom: int,
 ) -> None:
-    """Render destructive context as one aligned inspector-side task."""
+    """Compact, risk-first confirmation with explicit keyboard and mouse choices."""
     form = state.form
-    title, identifier = identity(state.key, form.original)
-    rows: list[tuple[str, str, str]] = [
-        ("记录", title, screen._TEXT_PRIMARY),
-        ("标识", identifier, screen._TEXT_SECONDARY),
-        *(
-            (label, value, screen._TEXT_PRIMARY)
-            for label, value in delete_impacts(catalog, state.key, form.original)
-        ),
-        ("风险", "删除后无法撤销", screen._BOLD + screen._TEXT_DANGER),
+    identity_rows = delete_identity(state.key, form.original)
+    impacts = delete_impacts(catalog, state.key, form.original)
+
+    # Reserve the controls before laying out details. Small terminals must
+    # still expose the destructive choice and a visible cancellation path.
+    label_delete = "确认删除" if width >= 22 else "删除"
+    button_space = screen._display_width(theme.button(label_delete)) + screen._display_width(theme.button("取消")) + 1
+    side_by_side = button_space <= width
+    action_height = 1 if side_by_side else 2
+    action_top = max(y, bottom - action_height)
+    capacity = max(0, action_top - y)
+
+    # Prefer showing consequences over secondary identifiers on short screens.
+    lines: list[tuple[str, str, str]] = [
+        ("field", identity_rows[0][0], identity_rows[0][1]),
+        ("field", identity_rows[1][0], identity_rows[1][1]),
+        *(("impact", "", text) for text in impacts),
+        ("risk", "", "删除后无法撤销"),
     ]
+    if len(lines) > capacity:
+        lines.pop(1)  # Identifier is the first detail to hide under pressure.
+    while len(lines) > capacity and len(lines) > 2:
+        lines.pop(-2)  # Retain the record name and irreversible-risk warning.
+    if len(lines) > capacity:
+        lines = lines[-capacity:] if capacity else []
 
-    board.put(x, y, "确认删除以下记录？", screen._BOLD + screen._TEXT_PRIMARY, width=width)
-    if y + 1 < bottom:
-        board.put(x, y + 1, "─" * width, screen._BORDER_SUBTLE, width=width)
-
-    label_width = 6
+    label_width = min(max(screen._display_width(label) for label, _ in identity_rows), max(1, width // 2))
     value_x = x + label_width + 2
     value_width = max(1, width - label_width - 2)
-    for index, (label, value, style) in enumerate(rows):
-        row_y = y + 3 + index
-        if row_y >= bottom:
+    spacious = bottom - y >= len(lines) + action_height + 3
+    for index, (kind, label, value) in enumerate(lines):
+        line_y = y + index + (1 if spacious and index >= 2 else 0)
+        if line_y >= action_top:
             break
-        board.put(
-            x,
-            row_y,
-            screen._pad_cells(screen._clip_cells(label, label_width), label_width),
-            screen._TEXT_SECONDARY,
-            width=label_width,
-        )
-        board.put(value_x, row_y, value, style, width=value_width)
+        if kind == "field":
+            board.put(x, line_y, screen._pad_cells(label, label_width), screen._TEXT_SECONDARY, width=label_width)
+            if value_x < x + width:
+                board.put(value_x, line_y, value, screen._TEXT_PRIMARY, width=value_width)
+        elif kind == "impact":
+            board.put(x, line_y, value, screen._TEXT_SECONDARY, width=width)
+        else:
+            board.put(x, line_y, value, screen._BOLD + screen._TEXT_DANGER, width=width)
+
+    control_y = min(bottom - action_height, y + len(lines) + (2 if spacious else 1))
+    control_y = max(y, control_y)
+    next_x = board.button(x, control_y, label_delete, "confirm-delete", selected=form.position == 0)
+    if side_by_side:
+        board.button(next_x, control_y, "取消", "cancel-delete", selected=form.position == 1)
+    elif control_y + 1 < bottom:
+        board.button(x, control_y + 1, "取消", "cancel-delete", selected=form.position == 1)
 
 
 def _field_label(field, width: int) -> str:
@@ -92,7 +112,6 @@ def _render_form_heading(
 
 def _render_form_action(board: Board, mode: str, x: int, y: int) -> None:
     label = {
-        "delete": "确认删除",
         "seed": "确认",
         "reset-password": "确认",
         "import": "执行",
@@ -145,7 +164,6 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
     bottom = action_row
 
     titles = {
-        "delete": "删除记录",
         "import": "导入学生 CSV",
         "export": "导出学生 CSV",
         "seed": "建立演示校园",
@@ -156,11 +174,13 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
         if form.mode == "create" and state.key in COLLECTIONS
         else titles.get(form.mode, "档案")
     )
-    _render_form_heading(board, state, x, heading_row, width, heading)
+    if form.mode == "delete":
+        board.put(x, heading_row, "▌ " + "删除" + COLLECTIONS[state.key].title, screen._BOLD + screen._TEXT_DANGER, width=width)
+    else:
+        _render_form_heading(board, state, x, heading_row, width, heading)
 
     if form.mode == "delete":
         _render_delete_panel(board, state, catalog, x, content_row, width, bottom)
-        _render_form_action(board, form.mode, x, action_row)
         return
 
     if form.mode in {"seed", "reset-password"}:

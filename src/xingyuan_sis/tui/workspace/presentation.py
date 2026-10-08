@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from ..view_common import safe
+from ..view_common import identity, safe
 from .birth_date_editor import display as display_birth_date
 from .data import Catalog
 from .state import FieldSession
@@ -64,24 +64,41 @@ def display_semantic_fields(
     )
 
 
+def delete_identity(collection: str, row: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
+    """Return collection-specific names for the two identity values."""
+    first, second = identity(collection, dict(row))
+    labels = {
+        "students": ("姓名", "学号"),
+        "courses": ("课程", "编号"),
+        "grades": ("学生", "课程 / 学期"),
+        "departments": ("学院", "编号"),
+        "majors": ("专业", "编号"),
+        "classes": ("班级", "编号"),
+        "announcements": ("标题", "班级 / 编号"),
+    }[collection]
+    return tuple(zip(labels, (first, second)))
+
+
 def delete_impacts(
     catalog: Catalog,
     collection: str,
     row: Mapping[str, Any],
-) -> tuple[tuple[str, str], ...]:
-    """Describe relationship changes caused by deleting one record."""
+) -> tuple[str, ...]:
+    """State actual cascades and relationship changes without generic filler."""
     record = dict(row)
     if collection in {"students", "courses"}:
         _, related = catalog.related(collection, record)
-        return (("影响", f"{len(related)} 条关联选课将一并移除"),)
+        return (f"同时删除 {len(related)} 条选课记录（含成绩）",) if related else ()
     if collection == "classes":
         _, students = catalog.related(collection, record)
         notices = sum(
             notice["class_id"] == record["id"]
             for notice in catalog.records["announcements"]
         )
-        return (
-            ("影响", f"{len(students)} 名学生将变为未分班"),
-            ("同时", f"删除 {notices} 条班级公告"),
-        )
+        impacts: list[str] = []
+        if students:
+            impacts.append(f"{len(students)} 名学生将解除班级关联")
+        if notices:
+            impacts.append(f"同时删除 {notices} 条班级公告")
+        return tuple(impacts)
     return ()

@@ -95,6 +95,8 @@ def _footer(state: Workspace, catalog: Catalog, width: int) -> str:
         enter = "选择" if state.field_session.options is not None else "确认"
         return theme.footer(width, enter=enter, escape="取消")
     if state.form is not None:
+        if state.form.mode == "delete":
+            return theme.footer(width, enter="选择", escape="取消")
         if state.form.fields:
             return theme.footer(
                 width,

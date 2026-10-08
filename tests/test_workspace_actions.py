@@ -234,25 +234,91 @@ class WorkspaceActionTests(unittest.TestCase):
 
         plain_lines = [screen._ANSI_RE.sub("", line) for line in frame.lines]
         text = "\n".join(plain_lines)
-        self.assertIn("删除记录", text)
-        self.assertIn("确认删除以下记录？", text)
+        self.assertIn("删除学生", text)
+        self.assertNotIn("确认删除以下记录？", text)
         self.assertIn(selected["name"], text)
         self.assertIn(neighbor["name"], text)
-        self.assertIn("记录", text)
-        self.assertIn("标识", text)
-        self.assertIn("影响", text)
-        self.assertIn("风险", text)
+        self.assertIn("姓名", text)
+        self.assertIn("学号", text)
+        self.assertIn("同时删除", text)
+        self.assertIn("删除后无法撤销", text)
         self.assertIn("确认删除", text)
         self.assertNotIn("\n档案", text)
 
-        record_line = next(line for line in plain_lines if "记录" in line and selected["name"] in line)
-        id_line = next(line for line in plain_lines if "标识" in line and selected["student_no"] in line)
+        record_line = next(line for line in plain_lines if "姓名" in line and selected["name"] in line)
+        id_line = next(line for line in plain_lines if "学号" in line and selected["student_no"] in line)
         record_value = record_line.rfind(selected["name"])
         id_value = id_line.rfind(selected["student_no"])
         self.assertEqual(
             screen._display_width(record_line[:record_value]),
             screen._display_width(id_line[:id_value]),
         )
+
+    def test_delete_defaults_to_cancel_and_repeated_enter_cannot_delete(self):
+        state = workspace.Workspace("students", selected=2)
+        original = state.current(self.catalog)
+        with patch.object(keys, "_read_key", side_effect=["delete", "select", "refresh"]), \
+             patch.object(screen, "_paint"), \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 26))):
+            event = workspace_events.interact(state, self.catalog)
+        self.assertEqual(event, ("refresh", 0))
+        self.assertIsNone(state.form)
+        self.assertIsNotNone(self.catalog.service.student_by_no(original["student_no"]))
+
+    def test_delete_confirmation_requires_explicit_keyboard_selection(self):
+        state = workspace.Workspace("students", selected=2)
+        original = state.current(self.catalog)
+        with patch.object(keys, "_read_key", side_effect=["delete", "left", "select"]), \
+             patch.object(screen, "_paint"), \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 26))):
+            self.assertEqual(workspace_events.interact(state, self.catalog), ("save", 0))
+        self.assertEqual(state.form.position, 0)
+        workspace_forms.apply_form(state, self.catalog)
+        self.assertIsNone(self.catalog.service.student_by_no(original["student_no"]))
+
+    def test_delete_buttons_are_near_warning_and_clickable_in_wide_and_compact_modes(self):
+        for width, height in ((120, 35), (64, 20), (30, 12)):
+            with self.subTest(size=(width, height)):
+                state = workspace.Workspace("students", selected=1)
+                workspace_forms.open_form(state, self.catalog, "delete")
+                with patch.object(screen, "_terminal_size", return_value=os.terminal_size((width, height))):
+                    frame = workspace_view.render(state, self.catalog)
+                plain = [screen._ANSI_RE.sub("", line) for line in frame.lines]
+                confirm = next(region for region in frame.regions if region.action == "confirm-delete")
+                cancel = next(region for region in frame.regions if region.action == "cancel-delete")
+                risk_y = next(i + 1 for i, line in enumerate(plain) if "删除后无法撤销" in line)
+                self.assertGreater(confirm.y, risk_y)
+                self.assertLessEqual(confirm.y - risk_y, 3)
+                self.assertLess(confirm.y, height)
+                self.assertLess(cancel.y, height)
+                self.assertIn("Enter 选择", plain[-1])
+
+    def test_delete_mouse_actions_have_distinct_meanings(self):
+        for action, event_sequence, expect_save in (
+            ("confirm-delete", None, True),
+            ("cancel-delete", "refresh", False),
+        ):
+            with self.subTest(action=action):
+                state = workspace.Workspace("students", selected=2)
+                original = state.current(self.catalog)
+                workspace_forms.open_form(state, self.catalog, "delete")
+                with patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 26))):
+                    frame = workspace_view.render(state, self.catalog)
+                region = next(region for region in frame.regions if region.action == action)
+                sequence = [keys.MouseClick(region.x, region.y)]
+                if event_sequence:
+                    sequence.append(event_sequence)
+                with patch.object(keys, "_read_key", side_effect=sequence), \
+                     patch.object(screen, "_paint"), \
+                     patch.object(screen, "_terminal_size", return_value=os.terminal_size((80, 26))):
+                    result = workspace_events.interact(state, self.catalog)
+                self.assertEqual(result, ("save", 0) if expect_save else ("refresh", 0))
+                if expect_save:
+                    workspace_forms.apply_form(state, self.catalog)
+                    self.assertIsNone(self.catalog.service.student_by_no(original["student_no"]))
+                else:
+                    self.assertIsNone(state.form)
+                    self.assertIsNotNone(self.catalog.service.student_by_no(original["student_no"]))
 
     def test_literal_command_shortcuts_open_the_same_transaction_forms(self):
         for key, action in (("a", "create"), ("d", "delete")):
