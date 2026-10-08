@@ -28,6 +28,10 @@ _RULES: dict[tuple[str, str], tuple[Dependency, ...]] = {
 Domain = Callable[[str, Mapping[str, Any]], list[tuple[Any, str]] | None]
 
 
+def has_dependents(collection: str, field: str) -> bool:
+    return (collection, field) in _RULES
+
+
 def clamp_to_domain(value: Any, domain: list[tuple[Any, str]] | None) -> Any:
     """Constrain a *confirmed* numeric value to the nearest allowed number."""
     if value is None:
