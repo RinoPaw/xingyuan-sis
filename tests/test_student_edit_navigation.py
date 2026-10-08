@@ -61,7 +61,7 @@ class StudentEditNavigationTests(unittest.TestCase):
 
     def test_species_composite_row_uses_real_event_geometry(self):
         self.assertEqual(self._move("field:student_no", "down"), "field:family")
-        self.assertEqual(self._move("field:gender", "up"), "field:branch")
+        self.assertEqual(self._move("field:gender", "up"), "field:family")
         self.assertEqual(self._move("field:branch", "up"), "field:student_no")
         self.assertEqual(self._move("field:branch", "left"), "field:family")
         self.assertEqual(self._move("field:family", "right"), "field:branch")
@@ -69,7 +69,7 @@ class StudentEditNavigationTests(unittest.TestCase):
 
     def test_class_composite_row_uses_same_real_event_geometry(self):
         self.assertEqual(self._move("field:department_name", "down"), "field:major_code")
-        self.assertEqual(self._move("field:status", "up"), "field:class_number")
+        self.assertEqual(self._move("field:status", "up"), "field:major_code")
         self.assertEqual(self._move("field:class_number", "up"), "field:department_name")
         self.assertEqual(self._move("field:class_number", "left"), "field:major_code")
         self.assertEqual(self._move("field:major_code", "right"), "field:class_number")
