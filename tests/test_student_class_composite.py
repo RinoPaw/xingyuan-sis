@@ -141,46 +141,38 @@ class StudentClassCompositeTests(unittest.TestCase):
                 field_session.start_form(state, self.catalog)
                 self.assertEqual([field.key for field in state.field_session.fields], [second])
 
-    def test_invalid_dependent_child_waits_for_explicit_right_navigation(self):
+    def test_parent_change_clears_optional_branch_and_commits_immediately(self):
         state = Workspace("students")
         original = state.current(self.catalog).copy()
         original_branch = original["branch"]
-        families = self.catalog.options("students", "family", original)
         target_family = next(
-            family for family, _ in families
+            family for family, _ in self.catalog.options("students", "family", original)
             if family != original["family"] and original_branch not in {
-                row["name"] for row in self.catalog.species_branches
-                if row["family_name"] == family
+                item["name"] for item in self.catalog.species_branches
+                if item["family_name"] == family
             }
         )
-
         field_session.start(state, self.catalog, "family")
         field_session.edit_current(state, self.catalog)
-        family_index = next(
+        index = next(
             i for i, (value, _) in enumerate(state.field_session.options)
             if value == target_family
         )
-        field_session.accept_option(state, self.catalog, family_index)
+        field_session.accept_option(state, self.catalog, index)
+        self.assertIsNone(state.field_session)
+        committed = self.catalog.service.student_by_no(original["student_no"])
+        self.assertEqual(committed["family"], target_family)
+        self.assertIsNone(committed["branch"])
 
-        self.assertIsNotNone(state.field_session)
-        self.assertEqual(state.field_session.active_key, "family")
-        self.assertIsNone(state.field_session.options)
-        self.assertIsNone(state.field_session.values["branch"])
-        self.assertEqual(
-            self.catalog.service.student_by_no(original["student_no"])["family"],
-            original["family"],
-        )
-
-        self.assertTrue(field_session.move_active_field(state, "right"))
-        self.assertEqual(state.field_session.active_key, "branch")
+        # The child remains independently editable after the parent is saved.
+        field_session.start(state, self.catalog, "branch")
         field_session.edit_current(state, self.catalog)
-        branch_index = next(
+        chosen = next(
             i for i, (value, _) in enumerate(state.field_session.options)
             if value is not None
         )
-        target_branch = state.field_session.options[branch_index][0]
-        field_session.accept_option(state, self.catalog, branch_index)
-
+        target_branch = state.field_session.options[chosen][0]
+        field_session.accept_option(state, self.catalog, chosen)
         self.assertIsNone(state.field_session)
         changed = self.catalog.service.student_by_no(original["student_no"])
         self.assertEqual((changed["family"], changed["branch"]), (target_family, target_branch))

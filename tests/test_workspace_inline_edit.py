@@ -83,7 +83,7 @@ class WorkspaceInlineEditTests(unittest.TestCase):
             for row in self.catalog.service.list_species_branches()
             if row["family_name"] == values["family"]
         ]
-        self.assertEqual([value for value, _ in branches], expected_branches)
+        self.assertEqual([value for value, _ in branches], [None, *expected_branches])
 
         for field in (
             "student_no", "name", "enrollment_year", "age",
@@ -272,37 +272,41 @@ class WorkspaceInlineEditTests(unittest.TestCase):
             original["status"],
         )
 
-    def test_family_edit_requires_explicit_move_before_editing_branch(self):
+    def test_parent_change_clears_optional_branch_and_commits_immediately(self):
         state = self.inspector_state()
         original = state.current(self.catalog).copy()
         original_branch = original["branch"]
-        workspace_field.start(state, self.catalog, "family")
-        workspace_field.edit_current(state, self.catalog)
-        family_index = next(
-            i for i, (value, _) in enumerate(state.field_session.options)
-            if value != original["family"] and original_branch not in {
-                row["name"] for row in self.catalog.species_branches
-                if row["family_name"] == value
+        target_family = next(
+            family for family, _ in self.catalog.options("students", "family", original)
+            if family != original["family"] and original_branch not in {
+                item["name"] for item in self.catalog.species_branches
+                if item["family_name"] == family
             }
         )
-        chosen_family = state.field_session.options[family_index][0]
-        workspace_field.accept_option(state, self.catalog, family_index)
-
-        self.assertEqual(state.field_session.active_key, "family")
-        self.assertIsNone(state.field_session.options)
-        self.assertTrue(workspace_field.move_active_field(state, "right"))
-        self.assertEqual(state.field_session.active_key, "branch")
+        workspace_field.start(state, self.catalog, "family")
         workspace_field.edit_current(state, self.catalog)
-        branch_index = next(
-            i for i, (value, _) in enumerate(state.field_session.options)
+        index = next(
+            i for i, (value, _) in enumerate(state.workspace_field.options)
+            if value == target_family
+        )
+        workspace_field.accept_option(state, self.catalog, index)
+        self.assertIsNone(state.field_session)
+        committed = self.catalog.service.student_by_no(original["student_no"])
+        self.assertEqual(committed["family"], target_family)
+        self.assertIsNone(committed["branch"])
+
+        # The child remains independently editable after the parent is saved.
+        workspace_field.start(state, self.catalog, "branch")
+        workspace_field.edit_current(state, self.catalog)
+        chosen = next(
+            i for i, (value, _) in enumerate(state.workspace_field.options)
             if value is not None
         )
-        chosen_branch = state.field_session.options[branch_index][0]
-        workspace_field.accept_option(state, self.catalog, branch_index)
-
+        target_branch = state.workspace_field.options[chosen][0]
+        workspace_field.accept_option(state, self.catalog, chosen)
         self.assertIsNone(state.field_session)
         changed = self.catalog.service.student_by_no(original["student_no"])
-        self.assertEqual((changed["family"], changed["branch"]), (chosen_family, chosen_branch))
+        self.assertEqual((changed["family"], changed["branch"]), (target_family, target_branch))
 
     def test_complete_birth_date_derives_age_but_keeps_age_in_focus_graph(self):
         row = self.catalog.records["students"][0]

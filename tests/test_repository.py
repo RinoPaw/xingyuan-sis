@@ -117,6 +117,7 @@ class RepositoryTests(unittest.TestCase):
             self.repository.add_student(
                 student_no=student["student_no"],
                 name=student["name"],
+                species_family_id=student["species_family_id"],
                 species_branch_id=student["species_branch_id"],
                 enrollment_year=student["enrollment_year"],
             )

@@ -277,9 +277,9 @@ def _finish_current_field(state: Workspace, catalog: Catalog) -> None:
     try:
         commit(state, catalog)
     except ValueError as exc:
-        # A parent change can invalidate a required child (for example族系/支系).
-        # Keep the session on the field the user actually edited; they may move
-        # to the dependent field explicitly with ←/→.
+        # Some composite groups require a complete dependent choice before
+        # persisting (e.g. a selected major with no class number). Keep the
+        # active field focused so the user can correct the draft.
         state.notice = str(exc)
 
 
