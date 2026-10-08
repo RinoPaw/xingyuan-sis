@@ -6,8 +6,8 @@ from . import keys, screen, theme
 from .commands import Command, resolve_shortcut
 
 
-_NEXT_PAGE = Command("page_down", "下一页", "n", toolbar=False)
-_PREVIOUS_PAGE = Command("page_up", "上一页", "p", toolbar=False)
+_NEXT_PAGE = Command("page_down", "下一页", "n")
+_PREVIOUS_PAGE = Command("page_up", "上一页", "p")
 
 
 def show(text: str, title: str) -> None:
