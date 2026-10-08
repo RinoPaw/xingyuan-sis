@@ -87,7 +87,7 @@ def _portal_home(
                 screen._paint(frame.lines, previous_lines)
                 previous_lines = frame.lines
 
-            key = keys._read_key(0.08 if animate and selected == 0 else 0.15)
+            key = keys._read_key(0.08 if animate and portal.SECTIONS[selected].key == "home" else 0.15)
             if isinstance(key, keys.MouseScroll):
                 key = key.direction
             if isinstance(key, screen.MouseClick):
@@ -95,7 +95,7 @@ def _portal_home(
             if key is None:
                 continue
 
-            if focus == "primary" and selected == 0:
+            if focus == "primary" and portal.SECTIONS[selected].key == "home":
                 key = resolve_shortcut(key, (portal.TOGGLE_ANIMATION,))
             if key == portal.TOGGLE_ANIMATION.action and focus == "primary":
                 preferences["animate"] = not animate
