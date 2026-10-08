@@ -110,6 +110,14 @@ def _portal_home(
                 elif action:
                     key = action
 
+            if key == "focus":
+                selected, focus, next_secondary = portal.next_tab_target(
+                    identity, selected, focus, secondary
+                )
+                if focus == "secondary":
+                    secondary_selected[selected] = next_secondary
+                continue
+
             if focus == "primary":
                 if selected == 0:
                     key = resolve_shortcut(key, (portal.TOGGLE_ANIMATION,))
