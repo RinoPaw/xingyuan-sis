@@ -41,10 +41,22 @@ class TuiRegressionAuditTests(unittest.TestCase):
         self.assertNotIn("q/", footer)
         self.assertNotIn("/q", footer)
 
-    def test_every_workspace_footer_uses_the_same_visible_escape_contract(self):
+    def test_browse_footers_show_only_commands_available_on_each_page(self):
         for key in WORKSPACES:
             with self.subTest(key=key):
-                self.assert_escape_footer(workspace.Workspace(key))
+                footer = screen._ANSI_RE.sub("", self.render(workspace.Workspace(key)).lines[-1])
+                self.assertNotIn("Esc", footer)
+                self.assertNotIn("Tab", footer)
+                if key == "students":
+                    for hint in ("/ 搜索", "A 增加", "D 删除", "R 重置密码"):
+                        self.assertIn(hint, footer)
+                elif key == "data":
+                    for hint in ("I 导入", "O 导出", "G 演示"):
+                        self.assertIn(hint, footer)
+                else:
+                    for hint in ("/ 搜索", "A 增加", "D 删除"):
+                        self.assertIn(hint, footer)
+                    self.assertNotIn("重置密码", footer)
 
     def test_every_transaction_and_field_session_keeps_escape_contract(self):
         for key in RECORD_WORKSPACES:
@@ -109,12 +121,12 @@ class TuiRegressionAuditTests(unittest.TestCase):
         for key in ("courses", "grades"):
             with self.subTest(key=key):
                 state = workspace.Workspace(key)
-                choice_row = screen._ANSI_RE.sub("", self.render(state).lines[4])
+                choice_row = screen._ANSI_RE.sub("", self.render(state).lines[2])
                 for index in range(3):
                     self.assertIn(f"· {len(self.catalog.rows(key, index, state.query))}", choice_row)
         for key in ACADEMICS:
             with self.subTest(key=key):
-                choice_row = screen._ANSI_RE.sub("", self.render(workspace.Workspace(key)).lines[4])
+                choice_row = screen._ANSI_RE.sub("", self.render(workspace.Workspace(key)).lines[2])
                 for collection in ACADEMICS:
                     self.assertIn(f"· {len(self.catalog.records[collection])}", choice_row)
 
