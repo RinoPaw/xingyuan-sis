@@ -131,7 +131,7 @@ class WorkspaceFlowTests(unittest.TestCase):
         footer = plain[-1]
 
         self.assertIn("名册", body)
-        self.assertIn("档案", body)
+        self.assertIn("新增学生", body)
         self.assertNotIn("新建 · 学生档案", body)
         self.assertNotIn("* 必填", body)
         self.assertNotIn("更改暂存", body)
