@@ -64,6 +64,27 @@ class WorkspaceActionTests(unittest.TestCase):
             for region in browsing.regions
         ))
 
+    def test_toolbar_input_reconciles_invalid_focus_only_when_handling_events(self):
+        from xingyuan_sis.tui.workspace.commands import toolbar as toolbar_commands
+
+        for index in (-50, 10_000):
+            with self.subTest(index=index):
+                state = workspace.Workspace(
+                    "students", focus=workspace.FocusArea.TOOLBAR,
+                    action_selected=index,
+                )
+                with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+                    workspace_view.render(state, self.catalog)
+                self.assertEqual(state.action_selected, index)
+                with patch.object(keys, "_read_key", side_effect=["down", "back"]), \
+                     patch.object(screen, "_paint"), \
+                     patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+                    self.assertIsNone(workspace_events.interact(state, self.catalog))
+                self.assertEqual(
+                    state.action_selected,
+                    min(max(0, index), len(toolbar_commands(self.catalog, "students")) - 1),
+                )
+
     def test_toolbar_enter_invokes_the_same_delete_command(self):
         state = workspace.Workspace("students", selected=15)
         selected_at_delete: list[int] = []
