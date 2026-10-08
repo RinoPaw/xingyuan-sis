@@ -22,112 +22,46 @@ class WorkspaceActionTests(unittest.TestCase):
         seed_demo(self.db)
         self.catalog = Catalog(self.db)
 
-    def test_record_commands_are_the_toolbar_and_footer_source(self):
+    def test_browse_actions_live_only_in_the_command_footer(self):
         state = workspace.Workspace("students")
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             frame = workspace_view.render(state, self.catalog)
-
-        actions = {region.action: region for region in frame.regions}
-        for action in ("search", "create", "delete", "reset-password"):
-            self.assertIn(action, actions)
-            self.assertLess(actions[action].y, 35)
-        self.assertNotIn("edit", actions)
-
+        actions = {region.action for region in frame.regions}
+        for command in ("search", "create", "delete", "reset-password"):
+            self.assertNotIn(command, actions)
         footer = screen._ANSI_RE.sub("", frame.lines[-1])
-        self.assertIn("Enter 打开", footer)
-        self.assertIn("Esc 返回", footer)
-        self.assertIn("/ 搜索", footer)
-        self.assertIn("A 增加", footer)
-        self.assertIn("D 删除", footer)
-        self.assertNotIn("E 编辑", footer)
-        self.assertFalse(any(region.y == 35 for region in frame.regions))
+        for label in ("/ 搜索", "A 增加", "D 删除", "R 重置密码"):
+            self.assertIn(label, footer)
+        for label in ("Tab", "方向键", "Enter", "Esc", "I 导入", "G 演示"):
+            self.assertNotIn(label, footer)
 
-    def test_create_save_is_archive_local_but_browse_delete_stays_in_toolbar(self):
-        state = workspace.Workspace(
-            "students",
-            focus=workspace.FocusArea.INSPECTOR,
-            content_panel=workspace.ContentPanel.INSPECTOR,
-        )
-        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
-            browsing = workspace_view.render(state, self.catalog)
-        delete = next(region for region in browsing.regions if region.action == "delete")
-
+    def test_create_save_remains_local_to_transaction(self):
+        state = workspace.Workspace("students")
         workspace_forms.open_form(state, self.catalog, "create")
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             creating = workspace_view.render(state, self.catalog)
         save = next(region for region in creating.regions if region.action == "save")
-
-        self.assertLess(delete.y, save.y)
         self.assertEqual(save.y, 34)
-        self.assertFalse(any(
-            region.action == "delete" and region.y == save.y
-            for region in browsing.regions
-        ))
 
-    def test_toolbar_input_reconciles_invalid_focus_only_when_handling_events(self):
-        from xingyuan_sis.tui.workspace.commands import toolbar as toolbar_commands
-
-        for index in (-50, 10_000):
-            with self.subTest(index=index):
-                state = workspace.Workspace(
-                    "students", focus=workspace.FocusArea.TOOLBAR,
-                    action_selected=index,
-                )
-                with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
-                    workspace_view.render(state, self.catalog)
-                self.assertEqual(state.action_selected, index)
-                with patch.object(keys, "_read_key", side_effect=["down", "back"]), \
-                     patch.object(screen, "_paint"), \
-                     patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
-                    self.assertIsNone(workspace_events.interact(state, self.catalog))
-                self.assertEqual(
-                    state.action_selected,
-                    min(max(0, index), len(toolbar_commands(self.catalog, "students")) - 1),
-                )
-
-    def test_toolbar_enter_invokes_the_same_delete_command(self):
+    def test_delete_shortcut_preserves_selected_record(self):
         state = workspace.Workspace("students", selected=15)
-        selected_at_delete: list[int] = []
+        captured = []
 
         def capture(_state, _catalog, action):
             if action == "delete":
-                selected_at_delete.append(_state.selected)
+                captured.append(_state.selected)
 
-        with patch.object(
-            keys, "_read_key",
-            side_effect=["focus", "focus", "right", "right", "select", "refresh"],
-        ), patch.object(screen, "_paint"), patch.object(
-            screen, "_terminal_size", return_value=os.terminal_size((120, 35))
-        ), patch.object(workspace_events, "open_form", side_effect=capture):
+        with patch.object(keys, "_read_key", side_effect=["d", "refresh"]), \
+             patch.object(screen, "_paint"), \
+             patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
+             patch.object(workspace_events, "open_form", side_effect=capture):
             event = workspace_events.interact(state, self.catalog)
 
         self.assertEqual(event, ("refresh", 0))
-        self.assertEqual(selected_at_delete, [15])
+        self.assertEqual(captured, [15])
         self.assertEqual(state.selected, 15)
 
-    def test_toolbar_focus_keeps_current_record_as_weak_context_only(self):
-        state = workspace.Workspace("students", selected=15, focus=workspace.FocusArea.TOOLBAR)
-        selected = state.current(self.catalog)
-
-        with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))), \
-             patch("sys.stdout.isatty", return_value=True), patch.dict(os.environ) as environment:
-            environment.pop("NO_COLOR", None)
-            frame = workspace_view.render(state, self.catalog)
-
-        selected_line = next(
-            line for line in frame.lines
-            if selected["name"] in screen._ANSI_RE.sub("", line)
-            and selected["student_no"] in screen._ANSI_RE.sub("", line)
-        )
-        plain = screen._ANSI_RE.sub("", selected_line)
-        self.assertIn("· ", plain)
-        self.assertIn(screen._TEXT_SECONDARY, selected_line)
-        self.assertIn(screen._TEXT_PRIMARY, selected_line)
-        self.assertNotIn(screen._SURFACE_INTERACTIVE, selected_line)
-        self.assertNotIn(screen._SURFACE_SELECTED, selected_line)
-        self.assertNotIn(screen._TEXT_ACCENT, selected_line)
-
-    def test_search_click_does_not_promote_inspector_to_selected_state(self):
+    def test_search_shortcut_returns_to_roster_from_inspector(self):
         state = workspace.Workspace(
             "students",
             focus=workspace.FocusArea.INSPECTOR,
@@ -135,9 +69,9 @@ class WorkspaceActionTests(unittest.TestCase):
         )
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
             frame = workspace_view.render(state, self.catalog)
-        search = next(region for region in frame.regions if region.action == "search")
+        self.assertFalse(any(region.action == "search" for region in frame.regions))
 
-        with patch.object(keys, "_read_key", side_effect=[keys.MouseClick(search.x, search.y)]), \
+        with patch.object(keys, "_read_key", side_effect=["/"]), \
              patch.object(screen, "_paint"), patch.object(
                  screen, "_terminal_size", return_value=os.terminal_size((120, 35))
              ):
@@ -157,28 +91,25 @@ class WorkspaceActionTests(unittest.TestCase):
         state = workspace.Workspace(
             "students",
             selected=4,
-            focus=workspace.FocusArea.TOOLBAR,
+            focus=workspace.FocusArea.INSPECTOR,
             content_panel=workspace.ContentPanel.INSPECTOR,
             detail_scroll=3,
             detail_selected=6,
-            action_selected=2,
         )
         workspace_forms.open_form(state, self.catalog, "delete")
 
         self.assertEqual(state.focus, workspace.FocusArea.INSPECTOR)
         self.assertEqual(state.content_panel, workspace.ContentPanel.INSPECTOR)
         self.assertIsNotNone(state.form.return_to)
-        self.assertEqual(state.form.return_to.focus, workspace.FocusArea.TOOLBAR)
+        self.assertEqual(state.form.return_to.focus, workspace.FocusArea.INSPECTOR)
         self.assertEqual(state.form.return_to.detail_scroll, 3)
         self.assertEqual(state.form.return_to.detail_selected, 6)
-        self.assertEqual(state.form.return_to.action_selected, 2)
 
         workspace_forms.cancel_form(state)
-        self.assertEqual(state.focus, workspace.FocusArea.TOOLBAR)
+        self.assertEqual(state.focus, workspace.FocusArea.INSPECTOR)
         self.assertEqual(state.content_panel, workspace.ContentPanel.INSPECTOR)
         self.assertEqual(state.detail_scroll, 3)
         self.assertEqual(state.detail_selected, 6)
-        self.assertEqual(state.action_selected, 2)
 
     def test_delete_confirmation_restores_the_same_context_after_commit(self):
         state = workspace.Workspace(
@@ -230,14 +161,14 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertIsNone(state.roster_gap)
         self.assertEqual(state.current(self.catalog)["id"], rows[4]["id"])
 
-    def test_toolbar_return_to_roster_resolves_gap_to_the_next_student(self):
+    def test_return_to_roster_resolves_gap_to_the_next_student(self):
         state = workspace.Workspace("students", selected=4)
         rows = state.rows(self.catalog)
         state.leave_roster_gap(4)
         self.assertIsNone(state.current(self.catalog))
 
-        state.set_focus(workspace.FocusArea.TOOLBAR)
-        state.focus_content()
+        state.set_focus(workspace.FocusArea.INSPECTOR)
+        state.focus_roster()
 
         self.assertEqual(state.focus, workspace.FocusArea.ROSTER)
         self.assertIsNone(state.roster_gap)
