@@ -6,6 +6,12 @@ from ..view_common import safe
 from .birth_date_editor import display as display_birth_date
 from .data import Catalog
 from .state import FieldSession
+from .student_layout import STUDENT_FIELD_ROWS
+
+
+_COMPOSITE_FIELDS = frozenset(
+    key for row in STUDENT_FIELD_ROWS if len(row.keys) > 1 for key in row.keys
+)
 
 
 def project_record(
@@ -30,6 +36,8 @@ def display_value(
 ) -> str:
     """Format stored, relationship and display-only attributes through one path."""
     value = values.get(field_key)
+    if collection == "students" and field_key in _COMPOSITE_FIELDS and value in (None, ""):
+        return "未指定"
     if collection == "students" and field_key == "birth_date":
         return display_birth_date(value)
     options = catalog.options(collection, field_key, dict(values))
@@ -50,13 +58,8 @@ def display_semantic_fields(
     independently focusable. Only a standalone empty field uses the compact
     em-dash placeholder.
     """
-    if not field_keys:
-        return ()
-    if len(field_keys) == 1:
-        key = field_keys[0]
-        return ((key, display_value(catalog, collection, values, key)),)
     return tuple(
-        (key, "未指定" if values.get(key) in (None, "") else display_value(catalog, collection, values, key))
+        (key, display_value(catalog, collection, values, key))
         for key in field_keys
     )
 
