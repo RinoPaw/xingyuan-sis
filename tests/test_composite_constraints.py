@@ -139,5 +139,34 @@ class CompositeConstraintTests(unittest.TestCase):
         )
 
 
+    def test_masked_day_supports_leading_zero_without_early_clamping(self) -> None:
+        student_no = self.catalog.rows("students")[0]["student_no"]
+        self.catalog.service.update_student_by_no(student_no, birth_date="2005-02-28")
+        self.catalog.refresh()
+
+        for day_input, expected in (("09", "2005-02-09"), ("31", "2005-02-28")):
+            with self.subTest(day_input=day_input):
+                state = Workspace("students")
+                field_session.start(state, self.catalog, "birth_date")
+                events = [
+                    TextEvent("tab"), TextEvent("tab"), TextEvent("clear"),
+                    *(TextEvent("insert", digit) for digit in day_input),
+                    TextEvent("submit"),
+                ]
+                with patch.object(field_session, "input_mode", return_value=nullcontext()), \\
+                     patch.object(field_session, "editing_cursor", return_value=nullcontext()), \\
+                     patch.object(field_session, "read_event", side_effect=events), \\
+                     patch.object(field_session, "_position_birth_cursor"), \\
+                     patch.object(screen, "_paint"), \\
+                     patch.object(screen, "_terminal_size", return_value=os.terminal_size((120, 35))):
+                    field_session.edit_current(state, self.catalog)
+                self.assertIsNone(state.field_session)
+                self.assertEqual(
+                    self.catalog.service.student_by_no(student_no)["birth_date"], expected
+                )
+                self.catalog.service.update_student_by_no(student_no, birth_date="2005-02-28")
+                self.catalog.refresh()
+
+
 if __name__ == "__main__":
     unittest.main()
