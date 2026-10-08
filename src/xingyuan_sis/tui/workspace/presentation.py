@@ -132,7 +132,7 @@ def confirmation_content(catalog: Catalog, collection: str, form: Form) -> Confi
         return ConfirmationContent(
             heading="重置学生密码",
             details=delete_identity("students", form.original),
-            notes=("密码重置为学号；原密码立即失效",),
+            notes=("新密码为学号（旧密码失效）",),
             warning="下次登录须改密",
             confirm_label="确认重置",
         )
@@ -140,8 +140,8 @@ def confirmation_content(catalog: Catalog, collection: str, form: Form) -> Confi
         return ConfirmationContent(
             heading="建立演示校园",
             details=(),
-            notes=("将写入演示学生、课程及选课数据",),
-            warning="仅支持空数据库；不会覆盖已有记录",
+            notes=("写入演示学生、课程和选课", "仅支持空数据库"),
+            warning="不会覆盖已有记录",
             confirm_label="确认建立",
         )
     raise ValueError(f"未知确认操作：{form.mode}")
