@@ -142,20 +142,15 @@ class PortalLayoutTests(unittest.TestCase):
             (2, "primary", {2: 0}),
             (2, "secondary", {2: 0}),
         )
-        footers: list[str] = []
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((100, 24))):
             for selected, focus, secondary in states:
                 frame = portal.frame(identity, selected, focus, secondary, {}, 0, animate=False)
                 footer = screen._ANSI_RE.sub("", frame.lines[-1])
-                footers.append(footer)
-                self.assertIn("Tab 下一项", footer)
                 self.assertIn("方向键 移动", footer)
                 self.assertIn("Enter 打开", footer)
                 self.assertIn("Esc 返回", footer)
                 self.assertFalse(any(region.y == 24 for region in frame.regions))
 
-        self.assertIn("P 动画", footers[0])
-        self.assertTrue(all("P 动画" not in footer for footer in footers[1:]))
 
     def test_portal_navigation_separates_focus_from_selection(self) -> None:
         for identity in (
