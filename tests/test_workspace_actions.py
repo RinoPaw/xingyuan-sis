@@ -175,8 +175,9 @@ class WorkspaceActionTests(unittest.TestCase):
         self.assertIsNone(self.catalog.service.student_by_no(original["student_no"]))
         self.assertEqual(state.focus, workspace.FocusArea.ROSTER)
         self.assertEqual(state.content_panel, workspace.ContentPanel.ROSTER)
-        self.assertEqual(state.detail_scroll, 2)
-        self.assertEqual(state.detail_selected, 5)
+        self.assertEqual(state.roster_gap, 4)
+        self.assertEqual(state.detail_scroll, 0)
+        self.assertEqual(state.detail_selected, 0)
 
     def test_deleted_student_can_leave_an_empty_slot_until_up_or_down_selects_a_neighbor(self):
         state = workspace.Workspace("students", selected=4)
