@@ -65,8 +65,6 @@ def _portal_home(
                 angle += max(0.0, now - last_tick) * 0.85
             last_tick = now
             preferences["angle"] = angle
-            preferences["portal_selected"] = selected
-            preferences["portal_focus"] = focus
 
             items = portal.secondary_items(identity, selected)
             secondary = int(secondary_selected.get(selected, 0))
@@ -93,34 +91,17 @@ def _portal_home(
             if isinstance(key, keys.MouseScroll):
                 key = key.direction
             if isinstance(key, screen.MouseClick):
-                action = screen._hit_action(key, frame.regions)
-                if action and action.startswith("primary:"):
-                    target = int(action.split(":")[1])
-                    if target == selected:
-                        key = "select"
-                    else:
-                        selected = target
-                        focus = "primary"
-                        continue
-                elif action and action.startswith("secondary:"):
-                    target = int(action.split(":")[1])
-                    if target < len(items):
-                        secondary_selected[selected] = target
-                        return items[target].action
-                elif action:
-                    key = action
+                key = screen._hit_action(key, frame.regions)
+            if key is None:
+                continue
 
             if focus == "primary" and selected == 0:
                 key = resolve_shortcut(key, (portal.TOGGLE_ANIMATION,))
             if key == portal.TOGGLE_ANIMATION.action and focus == "primary":
                 preferences["animate"] = not animate
                 continue
-            if key == "back" and focus == "primary":
-                return None
-            if key == "select":
-                if focus == "secondary" and items:
-                    return items[secondary].action
 
+            previous_focus = focus
             terminal = screen._terminal_size()
             columns = portal.secondary_columns(
                 max(1, terminal.columns - 1), focus, height=terminal.lines
@@ -130,6 +111,19 @@ def _portal_home(
             )
             if focus == "secondary":
                 secondary_selected[selected] = secondary
+
+            # Persist the final state before dispatching any action. Mouse and
+            # keyboard activation now leave identical return contexts.
+            preferences["portal_selected"] = selected
+            preferences["portal_focus"] = focus
+
+            if key == "back" and previous_focus == "primary":
+                return None
+            if (key == "select" and previous_focus == "secondary"
+                    or isinstance(key, str) and key.startswith("secondary:")):
+                items = portal.secondary_items(identity, selected)
+                if focus == "secondary" and 0 <= secondary < len(items):
+                    return items[secondary].action
 
 
 def _workspace(db_path: Path | str | None, key: str) -> None:
