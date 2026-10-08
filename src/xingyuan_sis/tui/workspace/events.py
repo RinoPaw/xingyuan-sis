@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from .. import keys, screen
 from ..commands import resolve_shortcut
-from ..layout import WorkspaceLayout
+from ..layout import WorkspaceLayout, visible_start
 from .commands import FORM_SAVE, available as available_commands, toolbar as toolbar_commands
 from .data import ACADEMICS, COLLECTIONS, Catalog
 from .field_session import (
@@ -443,11 +443,20 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 elif key == "end":
                     state.detail_scroll = 10**6
             else:
+                from .roster import roster_window
+
+                rows = state.rows(catalog)
+                capacity = WorkspaceLayout.measure().roster_capacity(state.key)
+                first = roster_window(state, len(rows), capacity)
                 state.selected += amount
                 if key == "home":
                     state.selected = 0
                 elif key == "end":
-                    state.selected = len(state.rows(catalog)) - 1
+                    state.selected = len(rows) - 1
+                state.selected = min(max(0, state.selected), max(0, len(rows) - 1))
+                # Persist the viewport that was actually displayed. Otherwise
+                # navigation re-anchors to a stale roster_scroll on the next paint.
+                state.roster_scroll = visible_start(state.selected, len(rows), capacity, first)
                 state.detail_scroll = 0
                 state.detail_selected = 0
         elif (isinstance(key, str) and key.startswith("view:")) or key in {"1", "2", "3", "4"}:
