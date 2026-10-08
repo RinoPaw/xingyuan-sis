@@ -13,7 +13,6 @@ from .field_geometry import (
     control_width,
     form_field_geometry,
 )
-from .picker import prepare_candidates
 from .presentation import delete_impacts, display_value, project_record
 from .state import FieldSessionOwner
 
@@ -210,7 +209,6 @@ def render_editor(board: Board, state: Workspace, catalog: Catalog, x: int, widt
                 or (field.key == "birth_date" and session.anchor_key == "birth_date")
             )
             if session_on_field and session.options is not None:
-                prepare_candidates(session)
                 if session.options:
                     for option_index, (_, label) in enumerate(session.options):
                         entries.append(("option", option_index, label))
