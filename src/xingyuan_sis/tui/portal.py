@@ -12,7 +12,6 @@ from .commands import Command
 from .layout import visible_start
 
 
-PRIMARY_LABELS = ("首页", "教务", "个人中心")
 NARROW_WIDTH = 38
 _SECONDARY_SLOT_WIDTH = 14
 _SECONDARY_CARD_WIDTH = 10
@@ -48,12 +47,28 @@ _PROFILE = (
 )
 
 
+@dataclass(frozen=True)
+class MenuSection:
+    """One primary menu with role-specific child actions."""
+
+    label: str
+    admin_items: tuple[MenuItem, ...] = ()
+    student_items: tuple[MenuItem, ...] = ()
+
+
+_SECTIONS = (
+    MenuSection("首页"),
+    MenuSection("教务", _ADMIN_ACADEMIC, _STUDENT_ACADEMIC),
+    MenuSection("个人中心", _PROFILE, _PROFILE),
+)
+PRIMARY_LABELS = tuple(section.label for section in _SECTIONS)
+
+
 def secondary_items(identity: Identity, primary: int) -> tuple[MenuItem, ...]:
-    if primary == 1:
-        return _ADMIN_ACADEMIC if identity.is_admin else _STUDENT_ACADEMIC
-    if primary == 2:
-        return _PROFILE
-    return ()
+    if not 0 <= primary < len(_SECTIONS):
+        return ()
+    section = _SECTIONS[primary]
+    return section.admin_items if identity.is_admin else section.student_items
 
 
 def navigate(
@@ -179,26 +194,15 @@ def frame(
         )
         return animation._starlight(board.frame(), width, angle, protected)
 
-    secondary_focused = focus == "secondary"
-    if selected == 1:
-        board.put(right_x, 1, "教务", screen._BOLD + screen._TEXT_ACCENT)
-        description = "增删改查与校园业务管理" if identity.is_admin else "查询校园学生信息"
-        board.put(right_x, 2, description, screen._TEXT_SECONDARY)
-        _secondary_grid(
-            board, right_x, 4, content_width, items, secondary,
-            focused=secondary_focused,
-        )
-    elif selected == 2:
-        board.put(right_x, 1, "个人中心", screen._BOLD + screen._TEXT_ACCENT)
-        board.put(
-            right_x, 2,
-            f"{name} · {'管理员' if identity.is_admin else identity.student_no}",
-            screen._TEXT_SECONDARY,
-        )
-        _secondary_grid(
-            board, right_x, 4, content_width, items, secondary,
-            focused=secondary_focused,
-        )
+    description = (
+        "增删改查与校园业务管理" if identity.is_admin else "查询校园学生信息"
+    ) if selected == 1 else f"{name} · {'管理员' if identity.is_admin else identity.student_no}"
+    board.put(right_x, 1, PRIMARY_LABELS[selected], screen._BOLD + screen._TEXT_ACCENT)
+    board.put(right_x, 2, description, screen._TEXT_SECONDARY)
+    _secondary_grid(
+        board, right_x, 4, content_width, items, secondary,
+        focused=focus == "secondary",
+    )
     return animation._starlight(board.frame(), width, angle)
 
 
@@ -277,7 +281,7 @@ def _compact_body(
             board.put(0, y + 2, "公告", screen._BOLD + screen._TEXT_PRIMARY)
         if y + 3 < height - 1:
             board.put(0, y + 3, announcements[0] if announcements else "暂无公告", screen._TEXT_SECONDARY)
-    elif selected in {1, 2}:
+    else:
         board.put(0, y, PRIMARY_LABELS[selected], screen._BOLD + screen._TEXT_ACCENT)
         if y + 2 < height - 1:
             board.put(0, y + 2, "Enter 进入", screen._TEXT_SECONDARY)
