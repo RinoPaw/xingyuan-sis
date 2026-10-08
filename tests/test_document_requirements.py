@@ -197,6 +197,23 @@ class DocumentRequirementTests(unittest.TestCase):
         self.assertNotIn("删除", output.getvalue())
         self.assertIn("搜索", output.getvalue())
 
+
+    def test_admin_workspace_forwards_identity_explicitly(self):
+        identity = Identity("Administrator", "admin")
+        with patch("xingyuan_sis.tui.workspace.run") as run:
+            self.assertEqual(
+                app._execute_portal_action("workspace:students", self.db, identity),
+                identity,
+            )
+        run.assert_called_once_with(self.db, "students", identity=identity)
+
+    def test_student_cannot_open_admin_workspace_even_through_direct_action(self):
+        student = Identity(self.sample["student_no"], "student", self.sample["student_no"])
+        with patch("xingyuan_sis.tui.workspace.run") as run:
+            with self.assertRaisesRegex(ValueError, "无权"):
+                app._execute_portal_action("workspace:students", self.db, student)
+        run.assert_not_called()
+
     def test_student_directory_and_personal_profile_use_the_same_read_only_workspace(self):
         identity = Identity(self.sample["student_no"], "student", self.sample["student_no"])
         with patch("xingyuan_sis.tui.workspace.run") as run:

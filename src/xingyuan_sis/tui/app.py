@@ -126,9 +126,9 @@ def _portal_home(
                     return items[secondary].action
 
 
-def _workspace(db_path: Path | str | None, key: str) -> None:
+def _workspace(db_path: Path | str | None, key: str, identity: Identity) -> None:
     from .workspace import run as run_workspace
-    run_workspace(db_path, key)
+    run_workspace(db_path, key, identity=identity)
 
 
 def _show_profile(db_path: Path | str | None, identity: Identity) -> None:
@@ -160,7 +160,7 @@ def _execute_portal_action(
     if action.startswith("workspace:"):
         if not identity.is_admin:
             raise ValueError("学生账户无权执行管理操作")
-        _workspace(db_path, action.removeprefix("workspace:"))
+        _workspace(db_path, action.removeprefix("workspace:"), identity)
     elif action == "student-directory":
         from .workspace import run as run_workspace
 

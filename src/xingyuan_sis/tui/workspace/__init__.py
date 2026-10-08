@@ -22,7 +22,7 @@ def run(
     db_path: Path | str | None,
     collection: str,
     *,
-    identity: Identity | None = None,
+    identity: Identity,
     query: str = "",
 ) -> None:
     catalog = Catalog(db_path, identity)
