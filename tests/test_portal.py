@@ -130,6 +130,7 @@ class PortalLayoutTests(unittest.TestCase):
                 frame = portal.frame(identity, selected, focus, secondary, {}, 0, animate=False)
                 footer = screen._ANSI_RE.sub("", frame.lines[-1])
                 footers.append(footer)
+                self.assertIn("Tab 下一项", footer)
                 self.assertIn("方向键 移动", footer)
                 self.assertIn("Enter 打开", footer)
                 self.assertIn("Esc 返回", footer)
@@ -290,6 +291,36 @@ class PortalLayoutTests(unittest.TestCase):
                 text = "\n".join(screen._ANSI_RE.sub("", line) for line in frame.lines)
                 self.assertIn("退出登录", text)
                 self.assertTrue(any(region.action == "secondary:2" for region in frame.regions))
+
+    def test_profile_logout_mouse_uses_same_action_in_wide_and_narrow_layouts(self) -> None:
+        for identity in (
+            Identity("Administrator", "admin"),
+            Identity("20260001", "student", "20260001"),
+        ):
+            for size in ((100, 24), (26, 18)):
+                focus = "primary" if size[0] >= portal.NARROW_WIDTH else "secondary"
+                with self.subTest(role=identity.role, size=size):
+                    preferences: dict[str, object] = {
+                        "identity": identity,
+                        "portal_selected": 2,
+                        "portal_focus": focus,
+                        "portal_secondary": {2: 2},
+                        "animate": False,
+                    }
+                    with patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
+                        frame = portal.frame(identity, 2, focus, {2: 2}, {}, 0, animate=False)
+                    region = next(r for r in frame.regions if r.action == "secondary:2")
+                    with patch("xingyuan_sis.service.XingyuanService") as service_type, \
+                         patch.object(app.screen, "_clear"), patch.object(app.screen, "_paint"), \
+                         patch.object(app.screen, "_terminal_size", return_value=os.terminal_size(size)), \
+                         patch.object(app.keys, "_mouse_tracking", return_value=nullcontext()), \
+                         patch.object(app.keys, "_read_key", return_value=screen.MouseClick(region.x, region.y)):
+                        service_type.return_value.stats.return_value = {}
+                        service_type.return_value.list_announcements.return_value = []
+                        self.assertEqual(
+                            app._portal_home(None, selected=2, preferences=preferences),
+                            "logout",
+                        )
 
     def test_logout_action_clears_session_and_resets_portal_navigation(self) -> None:
         identity = Identity("Administrator", "admin")
