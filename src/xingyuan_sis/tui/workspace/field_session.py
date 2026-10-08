@@ -249,13 +249,19 @@ def _normalize_changed_value(
     previous: object,
     *,
     year_complete: bool = True,
+    value_complete: bool = True,
 ) -> set[str]:
-    """Apply declared dependency rules as soon as the edited value changes."""
+    """Normalize complete values; preserve incomplete input inside masked slots."""
     session = state.field_session
     if session is None:
         return set()
     collection = _session_collection(state, session)
     if _is_birth_session(state, session):
+        # '0' is a valid first keystroke for 01–09, not a finished day.
+        # Year/month changes still immediately reconcile a previously set day.
+        if field_key == "birth_day" and not value_complete:
+            return set()
+
         def domain(key: str, values: dict) -> list[tuple[object, str]] | None:
             context = dict(values)
             if not year_complete:
@@ -464,6 +470,10 @@ def _edit_birth_date(state: Workspace, catalog: Catalog) -> None:
                 changed_fields = _normalize_changed_value(
                     state, catalog, key, previous,
                     year_complete=len(buffers["birth_year"].value) == 4,
+                    value_complete=(
+                        key != "birth_day"
+                        or len(buffers["birth_day"].value) == _BIRTH_SLOT_WIDTHS["birth_day"]
+                    ),
                 )
                 for changed_key in changed_fields:
                     updated = session.values.get(changed_key)
