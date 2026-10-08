@@ -391,6 +391,117 @@ class CliBasicAcceptanceTests(unittest.TestCase):
         self.assertIn("不是交互终端", err)
         self.assertNotIn("Traceback", err)
 
+    def test_basic_edits_existing_student_interactively(self):
+        number = self.sample["student_no"]
+        fields = [""] * 7 + ["休学"] + [""] * 5
+        code, out, err = self.basic(["1", "4", number, *fields, "", "0", "0"])
+        self.assertEqual((code, err), (0, ""), out + err)
+        self.assertEqual(self.service.student_by_no(number)["status"], "休学")
+        self.assertIn("档案已更新", out)
+
+    def test_basic_rejects_unknown_student_and_recovers_to_search(self):
+        code, out, err = self.basic([
+            "1", "2", "00000000", "", "6", self.sample["student_no"],
+            "", "0", "0",
+        ])
+        self.assertEqual(code, 0)
+        self.assertIn("找不到学生", err)
+        self.assertIn(self.sample["student_no"], out)
+
+    def test_basic_student_delete_yes_cascades_and_returns(self):
+        no = self.sample["student_no"]
+        code, out, err = self.basic(["1", "5", no, "y", "", "0", "0"])
+        self.assertEqual((code, err), (0, ""), out + err)
+        self.assertIn("学生已删除", out)
+        self.assertIsNone(self.service.student_by_no(no))
+        self.assertFalse(self.service.enrollments_for_student(no))
+
+    def test_basic_can_reset_password_and_deliver_temporary_password(self):
+        from xingyuan_sis.auth import authenticate
+        number = self.sample["student_no"]
+        self.service.reset_student_password(number, "new-long-password")
+        code, out, err = self.basic(["1", "7", number, "", "0", "0"])
+        self.assertEqual((code, err), (0, ""), out + err)
+        self.assertIn("初始密码", out)
+        self.assertIsNotNone(authenticate(self.db, number, "123456"))
+        self.assertIsNone(authenticate(self.db, number, "new-long-password"))
+
+    def test_basic_can_create_department_from_nested_academic_menu(self):
+        code, out, err = self.basic([
+            "2", "1", "2", "CLI88", "基础菜单学院",
+            "", "0", "0", "0",
+        ])
+        self.assertEqual((code, err), (0, ""), out + err)
+        self.assertEqual(self.service.department_by_code("CLI88")["name"], "基础菜单学院")
+        self.assertIn("学院已创建", out)
+
+    def test_basic_course_editor_accepts_zero_credits_and_hours(self):
+        course = self.service.list_courses()[0]["course_code"]
+        code, out, err = self.basic([
+            "3", "4", course, "", "基础菜单改名", "", "0", "0",
+            "", "0", "0",
+        ])
+        self.assertEqual((code, err), (0, ""), out + err)
+        updated = self.service.course_by_code(course)
+        self.assertEqual(updated["name"], "基础菜单改名")
+        self.assertEqual(updated["credits"], 0)
+        self.assertEqual(updated["hours"], 0)
+
+    def test_basic_grade_editor_retries_invalid_number(self):
+        item = self.service.list_enrollments()[0]
+        no, course, term = item["student_no"], item["course_code"], item["semester"]
+        code, out, err = self.basic([
+            "4", "3", no, course, term,
+            "nan", "101", "87.5",
+            "", "0", "0",
+        ])
+        self.assertEqual((code, err), (0, ""), out + err)
+        self.assertEqual(self.service.enrollment(no, course, term)["score"], 87.5)
+        self.assertEqual(out.count("请输入0～100"), 2)
+
+    def test_basic_grade_editor_can_clear_score(self):
+        item = next(
+            row for row in self.service.list_enrollments()
+            if row["score"] is not None
+        )
+        no, course, term = item["student_no"], item["course_code"], item["semester"]
+        code, out, err = self.basic([
+            "4", "3", no, course, term, "-", "", "0", "0",
+        ])
+        self.assertEqual((code, err), (0, ""), out + err)
+        self.assertIsNone(self.service.enrollment(no, course, term)["score"])
+
+    def test_basic_can_publish_announcement(self):
+        clazz = self.sample["class_code"]
+        code, out, err = self.basic([
+            "6", "3", "班会", clazz, "周五放学后集合",
+            "", "0", "0",
+        ])
+        self.assertEqual((code, err), (0, ""), out + err)
+        self.assertIn("公告已发布", out)
+        notices = self.service.list_announcements()
+        self.assertTrue(any(r["title"] == "班会" and r["body"] == "周五放学后集合" for r in notices))
+
+    def test_basic_data_export_creates_utf8_csv(self):
+        target = self.root / "basic-export.csv"
+        code, out, err = self.basic([
+            "5", "2", str(target), "", "0", "0",
+        ])
+        self.assertEqual((code, err), (0, ""), out + err)
+        self.assertTrue(target.exists())
+        content = target.read_text(encoding="utf-8-sig")
+        self.assertIn(self.sample["student_no"], content)
+        self.assertNotIn("password_hash", content)
+
+    def test_basic_seed_on_nonempty_db_keeps_existing_data(self):
+        before = len(self.service.list_students())
+        code, out, err = self.basic([
+            "5", "4", "", "0", "0",
+        ])
+        self.assertEqual(code, 0)
+        self.assertIn("--reset", err)
+        self.assertEqual(len(self.service.list_students()), before)
+
     def test_basic_menu_eof_exits_cleanly(self):
         code, out, err = self.basic([EOFError()])
         self.assertEqual((code, err), (0, ""), out + err)
