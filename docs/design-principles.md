@@ -60,6 +60,8 @@ UI 不写 SQL；Repository 不依赖 UI；业务校验进入 Service / Schema；
 
 读取投影与渲染必须无副作用。`Workspace.rows()`、`Workspace.current()` 和 render 路径只读取事实，不借读取之名修正 `selected / roster_gap / roster_scroll`。当搜索、导航、刷新或数据 mutation 可能使名册状态失效时，由对应事件 / 事务边界显式调用 `reconcile_roster()`；这样“谁改变了 Workspace”始终可追踪。
 
+此约束也覆盖嵌套编辑状态：渲染档案、表单、仪表盘、工具栏或候选项时不得修改 `FieldSession.options / option_index`、`detail_scroll`、`action_selected`。候选项必须在打开字段选项的事件边界完成过滤和索引初始化；绘制与鼠标命中只能读取同一份已准备好的候选项。
+
 ### 门户交互契约
 
 菜单结构只有 `tui/portal.py` 中的 `MenuSection / MenuItem` 一份权威数据；权限决定可见子项，`MenuItem.action` 决定业务动作。菜单序号只是当前显示位置，不能用 `selected == N` 表示退出、个人资料等业务含义，也不能在鼠标和键盘各写一套激活分支。
