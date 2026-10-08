@@ -158,7 +158,7 @@ def frame(
     board = Board(width, height)
     board.put(0, 0, _topbar(width, identity, name, database))
     hints = (TOGGLE_ANIMATION.hint,) if selected == 0 and focus == "primary" else ()
-    board.put(0, height - 1, theme.footer(width, switch_focus=True, command_hints=hints))
+    board.put(0, height - 1, theme.footer(width, switch_focus=True, tab_label="下一项", command_hints=hints))
 
     if width < NARROW_WIDTH or height < 9:
         _compact_body(
