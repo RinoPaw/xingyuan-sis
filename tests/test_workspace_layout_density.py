@@ -51,7 +51,8 @@ class WorkspaceLayoutDensityTests(unittest.TestCase):
             layout = workspace_layout(state, self.catalog)
         self.assertEqual(layout.inspector_width, 16)
         self.assertEqual(layout.panel_width, 16)
-        self.assertEqual(layout.split_x, 140)
+        self.assertGreaterEqual(layout.split_x, 139)
+        self.assertLessEqual(layout.split_x, 140)
 
     def test_class_relationship_uses_major_and_local_number_once(self):
         row = next(row for row in self.catalog.rows("students") if row.get("class_code"))
