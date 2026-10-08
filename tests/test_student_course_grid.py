@@ -61,9 +61,14 @@ class StudentCourseGridTests(unittest.TestCase):
         first_index = targets.index(first_course)
         self.assertGreater(first_index, 0)
 
-        self.assertEqual(
+        # Entry follows the nearest terminal cell, not a hard-coded course preference.
+        first_score = next(
+            action for _, _, action in grade_rows[0]
+            if action.startswith("field:related:grades:")
+        )
+        self.assertIn(
             directional_target(lines, targets[first_index - 1], "down"),
-            first_course,
+            (first_course, first_score),
         )
 
     def test_vertical_navigation_is_generic_terminal_geometry(self):
@@ -97,8 +102,6 @@ class StudentCourseGridTests(unittest.TestCase):
             self.assertEqual(line[separator_index][0], " · ")
             before = line[:separator_index]
             column = sum(screen._display_width(text) for text, _, _ in before)
-            if any(action == course_action for _, _, action in before):
-                column += 2  # the renderer replaces this row's reserved focus gutter with "> "
             separator_columns.append(column)
 
         self.assertEqual(len(set(separator_columns)), 1)
