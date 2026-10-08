@@ -10,7 +10,8 @@ from xingyuan_sis.tui.workspace.state import FocusArea
 class _State:
     key = "students"
     selected = 0
-    roster_scroll = 0\n    roster_gap = None
+    roster_scroll = 0
+    roster_gap = None
     focus = FocusArea.ROSTER
     form = None
     query = ""
