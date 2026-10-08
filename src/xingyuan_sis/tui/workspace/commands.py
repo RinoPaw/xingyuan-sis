@@ -16,9 +16,9 @@ RESET_PASSWORD = Command("reset-password", "重置密码", "r")
 IMPORT = Command("import", "导入", "i")
 EXPORT = Command("export", "导出", "o")
 SEED = Command("seed", "演示", "g")
-IMPORT_STUDENTS = Command("import", "导入学生 CSV", toolbar=False)
-SEED_STUDENTS = Command("seed", "体验演示校园", toolbar=False)
-FORM_SAVE = Command("save", "保存", "s", toolbar=False)
+IMPORT_STUDENTS = Command("import", "导入学生 CSV")
+SEED_STUDENTS = Command("seed", "体验演示校园")
+FORM_SAVE = Command("save", "保存", "s")
 
 
 def available(catalog: Catalog, key: str) -> tuple[Command, ...]:
