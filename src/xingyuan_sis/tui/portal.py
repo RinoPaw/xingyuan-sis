@@ -55,16 +55,61 @@ def secondary_items(identity: Identity, primary: int) -> tuple[MenuItem, ...]:
     return ()
 
 
-def next_tab_target(identity: Identity, selected: int, focus: str, secondary: int) -> tuple[int, str, int]:
-    """Traverse visible menu choices in reading order, including submenu entries."""
+def navigate(
+    identity: Identity,
+    selected: int,
+    focus: str,
+    secondary: int,
+    key: str,
+    columns: int,
+) -> tuple[int, str, int]:
+    """Single authority for portal focus and selection transitions.
+
+    Tab traverses primary menu choices and leaves an entered secondary region.
+    Only Enter or Right on a primary item enters its secondary menu.
+    """
     items = secondary_items(identity, selected)
+    if key == "focus":
+        if focus == "secondary":
+            return selected, "primary", secondary
+        return (selected + 1) % len(PRIMARY_LABELS), "primary", secondary
+
     if focus == "primary":
-        if items:
-            return selected, "secondary", 0
-        return (selected + 1) % len(PRIMARY_LABELS), "primary", 0
-    if secondary + 1 < len(items):
-        return selected, "secondary", secondary + 1
-    return (selected + 1) % len(PRIMARY_LABELS), "primary", 0
+        if key == "up":
+            selected = (selected - 1) % len(PRIMARY_LABELS)
+        elif key == "down":
+            selected = (selected + 1) % len(PRIMARY_LABELS)
+        elif key == "home":
+            selected = 0
+        elif key == "end":
+            selected = len(PRIMARY_LABELS) - 1
+        elif key in ("1", "2", "3", "4"):
+            selected = int(key) - 1
+        elif key in ("right", "select") and items:
+            focus = "secondary"
+        return selected, focus, secondary
+
+    columns = max(1, columns)
+    if key == "up":
+        secondary = max(0, secondary - columns)
+    elif key == "down":
+        secondary = min(len(items) - 1, secondary + columns)
+    elif key == "left":
+        if secondary % columns == 0:
+            focus = "primary"
+        else:
+            secondary -= 1
+    elif key == "right":
+        next_index = secondary + 1
+        if next_index < len(items) and next_index // columns == secondary // columns:
+            secondary = next_index
+    elif key == "home":
+        secondary = 0
+    elif key == "end":
+        secondary = max(0, len(items) - 1)
+    elif key == "back":
+        focus = "primary"
+    return selected, focus, secondary
 
 
 def secondary_columns(total_width: int, focus: str = "secondary", *, height: int | None = None) -> int:
