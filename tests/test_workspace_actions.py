@@ -99,7 +99,7 @@ class WorkspaceActionTests(unittest.TestCase):
             event = workspace_events.interact(state, self.catalog)
         self.assertEqual(event, ("search", 0))
 
-        with redirect_stdout(StringIO()), patch.object(workspace_forms, "read_input", return_value=""), \
+        with redirect_stdout(StringIO()), patch.object(workspace_forms, "read_inline_input", return_value=""), \
              patch.object(screen, "_paint"), patch.object(
                  screen, "_terminal_size", return_value=os.terminal_size((120, 35))
              ):
