@@ -12,7 +12,7 @@ from .commands import Command
 from .layout import visible_start
 
 
-PRIMARY_LABELS = ("首页", "教务", "个人中心", "退出登录")
+PRIMARY_LABELS = ("首页", "教务", "个人中心")
 NARROW_WIDTH = 38
 _SECONDARY_SLOT_WIDTH = 14
 _SECONDARY_CARD_WIDTH = 10
@@ -44,6 +44,7 @@ _STUDENT_ACADEMIC = (
 _PROFILE = (
     MenuItem("个人数据", "profile-data"),
     MenuItem("修改密码", "profile-password"),
+    MenuItem("退出登录", "logout"),
 )
 
 
@@ -83,7 +84,7 @@ def navigate(
             selected = 0
         elif key == "end":
             selected = len(PRIMARY_LABELS) - 1
-        elif key in ("1", "2", "3", "4"):
+        elif key in tuple(str(index + 1) for index in range(len(PRIMARY_LABELS))):
             selected = int(key) - 1
         elif key in ("right", "select") and items:
             focus = "secondary"
@@ -198,11 +199,6 @@ def frame(
             board, right_x, 4, content_width, items, secondary,
             focused=secondary_focused,
         )
-    else:
-        board.put(right_x, 1, "退出登录", screen._BOLD + screen._TEXT_ACCENT)
-        board.put(right_x, 3, f"当前用户  {name}", screen._TEXT_PRIMARY)
-        board.put(right_x, 5, "Enter 退出当前账户", screen._TEXT_SECONDARY)
-
     return animation._starlight(board.frame(), width, angle)
 
 
@@ -285,10 +281,6 @@ def _compact_body(
         board.put(0, y, PRIMARY_LABELS[selected], screen._BOLD + screen._TEXT_ACCENT)
         if y + 2 < height - 1:
             board.put(0, y + 2, "Enter 进入", screen._TEXT_SECONDARY)
-    else:
-        board.put(0, y, f"{display_name} · {'管理员' if identity.is_admin else '学生'}",
-                  screen._TEXT_SECONDARY)
-
 
 def _home_preview(
     board: Board,
