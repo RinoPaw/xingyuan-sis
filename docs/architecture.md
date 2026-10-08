@@ -102,7 +102,7 @@ app.run → portal
 - 在二级菜单按 Esc 返回所属一级菜单，保留子菜单选中位置；
 - 方向键遵守当前层级的行列布局，不因 Tab 隐式进入或退出菜单。
 
-工作台的 Tab 在名册、档案、工具栏等**焦点区域**间循环；门户的 Tab 在当前**菜单层级**内循环。二者的共同约束是 Tab 不承担 Enter（进入）或 Esc（返回）的职责。
+工作台的 Tab 只在当前实际存在的名册、档案等**内容焦点区域**间循环；门户的 Tab 在当前**菜单层级**内循环。二者的共同约束是 Tab 不承担 Enter（进入）或 Esc（返回）的职责。
 
 ## 4. 输入与 Command
 
@@ -133,14 +133,13 @@ Command 是按钮、鼠标点击、快捷键和底栏提示的共同来源，不
 ```text
 FocusArea.ROSTER
 FocusArea.INSPECTOR
-FocusArea.TOOLBAR
 FocusArea.DASHBOARD
 ```
 
 记录型页面的 Tab 循环固定为：
 
 ```text
-ROSTER → INSPECTOR → TOOLBAR → ROSTER
+ROSTER → INSPECTOR → ROSTER
 ```
 
 窄屏当前展示哪一块内容由独立的 `ContentPanel.ROSTER / INSPECTOR` 表示：
@@ -150,7 +149,7 @@ focus         → 键盘现在操作哪里
 content_panel → 单面板布局现在显示哪一面
 ```
 
-因此工具栏获得焦点时，窄屏仍保持进入工具栏前的名册或档案内容；宽屏始终同时绘制名册和档案。`Location` 保存并恢复这两个状态。
+宽屏同时绘制名册和档案，窄屏只展示当前内容焦点对应的面板；数据页只有仪表盘焦点。`Location` 保存并恢复焦点与面板状态。
 
 ## 6. 工作台职责
 
@@ -355,7 +354,7 @@ FieldSession(owner=FORM)
 
 - 工作台同一时刻只有一个 `FocusArea`；
 - `ContentPanel` 只表示窄屏内容，不兼职键盘焦点；
-- Tab 单向循环记录页的名册、档案和操作栏；
+- Tab 只循环记录页实际存在的名册和档案；
 - Shift+Tab 不存在第二条区域导航路径；
 - 用户可见字段使用稳定 `field:<key>`；
 - 物种、班级、元素三类复合行都使用两个独立 target；
@@ -370,7 +369,7 @@ FieldSession(owner=FORM)
 - `S` 只提交完整 Form；
 - 已有记录没有保存按钮或“编辑”Command；
 - `keys.py` 不包含业务快捷键；
-- Command 同时驱动工具栏、快捷键和快捷键提示；
+- Command 同时定义可用业务动作、快捷键和底栏提示，不依赖工具栏；
 - PageUp / PageDown 使用与渲染一致的 viewport 容量；
 - 展示、命中区和方向导航消费同一份最终几何；
 - 滚轮与方向键聚焦档案时进入同一导航路径；
