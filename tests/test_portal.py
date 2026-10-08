@@ -322,6 +322,103 @@ class PortalLayoutTests(unittest.TestCase):
                             "logout",
                         )
 
+    def test_keyboard_and_mouse_activation_preserve_the_same_menu_context(self) -> None:
+        for identity in (
+            Identity("Administrator", "admin"),
+            Identity("20260001", "student", "20260001"),
+        ):
+            for size in ((100, 24), (26, 18)):
+                with self.subTest(role=identity.role, size=size):
+                    selections = []
+                    for mouse in (False, True):
+                        preferences: dict[str, object] = {
+                            "identity": identity,
+                            "portal_selected": 2,
+                            "portal_focus": "secondary",
+                            "portal_secondary": {2: 0},
+                            "animate": False,
+                        }
+                        sequence = ["end", "select"]
+                        if mouse:
+                            with patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
+                                frame = portal.frame(
+                                    identity, 2, "secondary", {2: 0}, {}, 0, animate=False
+                                )
+                            target = next(
+                                region for region in frame.regions
+                                if region.action == "secondary:2"
+                            )
+                            sequence = [screen.MouseClick(target.x, target.y)]
+                        with patch("xingyuan_sis.service.XingyuanService") as service_type, \
+                             patch.object(app.screen, "_clear"), patch.object(app.screen, "_paint"), \
+                             patch.object(app.screen, "_terminal_size", return_value=os.terminal_size(size)), \
+                             patch.object(app.keys, "_mouse_tracking", return_value=nullcontext()), \
+                             patch.object(app.keys, "_read_key", side_effect=sequence):
+                            service_type.return_value.stats.return_value = {}
+                            service_type.return_value.list_announcements.return_value = []
+                            action = app._portal_home(None, selected=2, preferences=preferences)
+                        selections.append((
+                            action,
+                            preferences["portal_selected"],
+                            preferences["portal_focus"],
+                            preferences["portal_secondary"][2],
+                        ))
+                    self.assertEqual(selections, [
+                        ("logout", 2, "secondary", 2),
+                        ("logout", 2, "secondary", 2),
+                    ])
+
+    def test_clicking_parent_does_not_activate_selected_child(self) -> None:
+        identity = Identity("Administrator", "admin")
+        size = (100, 24)
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
+            frame = portal.frame(identity, 2, "secondary", {2: 2}, {}, 0, animate=False)
+        parent = next(region for region in frame.regions if region.action == "primary:2")
+        preferences: dict[str, object] = {
+            "identity": identity,
+            "portal_selected": 2,
+            "portal_focus": "secondary",
+            "portal_secondary": {2: 2},
+            "animate": False,
+        }
+        with patch("xingyuan_sis.service.XingyuanService") as service_type, \
+             patch.object(app.screen, "_clear"), patch.object(app.screen, "_paint"), \
+             patch.object(app.screen, "_terminal_size", return_value=os.terminal_size(size)), \
+             patch.object(app.keys, "_mouse_tracking", return_value=nullcontext()), \
+             patch.object(app.keys, "_read_key",
+                          side_effect=[screen.MouseClick(parent.x, parent.y), "back"]):
+            service_type.return_value.stats.return_value = {}
+            service_type.return_value.list_announcements.return_value = []
+            self.assertIsNone(app._portal_home(None, selected=2, preferences=preferences))
+        self.assertEqual(preferences["portal_selected"], 2)
+        self.assertEqual(preferences["portal_focus"], "primary")
+        self.assertEqual(preferences["portal_secondary"][2], 2)
+
+    def test_mouse_clicking_another_primary_menu_preserves_navigation(self) -> None:
+        identity = Identity("Administrator", "admin")
+        size = (100, 24)
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
+            frame = portal.frame(identity, 2, "secondary", {2: 2}, {}, 0, animate=False)
+        target = next(region for region in frame.regions if region.action == "primary:1")
+        preferences: dict[str, object] = {
+            "identity": identity,
+            "portal_selected": 2,
+            "portal_focus": "secondary",
+            "portal_secondary": {2: 2},
+            "animate": False,
+        }
+        with patch("xingyuan_sis.service.XingyuanService") as service_type, \
+             patch.object(app.screen, "_clear"), patch.object(app.screen, "_paint"), \
+             patch.object(app.screen, "_terminal_size", return_value=os.terminal_size(size)), \
+             patch.object(app.keys, "_mouse_tracking", return_value=nullcontext()), \
+             patch.object(app.keys, "_read_key",
+                          side_effect=[screen.MouseClick(target.x, target.y), "back"]):
+            service_type.return_value.stats.return_value = {}
+            service_type.return_value.list_announcements.return_value = []
+            self.assertIsNone(app._portal_home(None, selected=2, preferences=preferences))
+        self.assertEqual(preferences["portal_selected"], 1)
+        self.assertEqual(preferences["portal_focus"], "primary")
+
     def test_logout_action_clears_session_and_resets_portal_navigation(self) -> None:
         identity = Identity("Administrator", "admin")
         calls = []
