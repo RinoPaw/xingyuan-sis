@@ -264,6 +264,10 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
         toolbar = toolbar_commands(catalog, state.key)
         toolbar_actions = tuple(command.action for command in toolbar)
         if state.focus is FocusArea.TOOLBAR and state.form is None and state.field_session is None:
+            # Reconcile at the event boundary, never as a side effect of painting.
+            state.action_selected = min(
+                max(0, state.action_selected), max(0, len(toolbar_actions) - 1)
+            )
             if key == "left":
                 state.action_selected = max(0, state.action_selected - 1)
                 continue
