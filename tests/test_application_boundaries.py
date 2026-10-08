@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from xingyuan_sis.auth import (
-    DEMO_STUDENT_PASSWORD,
+    INITIAL_STUDENT_PASSWORD,
     authenticate,
     initialize_admin,
     read_session,
@@ -61,24 +61,23 @@ class ApplicationBoundaryTests(unittest.TestCase):
         )
 
         self.assertGreater(record_id, 0)
-        self.assertEqual(password, student_no)
-        identity = authenticate(self.db, student_no, student_no)
+        self.assertEqual(password, INITIAL_STUDENT_PASSWORD)
+        identity = authenticate(self.db, student_no, INITIAL_STUDENT_PASSWORD)
         self.assertIsNotNone(identity)
         self.assertTrue(identity.must_change_password)
 
-    def test_invalid_first_password_does_not_leave_student_record(self) -> None:
+    def test_short_student_number_still_gets_fixed_initial_password(self) -> None:
         service = self.service_with_species()
-
-        with self.assertRaisesRegex(ValueError, "密码至少需要 8 个字符"):
-            service.register_student(
-                student_no="123",
-                name="短学号",
-                family="犬科",
-                branch="灰狼",
-                enrollment_year=2026,
-            )
-
-        self.assertIsNone(service.student_by_no("123"))
+        record_id, password = service.register_student(
+            student_no="123",
+            name="短学号",
+            family="犬科",
+            branch="灰狼",
+            enrollment_year=2026,
+        )
+        self.assertGreater(record_id, 0)
+        self.assertEqual(password, INITIAL_STUDENT_PASSWORD)
+        self.assertIsNotNone(authenticate(self.db, "123", password))
 
     def test_service_owns_demo_seed_lifecycle_and_credentials(self) -> None:
         service = XingyuanService(self.db)
@@ -86,7 +85,7 @@ class ApplicationBoundaryTests(unittest.TestCase):
 
         self.assertGreater(result.students, 0)
         first = service.list_students()[0]
-        identity = authenticate(self.db, str(first["student_no"]), DEMO_STUDENT_PASSWORD)
+        identity = authenticate(self.db, str(first["student_no"]), INITIAL_STUDENT_PASSWORD)
         self.assertIsNotNone(identity)
         self.assertTrue(identity.must_change_password)
 
