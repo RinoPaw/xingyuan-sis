@@ -30,7 +30,8 @@ def lines(
     values = catalog.project("students", project_record(row, student_session))
     birth_editing = student_session is not None and student_session.anchor_key == "birth_date"
     if birth_editing:
-        values["birth_date"] = projected_birth_date(student_session.values)
+        preview = student_session.preview_values
+        values["birth_date"] = projected_birth_date(student_session.values if preview is None else preview)
 
     def field(
         key: str,
