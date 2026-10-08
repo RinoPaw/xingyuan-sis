@@ -154,7 +154,14 @@ class PortalLayoutTests(unittest.TestCase):
                 self.assertEqual(navigate(3, "primary", 0, "focus"), (0, "primary", 0))
                 self.assertEqual(navigate(1, "primary", 1, "select"), (1, "secondary", 1))
                 self.assertEqual(navigate(1, "primary", 1, "right"), (1, "secondary", 1))
-                self.assertEqual(navigate(1, "secondary", 1, "focus"), (1, "primary", 1))
+                for parent in (1, 2):
+                    total = len(portal.secondary_items(identity, parent))
+                    for index in range(total):
+                        self.assertEqual(
+                            navigate(parent, "secondary", index, "focus"),
+                            (parent, "secondary", (index + 1) % total),
+                        )
+                self.assertEqual(navigate(1, "secondary", 1, "back"), (1, "primary", 1))
                 self.assertEqual(navigate(1, "secondary", 1, "back"), (1, "primary", 1))
                 self.assertEqual(navigate(1, "primary", 1, "down"), (2, "primary", 1))
                 self.assertEqual(navigate(1, "secondary", 0, "right"), (1, "secondary", 1))
@@ -179,7 +186,36 @@ class PortalLayoutTests(unittest.TestCase):
         self.assertEqual(preferences["portal_focus"], "primary")
         self.assertEqual(preferences["portal_secondary"].get(1, 0), 0)
 
-    def test_portal_tab_leaves_secondary_without_changing_parent(self) -> None:
+    def test_portal_tab_selects_next_secondary_item_without_leaving_menu(self) -> None:
+        for identity in (
+            Identity("Administrator", "admin"),
+            Identity("20260001", "student", "20260001"),
+        ):
+            items = portal.secondary_items(identity, 1)
+            for initial in (0, len(items) - 1):
+                with self.subTest(role=identity.role, initial=initial):
+                    preferences: dict[str, object] = {
+                        "identity": identity,
+                        "portal_selected": 1,
+                        "portal_focus": "primary",
+                        "portal_secondary": {1: initial},
+                        "animate": False,
+                    }
+                    with patch("xingyuan_sis.service.XingyuanService") as service_type, \
+                         patch.object(app.screen, "_clear"), patch.object(app.screen, "_paint"), \
+                         patch.object(app.screen, "_terminal_size", return_value=os.terminal_size((100, 24))), \
+                         patch.object(app.keys, "_mouse_tracking", return_value=nullcontext()), \
+                         patch.object(app.keys, "_read_key", side_effect=["select", "focus", "select"]):
+                        service_type.return_value.stats.return_value = {}
+                        service_type.return_value.list_announcements.return_value = []
+                        result = app._portal_home(None, selected=1, preferences=preferences)
+                    expected = (initial + 1) % len(items)
+                    self.assertEqual(result, items[expected].action)
+                    self.assertEqual(preferences["portal_selected"], 1)
+                    self.assertEqual(preferences["portal_focus"], "secondary")
+                    self.assertEqual(preferences["portal_secondary"][1], expected)
+
+    def test_portal_escape_from_secondary_returns_to_parent(self) -> None:
         identity = Identity("Administrator", "admin")
         preferences: dict[str, object] = {
             "identity": identity,
@@ -192,13 +228,13 @@ class PortalLayoutTests(unittest.TestCase):
              patch.object(app.screen, "_clear"), patch.object(app.screen, "_paint"), \
              patch.object(app.screen, "_terminal_size", return_value=os.terminal_size((100, 24))), \
              patch.object(app.keys, "_mouse_tracking", return_value=nullcontext()), \
-             patch.object(app.keys, "_read_key", side_effect=["select", "focus", "back"]):
+             patch.object(app.keys, "_read_key", side_effect=["select", "focus", "back", "back"]):
             service_type.return_value.stats.return_value = {}
             service_type.return_value.list_announcements.return_value = []
             self.assertIsNone(app._portal_home(None, selected=1, preferences=preferences))
         self.assertEqual(preferences["portal_selected"], 1)
         self.assertEqual(preferences["portal_focus"], "primary")
-        self.assertEqual(preferences["portal_secondary"][1], 2)
+        self.assertEqual(preferences["portal_secondary"][1], 3)
 
     def test_home_animation_shortcut_is_resolved_in_portal_context(self) -> None:
         identity = Identity("Administrator", "admin")
