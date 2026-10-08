@@ -3,7 +3,7 @@ from __future__ import annotations
 from .. import keys, screen
 from ..commands import resolve_shortcut
 from ..layout import WorkspaceLayout, visible_start
-from .commands import FORM_SAVE, available as available_commands, toolbar as toolbar_commands
+from .commands import FORM_SAVE, available as available_commands
 from .data import ACADEMICS, COLLECTIONS, Catalog
 from .field_session import (
     accept_option as accept_field_option,
@@ -178,10 +178,10 @@ def _page_detail(state: Workspace, catalog: Catalog, direction: str) -> None:
 
 def _focus_cycle(state: Workspace, catalog: Catalog) -> tuple[FocusArea, ...]:
     if state.key == "data":
-        return (FocusArea.DASHBOARD, FocusArea.TOOLBAR)
+        return (FocusArea.DASHBOARD,)
     if state.current(catalog) is None:
-        return (FocusArea.ROSTER, FocusArea.TOOLBAR)
-    return (FocusArea.ROSTER, FocusArea.INSPECTOR, FocusArea.TOOLBAR)
+        return (FocusArea.ROSTER,)
+    return (FocusArea.ROSTER, FocusArea.INSPECTOR)
 
 
 def _activate_detail_action(
@@ -261,33 +261,6 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 reveal_detail_selection(state, catalog)
             continue
 
-        toolbar = toolbar_commands(catalog, state.key)
-        toolbar_actions = tuple(command.action for command in toolbar)
-        if state.focus is FocusArea.TOOLBAR and state.form is None and state.field_session is None:
-            # Reconcile at the event boundary, never as a side effect of painting.
-            state.action_selected = min(
-                max(0, state.action_selected), max(0, len(toolbar_actions) - 1)
-            )
-            if key == "left":
-                state.action_selected = max(0, state.action_selected - 1)
-                continue
-            if key == "right":
-                state.action_selected = min(max(0, len(toolbar_actions) - 1), state.action_selected + 1)
-                continue
-            if key == "home":
-                state.action_selected = 0
-                continue
-            if key == "end":
-                state.action_selected = max(0, len(toolbar_actions) - 1)
-                continue
-            if key == "up":
-                continue
-            if key == "down":
-                state.focus_content()
-                continue
-            if key == "select" and toolbar_actions:
-                key = toolbar_actions[state.action_selected]
-
         if key == "back":
             if state.field_session is not None:
                 cancel_field_session(state)
@@ -296,8 +269,6 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
             elif state.focus is FocusArea.INSPECTOR:
                 state.set_focus(FocusArea.ROSTER)
                 state.detail_scroll = 0
-            elif state.focus is FocusArea.TOOLBAR:
-                state.focus_content()
             elif state.history:
                 state.restore(catalog)
             else:
@@ -420,11 +391,6 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 len(state.rows(catalog)), key
             ):
                 continue
-            if state.focus in {FocusArea.ROSTER, FocusArea.DASHBOARD} and key == "up" and not wheel:
-                if ((state.key == "data" and state.detail_scroll == 0)
-                        or (state.key != "data" and state.selected == 0)):
-                    state.set_focus(FocusArea.TOOLBAR)
-                    continue
             amount = -1 if key == "up" else 1
             if wheel and state.key != "data":
                 if wheel_over_details:
