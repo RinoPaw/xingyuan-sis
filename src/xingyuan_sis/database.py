@@ -54,7 +54,8 @@ CREATE TABLE IF NOT EXISTS students (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     student_no TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
-    species_branch_id INTEGER NOT NULL,
+    species_family_id INTEGER NOT NULL,
+    species_branch_id INTEGER,
     gender TEXT,
     birth_date TEXT,
     age INTEGER CHECK(age IS NULL OR age >= 0),
@@ -68,6 +69,8 @@ CREATE TABLE IF NOT EXISTS students (
     notes TEXT,
     password_hash TEXT,
     must_change_password INTEGER NOT NULL DEFAULT 1 CHECK(must_change_password IN (0, 1)),
+    FOREIGN KEY (species_family_id) REFERENCES species_families(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
     FOREIGN KEY (species_branch_id) REFERENCES species_branches(id)
         ON UPDATE CASCADE ON DELETE RESTRICT,
     FOREIGN KEY (class_id) REFERENCES classes(id)
@@ -110,6 +113,7 @@ CREATE TABLE IF NOT EXISTS announcements (
 );
 CREATE INDEX IF NOT EXISTS idx_announcements_class_id ON announcements(class_id);
 CREATE INDEX IF NOT EXISTS idx_students_class_id ON students(class_id);
+CREATE INDEX IF NOT EXISTS idx_students_species_family_id ON students(species_family_id);
 CREATE INDEX IF NOT EXISTS idx_students_species_branch_id ON students(species_branch_id);
 CREATE INDEX IF NOT EXISTS idx_species_branches_family_id ON species_branches(family_id);
 CREATE INDEX IF NOT EXISTS idx_courses_name ON courses(name);

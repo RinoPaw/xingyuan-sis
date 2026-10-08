@@ -223,7 +223,7 @@ class Repository:
         pattern = f"%{keyword.strip()}%"
         return self._fetch_all(
             """
-            SELECT s.id, s.student_no, s.name, s.species_branch_id,
+            SELECT s.id, s.student_no, s.name, s.species_family_id, s.species_branch_id,
                    f.name AS family, b.name AS branch,
                    s.gender, s.birth_date, s.age, s.enrollment_year, s.status,
                    s.primary_element, s.primary_affinity,
@@ -232,8 +232,8 @@ class Repository:
                    m.code AS major_code, m.name AS major_name,
                    d.code AS department_code, d.name AS department_name
             FROM students AS s
-            JOIN species_branches AS b ON b.id = s.species_branch_id
-            JOIN species_families AS f ON f.id = b.family_id
+            JOIN species_families AS f ON f.id = s.species_family_id
+            LEFT JOIN species_branches AS b ON b.id = s.species_branch_id
             LEFT JOIN classes AS c ON c.id = s.class_id
             LEFT JOIN majors AS m ON m.id = c.major_id
             LEFT JOIN departments AS d ON d.id = m.department_id
@@ -241,7 +241,7 @@ class Repository:
                OR s.student_no LIKE ?
                OR s.name LIKE ?
                OR f.name LIKE ?
-               OR b.name LIKE ?
+               OR COALESCE(b.name, '') LIKE ?
                OR COALESCE(c.name, '') LIKE ?
                OR COALESCE(m.name, '') LIKE ?
                OR COALESCE(d.name, '') LIKE ?
@@ -254,7 +254,7 @@ class Repository:
     def find_student_by_no(self, student_no: str) -> sqlite3.Row | None:
         return self._fetch_one(
             """
-            SELECT s.id, s.student_no, s.name, s.species_branch_id,
+            SELECT s.id, s.student_no, s.name, s.species_family_id, s.species_branch_id,
                    f.name AS family, b.name AS branch,
                    s.gender, s.birth_date, s.age, s.enrollment_year, s.status,
                    s.primary_element, s.primary_affinity,
@@ -263,8 +263,8 @@ class Repository:
                    m.code AS major_code, m.name AS major_name,
                    d.code AS department_code, d.name AS department_name
             FROM students AS s
-            JOIN species_branches AS b ON b.id = s.species_branch_id
-            JOIN species_families AS f ON f.id = b.family_id
+            JOIN species_families AS f ON f.id = s.species_family_id
+            LEFT JOIN species_branches AS b ON b.id = s.species_branch_id
             LEFT JOIN classes AS c ON c.id = s.class_id
             LEFT JOIN majors AS m ON m.id = c.major_id
             LEFT JOIN departments AS d ON d.id = m.department_id
@@ -281,8 +281,9 @@ class Repository:
         *,
         student_no: str,
         name: str,
-        species_branch_id: int,
+        species_family_id: int,
         enrollment_year: int,
+        species_branch_id: int | None = None,
         gender: str | None = None,
         birth_date: str | None = None,
         age: int | None = None,
@@ -298,14 +299,14 @@ class Repository:
         return self._execute(
             """
             INSERT INTO students(
-                student_no, name, species_branch_id, gender, birth_date, age,
+                student_no, name, species_family_id, species_branch_id, gender, birth_date, age,
                 enrollment_year, class_id, status,
                 primary_element, primary_affinity,
                 contact, dormitory, notes, password_hash
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                student_no.strip(), name.strip(), species_branch_id,
+                student_no.strip(), name.strip(), species_family_id, species_branch_id,
                 _blank_to_none(gender), _blank_to_none(birth_date), age, enrollment_year,
                 class_id, status.strip() or "在读",
                 _blank_to_none(primary_element), _blank_to_none(primary_affinity),
@@ -316,7 +317,7 @@ class Repository:
 
     def update_student(self, student_id: int, **values: Any) -> None:
         allowed = {
-            "student_no", "name", "species_branch_id", "gender", "birth_date", "age",
+            "student_no", "name", "species_family_id", "species_branch_id", "gender", "birth_date", "age",
             "enrollment_year", "class_id", "status", "primary_element",
             "primary_affinity", "contact", "dormitory", "notes",
         }
@@ -589,12 +590,13 @@ class Repository:
             connection.executemany(
                 """
                 INSERT INTO students(
-                    student_no, name, species_branch_id, gender, birth_date, age,
+                    student_no, name, species_family_id, species_branch_id, gender, birth_date, age,
                     enrollment_year, class_id, status,
                     primary_element, primary_affinity, contact, dormitory, notes,
                     password_hash
                 ) VALUES (
                     ?, ?,
+                    (SELECT id FROM species_families WHERE name = ?),
                     (
                         SELECT b.id
                         FROM species_branches AS b
@@ -606,7 +608,11 @@ class Repository:
                     ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
-                (tuple(student) + (student_password_hash,) for student in students),
+                (
+                    tuple(student[:2]) + (student[2], student[2], student[3])
+                    + tuple(student[4:]) + (student_password_hash,)
+                    for student in students
+                ),
             )
             connection.executemany(
                 """

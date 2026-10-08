@@ -106,7 +106,7 @@ STUDENT_NUMBER = Field("student_no", "学号", True, "digits", editable=False)
 FIELDS: dict[str, tuple[Field, ...]] = {
     "students": (
         STUDENT_NUMBER, Field("name", "姓名", True, editable=False),
-        Field("family", "族系", True), Field("branch", "支系", True), YEAR,
+        Field("family", "族系", True), Field("branch", "支系"), YEAR,
         Field("class_code", "班级编号"), Field("status", "学籍状态", True, default="在读"),
         Field("gender", "性别"), Field("age", "年龄", kind="int"),
         Field("birth_date", "出生日期", kind="birth_date"),

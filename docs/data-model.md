@@ -32,7 +32,9 @@
 - `id`：内部主键
 - `student_no`：学号，只含 `0–9` 的非空字符串，保留前导零，唯一，创建后不可修改
 - `name`：姓名，创建后不可修改
-- `species_branch_id`：种族支系外键；`family`、`branch` 由支系与族系关联查询得到
+- `species_family_id`：种族族系外键，必填，独立保存
+- `species_branch_id`：种族支系外键，可空；有值时必须属于所选族系
+- `family`、`branch`：通过各自的关联表查询；未指定支系显示为“未指定”
 - `gender`：性别，可空
 - `birth_date`：出生资料，可空；支持完整日期 `YYYY-MM-DD`、仅年份 `YYYY`、仅月日 `--MM-DD`
 - `age`：已知年龄，可空；用于出生日期不足以精确计算年龄的情况

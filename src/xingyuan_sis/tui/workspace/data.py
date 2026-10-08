@@ -318,7 +318,7 @@ class Catalog:
             rows = self.species_branches
             if family:
                 rows = [row for row in rows if row["family_name"] == family]
-            return [
+            return [(None, "未指定")] + [
                 (row["name"], row["name"] if family else f"{row['family_name']} · {row['name']}")
                 for row in rows
             ]

@@ -11,7 +11,7 @@ class StudentListRecord:
     student_no: str
     name: str
     family: str
-    branch: str
+    branch: str | None
     gender: str | None
     birth_date: str | None
     age: int | None
@@ -130,7 +130,7 @@ def query_students(
                 student_no=str(row["student_no"]),
                 name=str(row["name"]),
                 family=str(row["family"]),
-                branch=str(row["branch"]),
+                branch=None if row["branch"] is None else str(row["branch"]),
                 gender=None if row["gender"] is None else str(row["gender"]),
                 birth_date=None if row["birth_date"] is None else str(row["birth_date"]),
                 age=None if row["age"] is None else int(row["age"]),

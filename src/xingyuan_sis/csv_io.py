@@ -45,7 +45,7 @@ def import_students_csv(
     credentials: list[tuple[str, str]] = []
     with Path(path).open("r", encoding="utf-8-sig", newline="") as file:
         reader = csv.DictReader(file)
-        required = {"student_no", "name", "family", "branch", "enrollment_year"}
+        required = {"student_no", "name", "family", "enrollment_year"}
         missing = required - set(reader.fieldnames or ())
         if missing:
             raise ValueError(f"CSV 缺少字段：{', '.join(sorted(missing))}")

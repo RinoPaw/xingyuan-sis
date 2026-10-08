@@ -259,8 +259,8 @@ class XingyuanService:
         student_no: str,
         name: str,
         family: str,
-        branch: str,
         enrollment_year: int,
+        branch: str | None = None,
         class_code: str | None = None,
         gender: str | None = None,
         birth_date: str | None = None,
@@ -282,9 +282,16 @@ class XingyuanService:
         })
         if is_complete_birth_date(values["birth_date"]):
             values["age"] = None
-        species = self._require(
-            self.species_branch_by_name(values["branch"], values["family"]),
-            f"找不到种族支系：{family} · {branch}",
+        family_row = self._require(
+            self.species_family_by_name(values["family"]),
+            f"找不到族系：{values['family']}",
+        )
+        species = (
+            self._require(
+                self.species_branch_by_name(values["branch"], values["family"]),
+                f"找不到种族支系：{values['family']} · {values['branch']}",
+            )
+            if values["branch"] is not None else None
         )
         class_id = None
         class_code = values["class_code"]
@@ -294,7 +301,9 @@ class XingyuanService:
         for field in ("family", "branch", "class_code"):
             values.pop(field)
         return self.repository.add_student(
-            species_branch_id=int(species["id"]), class_id=class_id,
+            species_family_id=int(family_row["id"]),
+            species_branch_id=int(species["id"]) if species is not None else None,
+            class_id=class_id,
             password_hash=(
                 hash_initial_student_password() if initial_password == INITIAL_STUDENT_PASSWORD
                 else hash_password(initial_password) if initial_password is not None else None
@@ -317,13 +326,21 @@ class XingyuanService:
             values["age"] = None
 
         if "family" in values or "branch" in values:
-            family = str(values.pop("family", row["family"]))
-            branch = str(values.pop("branch", row["branch"]))
-            species = self._require(
-                self.species_branch_by_name(branch, family),
-                f"找不到种族支系：{family} · {branch}",
+            family = values.pop("family", row["family"])
+            branch = values.pop("branch", row["branch"])
+            family_row = self._require(
+                self.species_family_by_name(family),
+                f"找不到族系：{family}",
             )
-            values["species_branch_id"] = int(species["id"])
+            species = (
+                self._require(
+                    self.species_branch_by_name(branch, family),
+                    f"找不到种族支系：{family} · {branch}",
+                )
+                if branch is not None else None
+            )
+            values["species_family_id"] = int(family_row["id"])
+            values["species_branch_id"] = int(species["id"]) if species is not None else None
 
         if "class_code" in values:
             class_code = values.pop("class_code")

@@ -136,7 +136,7 @@ def run(service: XingyuanService, args: argparse.Namespace) -> int:
         student_no = prompt("学号", args.student_no, required=True)
         name = prompt("姓名", args.name, required=True)
         family = prompt("族系", args.family, required=True)
-        branch = prompt("支系", args.branch, required=True)
+        branch = prompt("支系", args.branch)
         year = prompt_int("入学年份", args.enrollment_year, required=True)
         optional: dict[str, Any] = {
             "class_code": args.class_code,
