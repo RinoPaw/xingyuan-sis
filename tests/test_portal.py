@@ -291,6 +291,33 @@ class PortalLayoutTests(unittest.TestCase):
                 self.assertIn("退出登录", text)
                 self.assertTrue(any(region.action == "secondary:2" for region in frame.regions))
 
+    def test_logout_action_clears_session_and_resets_portal_navigation(self) -> None:
+        identity = Identity("Administrator", "admin")
+        calls = []
+
+        def portal_session(db_path, *, selected, preferences):
+            calls.append((selected, dict(preferences)))
+            if len(calls) == 1:
+                preferences["identity"] = identity
+                preferences["portal_selected"] = 2
+                preferences["portal_focus"] = "secondary"
+                return "logout"
+            self.assertNotIn("identity", preferences)
+            self.assertEqual(preferences["portal_selected"], 0)
+            self.assertEqual(preferences["portal_focus"], "primary")
+            return None
+
+        with patch("sys.stdin.isatty", return_value=True), \
+             patch("sys.stdout.isatty", return_value=True), \
+             patch.object(app.screen, "_terminal_session", return_value=nullcontext()), \
+             patch.object(app.screen, "_clear"), \
+             patch.object(app, "_portal_home", side_effect=portal_session), \
+             patch.object(app, "clear_session") as clear:
+            app.run()
+
+        clear.assert_called_once_with()
+        self.assertEqual(len(calls), 2)
+
     def test_extreme_narrow_width_hides_preview_but_entered_menu_still_renders(self) -> None:
         identity = Identity("Administrator", "admin")
         with patch.object(screen, "_terminal_size", return_value=os.terminal_size((26, 18))):
