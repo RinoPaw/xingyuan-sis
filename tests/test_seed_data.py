@@ -2,12 +2,13 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import sqlite3
 import unittest
 from unittest.mock import patch
 
 from xingyuan_sis.entry import main as cli_main
 from xingyuan_sis.auth import Identity
-from xingyuan_sis.database import initialize_database
+from xingyuan_sis.database import connect, initialize_database
 from xingyuan_sis.seed_data import (
     CLASSES,
     COURSES,
@@ -91,6 +92,67 @@ class SeedDataTests(unittest.TestCase):
             expected[9],
         )
         self.assertEqual(len(self.service.list_students()), len(STUDENTS))
+
+    def test_cli_reset_replaces_legacy_schema_without_migration(self) -> None:
+        legacy_db = self.db_path.with_name("legacy.db")
+        with sqlite3.connect(legacy_db) as connection:
+            connection.execute(
+                "CREATE TABLE students (id INTEGER PRIMARY KEY, "
+                "student_no TEXT NOT NULL, species_branch_id INTEGER NOT NULL)"
+            )
+            connection.execute(
+                "INSERT INTO students(student_no, species_branch_id) VALUES ('old-record', 1)"
+            )
+
+        output = StringIO()
+        with redirect_stdout(output):
+            code = cli_main(["--db", str(legacy_db), "data", "seed", "--reset"])
+        self.assertEqual(code, 0)
+        self.assertIn("演示数据已写入", output.getvalue())
+        service = XingyuanService(legacy_db)
+        self.assertEqual(len(service.list_students()), len(STUDENTS))
+        self.assertIsNone(service.student_by_no("old-record"))
+        with connect(legacy_db) as connection:
+            columns = {row["name"]: row for row in connection.execute("PRAGMA table_info(students)")}
+            self.assertEqual(columns["species_family_id"]["notnull"], 1)
+            self.assertEqual(columns["species_branch_id"]["notnull"], 0)
+            self.assertEqual(connection.execute("PRAGMA foreign_key_check").fetchall(), [])
+
+    def test_failed_reset_rolls_back_previous_schema_and_records(self) -> None:
+        seed_demo(self.db_path)
+        sample = STUDENTS[0]
+        self.service.update_student_by_no(str(sample[0]), status="休学")
+        original = self.service.student_by_no(str(sample[0]))
+        from xingyuan_sis.auth import hash_initial_student_password
+
+        with self.assertRaises(sqlite3.Error):
+            self.service.repository.seed_demo(
+                departments=DEPARTMENTS,
+                majors=MAJORS,
+                classes=CLASSES,
+                species_families=SPECIES_FAMILIES,
+                species_branches=SPECIES_BRANCHES,
+                students=(("malformed",),),
+                courses=COURSES,
+                enrollments=ENROLLMENTS,
+                student_password_hash=hash_initial_student_password(),
+                reset=True,
+            )
+
+        current = self.service.student_by_no(str(sample[0]))
+        self.assertEqual(current["status"], "休学")
+        self.assertEqual(current["id"], original["id"])
+        self.assertEqual(len(self.service.list_students()), len(STUDENTS))
+        with connect(self.db_path) as connection:
+            self.assertEqual(connection.execute("PRAGMA foreign_key_check").fetchall(), [])
+
+    def test_seed_without_reset_never_replaces_existing_records(self) -> None:
+        seed_demo(self.db_path)
+        sample = STUDENTS[0]
+        self.service.update_student_by_no(str(sample[0]), status="休学")
+        with self.assertRaisesRegex(ValueError, "已有数据"):
+            self.service.seed_demo(reset=False)
+        self.assertEqual(self.service.student_by_no(str(sample[0]))["status"], "休学")
 
     def test_cli_seed_command(self) -> None:
         output = StringIO()

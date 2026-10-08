@@ -137,7 +137,19 @@ def connect(db_path: Path | str | None = None) -> Iterator[sqlite3.Connection]:
         connection.close()
 
 
+def create_schema(connection: sqlite3.Connection) -> None:
+    """Apply canonical schema without implicit commits, including during reset."""
+    statement = ""
+    for line in SCHEMA.splitlines(keepends=True):
+        statement += line
+        if sqlite3.complete_statement(statement):
+            connection.execute(statement)
+            statement = ""
+    if statement.strip():
+        raise ValueError("数据库结构定义不完整")
+
+
 def initialize_database(db_path: Path | str | None = None) -> None:
-    """Create the current schema; historical schemas are not migrated in place."""
+    """Initialize a new schema; existing schemas are not migrated."""
     with connect(db_path) as connection:
-        connection.executescript(SCHEMA)
+        create_schema(connection)

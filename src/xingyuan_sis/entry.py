@@ -5,7 +5,7 @@ import sqlite3
 import sys
 from typing import Sequence
 
-from .cli import build_parser, run as run_cli
+from .cli import build_parser, is_schema_reset, run as run_cli
 from .database import initialize_database
 from .terminal_capabilities import detect_terminal
 
@@ -67,7 +67,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.group != "auth":
             from .auth_cli import authorize, require_identity
 
-            initialize_database(args.db)
+            if not is_schema_reset(args):
+                initialize_database(args.db)
             identity = require_identity(args.db)
             authorize(identity, args)
         return run_cli(args, parser)

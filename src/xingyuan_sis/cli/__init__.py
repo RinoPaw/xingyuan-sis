@@ -12,6 +12,11 @@ from ..service import XingyuanService
 __all__ = ["build_parser", "print_table", "run"]
 
 
+def is_schema_reset(args: argparse.Namespace) -> bool:
+    """Only an explicit data seed --reset may bypass usual schema initialization."""
+    return args.group == "data" and args.action == "seed" and bool(args.reset)
+
+
 def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     if args.group is None:
         parser.print_help()
@@ -19,7 +24,8 @@ def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     if args.basic or args.tui:
         parser.error("--basic / --tui 不能与 CLI 子命令同时使用")
 
-    initialize_database(args.db)
+    if not is_schema_reset(args):
+        initialize_database(args.db)
     if args.group == "auth":
         from ..auth_cli import run as run_auth
 

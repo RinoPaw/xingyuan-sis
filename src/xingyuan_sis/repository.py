@@ -4,7 +4,7 @@ from pathlib import Path
 import sqlite3
 from typing import Any, Iterable
 
-from .database import connect
+from .database import connect, create_schema
 
 
 class Repository:
@@ -531,32 +531,28 @@ class Repository:
         student_password_hash: str,
         reset: bool = False,
     ) -> None:
-        """Persist the canonical demo dataset as one SQLite transaction."""
+        """Seed atomically, recreating the schema only on explicit --reset."""
         with connect(self.db_path) as connection:
-            business_tables = (
-                "departments", "majors", "classes", "species_families",
-                "species_branches", "students", "courses", "enrollments", "announcements",
-            )
-            has_business_data = any(
-                connection.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone() is not None
-                for table in business_tables
-            )
-            if has_business_data and not reset:
-                raise ValueError("数据库中已有数据；如需重建演示数据，请使用 --reset")
-
             if reset:
+                # Transactional DDL protects the previous database if seeding fails.
+                connection.execute("BEGIN IMMEDIATE")
                 for table in (
                     "announcements", "enrollments", "students", "species_branches",
                     "species_families", "classes", "majors", "courses", "departments",
                 ):
-                    connection.execute(f"DELETE FROM {table}")
-                connection.execute(
-                    "DELETE FROM sqlite_sequence WHERE name IN (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        "departments", "majors", "classes", "species_families",
-                        "species_branches", "students", "courses", "enrollments", "announcements",
-                    ),
+                    connection.execute(f"DROP TABLE IF EXISTS {table}")
+                create_schema(connection)
+            else:
+                business_tables = (
+                    "departments", "majors", "classes", "species_families",
+                    "species_branches", "students", "courses", "enrollments", "announcements",
                 )
+                has_business_data = any(
+                    connection.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone() is not None
+                    for table in business_tables
+                )
+                if has_business_data:
+                    raise ValueError("数据库中已有数据；如需重建演示数据，请使用 --reset")
 
             connection.executemany(
                 "INSERT INTO departments(code, name) VALUES (?, ?)",

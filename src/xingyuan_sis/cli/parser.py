@@ -116,7 +116,7 @@ def build_parser() -> argparse.ArgumentParser:
     data_cmd = data.add_subparsers(dest="action", required=True)
     data_cmd.add_parser("stats", help="显示统计摘要")
     data_seed = data_cmd.add_parser("seed", help="写入默认演示数据")
-    data_seed.add_argument("--reset", action="store_true", help="清空现有业务数据后重建演示数据")
+    data_seed.add_argument("--reset", action="store_true", help="删除现有业务表及数据，按当前结构重建演示校园")
     data_export = data_cmd.add_parser("export", help="导出学生 CSV")
     data_export.add_argument("path", type=Path)
     data_import = data_cmd.add_parser("import", help="导入学生 CSV")
