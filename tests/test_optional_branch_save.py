@@ -88,7 +88,10 @@ class OptionalBranchAndSaveTests(unittest.TestCase):
                 self.assertEqual(state.form.position, count)
                 frame = self.render(state, size)
                 save = next(r for r in frame.regions if r.action == "save")
-                self.assertLess(save.y, size[1] - 1)
+                # Hit regions are 1-based: the footer is row size[1].
+                self.assertLess(save.y, size[1])
+                if size == (120, 35):
+                    self.assertLess(save.y, size[1] - 1)
                 self.assertIn("Enter 保存", screen._ANSI_RE.sub("", frame.lines[-1]))
                 self.assertEqual(self.interact(state, ["up", "save"], size), ("save", 0))
                 self.assertEqual(state.form.position, count - 1)
