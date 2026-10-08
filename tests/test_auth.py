@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from xingyuan_sis.auth import (
     ADMIN_USERNAME,
-    DEMO_STUDENT_PASSWORD,
+    INITIAL_STUDENT_PASSWORD,
     authenticate,
     has_admin,
     provision_demo_passwords,
@@ -79,7 +79,7 @@ class AuthCliTests(unittest.TestCase):
 
         with patch(
             "xingyuan_sis.auth_cli.getpass.getpass",
-            side_effect=[DEMO_STUDENT_PASSWORD, "studentpass", "studentpass"],
+            side_effect=[INITIAL_STUDENT_PASSWORD, "studentpass", "studentpass"],
         ):
             with redirect_stdout(StringIO()):
                 code = entry_main(["--db", str(self.db_path), "auth", "login", "20260001"])
@@ -90,7 +90,7 @@ class AuthCliTests(unittest.TestCase):
         self.assertTrue(identity.is_student)
         self.assertFalse(identity.must_change_password)
         self.assertIsNotNone(authenticate(self.db_path, "20260001", "studentpass"))
-        self.assertIsNone(authenticate(self.db_path, "20260001", DEMO_STUDENT_PASSWORD))
+        self.assertIsNone(authenticate(self.db_path, "20260001", INITIAL_STUDENT_PASSWORD))
 
     def test_student_cli_is_limited_to_student_queries(self) -> None:
         self.initialize_admin()
@@ -99,7 +99,7 @@ class AuthCliTests(unittest.TestCase):
         entry_main(["--db", str(self.db_path), "auth", "logout"])
         with patch(
             "xingyuan_sis.auth_cli.getpass.getpass",
-            side_effect=[DEMO_STUDENT_PASSWORD, "studentpass", "studentpass"],
+            side_effect=[INITIAL_STUDENT_PASSWORD, "studentpass", "studentpass"],
         ):
             with redirect_stdout(StringIO()):
                 self.assertEqual(
