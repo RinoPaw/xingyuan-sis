@@ -132,7 +132,7 @@ class SeedDataTests(unittest.TestCase):
                 classes=CLASSES,
                 species_families=SPECIES_FAMILIES,
                 species_branches=SPECIES_BRANCHES,
-                students=(("malformed",),),
+                students=(("malformed", "缺字段", "犬科", "灰狼"),),
                 courses=COURSES,
                 enrollments=ENROLLMENTS,
                 student_password_hash=hash_initial_student_password(),
