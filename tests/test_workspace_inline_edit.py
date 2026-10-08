@@ -46,16 +46,33 @@ class WorkspaceInlineEditTests(unittest.TestCase):
                 options = self.catalog.options("students", field, values)
                 self.assertEqual([value for value, _ in options], choices)
 
-        dormitories = list(dict.fromkeys(
-            row["dormitory"]
-            for row in self.catalog.records["students"]
-            if row.get("dormitory")
-        ))
-        dormitory_options = self.catalog.options("students", "dormitory", values)
-        self.assertEqual(
-            [value for value, _ in dormitory_options],
-            [None, *dormitories],
-        )
+        # The TUI edits dormitories as dependent area/building/room fields.
+        from xingyuan_sis.tui.workspace.data import _dorm_parts
+        dorm_parts = [_dorm_parts(row.get("dormitory")) for row in self.catalog.records["students"]]
+        areas = list(dict.fromkeys(area for area, _, _ in dorm_parts if area))
+        area_options = self.catalog.options("students", "dorm_area", values)
+        self.assertEqual([value for value, _ in area_options], [None, *areas])
+        if areas:
+            area = areas[0]
+            buildings = list(dict.fromkeys(
+                building for dorm_area, building, _ in dorm_parts
+                if dorm_area == area and building
+            ))
+            building_options = self.catalog.options(
+                "students", "dorm_building", {**values, "dorm_area": area}
+            )
+            self.assertEqual([value for value, _ in building_options], [None, *buildings])
+            if buildings:
+                rooms = list(dict.fromkeys(
+                    room for dorm_area, building, room in dorm_parts
+                    if dorm_area == area and building == buildings[0] and room
+                ))
+                room_options = self.catalog.options(
+                    "students", "dorm_room",
+                    {**values, "dorm_area": area, "dorm_building": buildings[0]},
+                )
+                self.assertEqual([value for value, _ in room_options], [None, *rooms])
+        self.assertIsNone(self.catalog.options("students", "dormitory", values))
 
         families = self.catalog.options("students", "family", values)
         self.assertIn(values["family"], [value for value, _ in families])
