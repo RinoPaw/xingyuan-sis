@@ -22,6 +22,24 @@ class PortalLayoutTests(unittest.TestCase):
         self.assertIn("公告", text)
         self.assertIn("暂无公告", text)
 
+    def test_menu_sections_have_unique_semantic_keys_and_own_their_labels(self) -> None:
+        self.assertEqual(
+            tuple(section.label for section in portal.SECTIONS),
+            portal.PRIMARY_LABELS,
+        )
+        self.assertEqual(
+            [section.key for section in portal.SECTIONS],
+            ["home", "academics", "profile"],
+        )
+        self.assertEqual(
+            len({section.key for section in portal.SECTIONS}),
+            len(portal.SECTIONS),
+        )
+        self.assertEqual(
+            [item.action for item in portal.secondary_items(Identity("Administrator", "admin"), 2)],
+            ["profile-data", "profile-password", "logout"],
+        )
+
     def test_portal_topbar_shows_live_date_and_time_without_sacrificing_database(self) -> None:
         identity = Identity("Administrator", "admin")
         now = datetime(2026, 9, 20, 14, 32)
