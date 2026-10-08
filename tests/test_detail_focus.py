@@ -84,19 +84,18 @@ class DetailFocusTests(unittest.TestCase):
                         self.assertEqual(first.lines, second.lines)
                         self.assertEqual(first.regions, second.regions)
 
-    def test_render_does_not_reconcile_toolbar_or_dashboard_scroll(self):
+    def test_render_does_not_reconcile_panel_scroll(self):
         cases = (
-            ("students", workspace.FocusArea.TOOLBAR, 10_000, 10_000),
-            ("students", workspace.FocusArea.TOOLBAR, -10, -10),
-            ("data", workspace.FocusArea.DASHBOARD, 10_000, 10_000),
-            ("data", workspace.FocusArea.DASHBOARD, -10, -10),
+            ("students", workspace.FocusArea.INSPECTOR, 10_000),
+            ("students", workspace.FocusArea.INSPECTOR, -10),
+            ("data", workspace.FocusArea.DASHBOARD, 10_000),
+            ("data", workspace.FocusArea.DASHBOARD, -10),
         )
-        for collection, focus, selected, scroll in cases:
+        for collection, focus, scroll in cases:
             for size in ((120, 35), (30, 12)):
-                with self.subTest(collection=collection, selected=selected, size=size):
+                with self.subTest(collection=collection, scroll=scroll, size=size):
                     state = workspace.Workspace(
-                        collection, focus=focus, action_selected=selected,
-                        detail_scroll=scroll,
+                        collection, focus=focus, detail_scroll=scroll,
                     )
                     before = dict(vars(state))
                     with patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
