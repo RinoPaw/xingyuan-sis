@@ -105,6 +105,15 @@ class SearchFooterFlowTests(unittest.TestCase):
         state.clear_search()
         self.assertEqual((state.query, state.selected, state.roster_scroll), ("", 9, 7))
 
+    def test_empty_query_from_unfiltered_roster_does_not_jump_selection(self):
+        state = Workspace("students", selected=12, roster_scroll=10,
+                          focus=FocusArea.INSPECTOR, content_panel=ContentPanel.INSPECTOR)
+        with patch("builtins.input", return_value=""), patch.object(screen, "_paint"):
+            forms.read_search(state, self.catalog)
+        self.assertEqual((state.query, state.selected, state.roster_scroll), ("", 12, 10))
+        self.assertEqual(state.focus, FocusArea.ROSTER)
+        self.assertIsNone(state.search_context)
+
     def test_empty_search_restores_list_and_footer(self):
         state = Workspace("students", selected=7)
         state.commit_search(self.catalog.records["students"][0]["student_no"])

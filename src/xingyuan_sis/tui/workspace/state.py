@@ -149,7 +149,11 @@ class Workspace:
     def commit_search(self, query: str) -> None:
         """Apply a confirmed filter; preserve the original unfiltered viewport."""
         if not query:
-            self.clear_search()
+            if self.search_context is not None or self.query:
+                self.clear_search()
+            else:
+                # Enter on an empty search must not jump to the first record.
+                self.set_focus(FocusArea.ROSTER)
             return
         if self.search_context is None:
             self.search_context = SearchContext(self.query, self.selected, self.roster_scroll)
