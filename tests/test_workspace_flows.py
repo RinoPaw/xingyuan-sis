@@ -67,6 +67,21 @@ class WorkspaceFlowTests(unittest.TestCase):
             self.assertEqual(state.focus, expected)
             self.assertEqual((state.selected, state.roster_scroll), original)
 
+    def test_keyboard_and_mouse_record_selection_have_equivalent_state(self):
+        for collection in ("students", "courses", "departments"):
+            with self.subTest(collection=collection):
+                keyboard = Workspace(collection)
+                mouse = Workspace(collection)
+                size = (120, 35)
+                frame = self.render(mouse, size)
+                second = next(region for region in frame.regions if region.action == "row:1")
+                self.interact(keyboard, ["down", "refresh"], size)
+                self.interact(mouse, [keys.MouseClick(second.x, second.y), "refresh"], size)
+                self.assertEqual(keyboard.current(self.catalog)["id"], mouse.current(self.catalog)["id"])
+                self.assertEqual(keyboard.focus, mouse.focus)
+                self.assertEqual(keyboard.detail_selected, mouse.detail_selected)
+                self.assertEqual(keyboard.detail_scroll, mouse.detail_scroll)
+
     def test_cancel_delete_preserves_student_and_returns_to_current_record(self):
         state = Workspace("students", selected=21)
         original = state.current(self.catalog).copy()
