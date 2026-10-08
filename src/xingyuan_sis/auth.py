@@ -13,11 +13,10 @@ from typing import Any
 from .database import DATA_DIR, DB_PATH, connect
 
 ADMIN_USERNAME = "Administrator"
-DEMO_STUDENT_PASSWORD = "xingyuan"
+INITIAL_STUDENT_PASSWORD = "123456"
 _ALGORITHM = "pbkdf2_sha256"
 _ITERATIONS = 260_000
 _SALT_BYTES = 16
-_INITIAL_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
 
 
 @dataclass(frozen=True)
@@ -49,11 +48,20 @@ def session_path() -> Path:
     return auth_dir() / "session.json"
 
 
-def hash_password(password: str) -> str:
-    password = validate_password(password)
+def _encode_password(password: str) -> str:
     salt = secrets.token_bytes(_SALT_BYTES)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, _ITERATIONS)
     return f"{_ALGORITHM}${_ITERATIONS}${salt.hex()}${digest.hex()}"
+
+
+def hash_password(password: str) -> str:
+    """Hash an administrator password or a student-chosen strong password."""
+    return _encode_password(validate_password(password))
+
+
+def hash_initial_student_password() -> str:
+    """Hash the fixed temporary student credential without weakening password policy."""
+    return _encode_password(INITIAL_STUDENT_PASSWORD)
 
 
 def verify_password(password: str, encoded: str | None) -> bool:
@@ -76,10 +84,6 @@ def validate_password(password: str) -> str:
     if len(password) < 8:
         raise ValueError("密码至少需要 8 个字符")
     return password
-
-
-def generate_initial_password(length: int = 10) -> str:
-    return "".join(secrets.choice(_INITIAL_PASSWORD_ALPHABET) for _ in range(length))
 
 
 def has_admin() -> bool:
@@ -180,8 +184,8 @@ def reset_student_password(
     student_no: str,
     password: str | None = None,
 ) -> str:
-    initial = password or generate_initial_password()
-    encoded = hash_password(initial)
+    initial = INITIAL_STUDENT_PASSWORD if password is None else password
+    encoded = hash_initial_student_password() if password is None else hash_password(initial)
     with connect(db_path) as connection:
         cursor = connection.execute(
             """
@@ -197,7 +201,7 @@ def reset_student_password(
 
 
 def provision_demo_passwords(db_path: Path | str | None) -> None:
-    encoded = hash_password(DEMO_STUDENT_PASSWORD)
+    encoded = hash_initial_student_password()
     with connect(db_path) as connection:
         connection.execute(
             "UPDATE students SET password_hash = ?, must_change_password = 1",
