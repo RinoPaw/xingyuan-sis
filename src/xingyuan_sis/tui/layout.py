@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from . import screen
 
 
-_CONTROL_ROWS = {
+_SECTION_ROWS = {
     "students": 0,
     "announcements": 0,
     "courses": 1,
@@ -79,23 +79,19 @@ class WorkspaceLayout:
         return min(available, self.desired_inspector_width) if self.split else available
 
     @property
-    def action_row(self) -> int:
-        return 2 if self.compact else 3
-
-    @property
     def panel_action_row(self) -> int:
         """Stable row used by archive-local Save/Delete/Confirm actions."""
         return max(0, self.height - 2)
 
     def separator_row(self, key: str) -> int:
-        """Row separating workspace controls from record content."""
+        """Separate optional collection tabs/metrics from record content."""
         if self.compact:
-            return self.action_row
-        return self.action_row + 1 + _CONTROL_ROWS.get(key, 0)
+            return 2
+        return 2 + _SECTION_ROWS.get(key, 0)
 
     def panel_heading_row(self, key: str) -> int:
         """Row containing the roster/inspector heading."""
-        return 3 if self.compact else self.separator_row(key) + 1
+        return 2 if self.compact else self.separator_row(key) + 1
 
     def panel_content_row(self, key: str) -> int:
         """First row available to panel content below its heading."""
