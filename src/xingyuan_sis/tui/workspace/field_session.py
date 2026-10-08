@@ -9,7 +9,9 @@ from ..text_edit import TextBuffer, input_mode, read_event
 from .birth_date_editor import BIRTH_DATE_FIELDS, BIRTH_DATE_KEYS, canonical as birth_canonical
 from .birth_date_editor import options as birth_options, parts as birth_parts, projected as projected_birth_date
 from .data import COLLECTIONS, Catalog
-from .composite_constraints import reconcile as reconcile_dependencies
+from .composite_constraints import (
+    clamp_to_domain, has_dependents, reconcile as reconcile_dependencies,
+)
 from .picker import prepare_candidates
 from .presentation import project_record
 from .state import FieldSession, FieldSessionOwner, FocusArea, Workspace
@@ -245,44 +247,33 @@ def move_active_field(state: Workspace, direction: str) -> bool:
 def _normalize_changed_value(
     state: Workspace,
     catalog: Catalog,
-    field_key: str,
-    previous: object,
-    *,
-    year_complete: bool = True,
-    value_complete: bool = True,
+    before: dict[str, object],
 ) -> set[str]:
-    """Normalize complete values; preserve incomplete input inside masked slots."""
+    """Check changed option domains after a confirmed field edit."""
     session = state.field_session
     if session is None:
         return set()
     collection = _session_collection(state, session)
     if _is_birth_session(state, session):
-        # '0' is a valid first keystroke for 01–09, not a finished day.
-        # Year/month changes still immediately reconcile a previously set day.
-        if field_key == "birth_day" and not value_complete:
-            return set()
+        return reconcile_dependencies(collection, before, session.values, birth_options)
 
-        def domain(key: str, values: dict) -> list[tuple[object, str]] | None:
-            context = dict(values)
-            if not year_complete:
-                context["birth_year"] = None
-            return birth_options(key, context)
-    else:
-        def domain(key: str, values: dict) -> list[tuple[object, str]] | None:
-            context = projected_values(state, catalog)
-            context.update(values)
-            return catalog.options(collection, key, context)
-    return reconcile_dependencies(collection, field_key, previous, session.values, domain)
+    context = projected_values(state, catalog)
+
+    def domain(key: str, values: dict) -> list[tuple[object, str]] | None:
+        return catalog.options(collection, key, context | values)
+
+    return reconcile_dependencies(collection, before, session.values, domain)
 
 
 def _set_value(state: Workspace, catalog: Catalog, key: str, value: object) -> None:
-    """Single mutation boundary for text and option-pick edits."""
+    """Confirm one text/option value, then check only declared dependents."""
     session = state.field_session
     if session is None:
         return
-    previous = session.values.get(key)
+    before = dict(session.values)
     session.values[key] = value
-    _normalize_changed_value(state, catalog, key, previous)
+    if before.get(key) != value and has_dependents(_session_collection(state, session), key):
+        _normalize_changed_value(state, catalog, before)
 
 
 def _finish_current_field(state: Workspace, catalog: Catalog) -> None:
@@ -313,13 +304,6 @@ def _birth_buffers(session: FieldSession) -> dict[str, TextBuffer]:
     for buffer in buffers.values():
         buffer.cursor = 0
     return buffers
-
-
-def _sync_birth_buffers(session: FieldSession, buffers: dict[str, TextBuffer]) -> None:
-    session.values.update({
-        key: (buffer.value if buffer.value else None)
-        for key, buffer in buffers.items()
-    })
 
 
 def _parsed_birth_buffers(buffers: dict[str, TextBuffer]) -> dict[str, int | None]:
@@ -414,7 +398,7 @@ def _set_cursor_visible(visible: bool) -> None:
 
 
 def _edit_birth_date(state: Workspace, catalog: Catalog) -> None:
-    """Edit year/month/day as one masked control with independent text carets."""
+    """Edit the three text slots as a draft; Enter confirms all of them."""
     session = state.field_session
     if session is None:
         return
@@ -424,6 +408,11 @@ def _edit_birth_date(state: Workspace, catalog: Catalog) -> None:
     buffers = _birth_buffers(session)
 
     def redraw() -> None:
+        # The preview has no effect on the confirmed values or their domains.
+        session.preview_values = {
+            key: (buffer.value if buffer.value else None)
+            for key, buffer in buffers.items()
+        }
         frame = render(state, catalog)
         screen._paint(frame.lines)
         _position_birth_cursor(frame, session, buffers)
@@ -431,58 +420,51 @@ def _edit_birth_date(state: Workspace, catalog: Catalog) -> None:
     state.notice = ""
     redraw()
     cursor_visible = True
-    with input_mode(), editing_cursor():
-        while True:
-            event = read_event(_CURSOR_BLINK_SECONDS)
-            if event is None:
-                cursor_visible = not cursor_visible
-                _set_cursor_visible(cursor_visible)
-                continue
-            if not cursor_visible:
-                cursor_visible = True
-                _set_cursor_visible(True)
-
-            kind = event.kind
-            if kind == "cancel":
-                raise KeyboardInterrupt
-            if kind == "submit":
-                parsed = _parsed_birth_buffers(buffers)
-                try:
-                    birth_canonical(parsed)
-                except (TypeError, ValueError):
-                    sys.stdout.write("\a")
-                    sys.stdout.flush()
+    try:
+        with input_mode(), editing_cursor():
+            while True:
+                event = read_event(_CURSOR_BLINK_SECONDS)
+                if event is None:
+                    cursor_visible = not cursor_visible
+                    _set_cursor_visible(cursor_visible)
                     continue
-                session.values.update(parsed)
-                commit(state, catalog)
-                return
+                if not cursor_visible:
+                    cursor_visible = True
+                    _set_cursor_visible(True)
 
-            if kind in {"left", "right", "home", "end", "tab"}:
-                _move_birth_caret(session, buffers, kind)
-                redraw()
-                continue
-
-            key = session.active_key
-            buffer = buffers[key]
-            if _edit_birth_buffer(buffer, event, _BIRTH_SLOT_WIDTHS[key]):
-                previous = session.values.get(key)
-                _sync_birth_buffers(session, buffers)
-                changed_fields = _normalize_changed_value(
-                    state, catalog, key, previous,
-                    year_complete=len(buffers["birth_year"].value) == 4,
-                    value_complete=(
-                        key != "birth_day"
-                        or len(buffers["birth_day"].value) == _BIRTH_SLOT_WIDTHS["birth_day"]
-                    ),
-                )
-                for changed_key in changed_fields:
-                    updated = session.values.get(changed_key)
-                    affected_buffer = buffers[changed_key]
-                    affected_buffer.chars = list("" if updated is None else str(updated))
-                    affected_buffer.cursor = min(
-                        affected_buffer.cursor, len(affected_buffer.chars)
+                kind = event.kind
+                if kind == "cancel":
+                    raise KeyboardInterrupt
+                if kind == "submit":
+                    proposed = dict(session.values)
+                    proposed.update(_parsed_birth_buffers(buffers))
+                    # Constraints are evaluated once, against the complete
+                    # submitted text. Intermediate keystrokes are never values.
+                    reconcile_dependencies("students", session.values, proposed, birth_options)
+                    proposed["birth_day"] = clamp_to_domain(
+                        proposed.get("birth_day"), birth_options("birth_day", proposed)
                     )
-                redraw()
+                    try:
+                        birth_canonical(proposed)
+                    except (TypeError, ValueError):
+                        sys.stdout.write("\\a")
+                        sys.stdout.flush()
+                        continue
+                    session.values.update(proposed)
+                    session.preview_values = None
+                    commit(state, catalog)
+                    return
+
+                if kind in {"left", "right", "home", "end", "tab"}:
+                    _move_birth_caret(session, buffers, kind)
+                    redraw()
+                    continue
+
+                key = session.active_key
+                if _edit_birth_buffer(buffers[key], event, _BIRTH_SLOT_WIDTHS[key]):
+                    redraw()
+    finally:
+        session.preview_values = None
 
 
 def edit_current(state: Workspace, catalog: Catalog) -> None:
