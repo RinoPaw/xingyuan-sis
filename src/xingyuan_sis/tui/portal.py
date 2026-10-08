@@ -55,6 +55,18 @@ def secondary_items(identity: Identity, primary: int) -> tuple[MenuItem, ...]:
     return ()
 
 
+def next_tab_target(identity: Identity, selected: int, focus: str, secondary: int) -> tuple[int, str, int]:
+    """Traverse visible menu choices in reading order, including submenu entries."""
+    items = secondary_items(identity, selected)
+    if focus == "primary":
+        if items:
+            return selected, "secondary", 0
+        return (selected + 1) % len(PRIMARY_LABELS), "primary", 0
+    if secondary + 1 < len(items):
+        return selected, "secondary", secondary + 1
+    return (selected + 1) % len(PRIMARY_LABELS), "primary", 0
+
+
 def secondary_columns(total_width: int, focus: str = "secondary", *, height: int | None = None) -> int:
     if total_width < NARROW_WIDTH or (height is not None and height < 9):
         return 1
@@ -85,7 +97,7 @@ def frame(
     board = Board(width, height)
     board.put(0, 0, _topbar(width, identity, name, database))
     hints = (TOGGLE_ANIMATION.hint,) if selected == 0 and focus == "primary" else ()
-    board.put(0, height - 1, theme.footer(width, command_hints=hints))
+    board.put(0, height - 1, theme.footer(width, switch_focus=True, command_hints=hints))
 
     if width < NARROW_WIDTH or height < 9:
         _compact_body(
