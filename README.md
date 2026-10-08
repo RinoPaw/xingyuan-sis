@@ -26,9 +26,8 @@
 - SQLite / `sqlite3`
 - Tkinter / `ttk` 图形界面
 - 自绘 ANSI 终端交互
-- TerminalTextEffects（TUI 名册局部增删动效）
 
-除 TerminalTextEffects 外，业务、持久化、CLI、基础终端界面和 Tkinter GUI 均使用 Python 标准库。
+业务、持久化、CLI、TUI 和 Tkinter GUI 均使用 Python 标准库，无需额外 Python 运行时依赖。
 
 ## 快速开始
 

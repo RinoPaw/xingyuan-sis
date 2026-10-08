@@ -80,11 +80,8 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
     if form is None:
         return None
 
-    from .roster_effects import capture_student_roster_effect, play_student_roster_effect
-
     record_id: int | None = None
     deleting_position: int | None = None
-    delete_effect = None
 
     if form.mode == "create":
         values = {field.key: form.values.get(field.key) for field in form.fields}
@@ -109,15 +106,6 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
     elif form.mode == "delete":
         if state.key == "students":
             deleting_position = state.selected
-            # Capture presentation while the record still exists, but do not
-            # play anything until persistence succeeds. A failed delete must
-            # never visually burn a record that remains in the database.
-            delete_effect = capture_student_roster_effect(
-                state,
-                catalog,
-                int(form.original["id"]),
-                "burn",
-            )
         catalog.delete(state.key, form.original)
         state.notice = "记录已删除。"
     elif form.mode == "seed":
@@ -160,15 +148,6 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
     else:
         state.set_focus(FocusArea.DASHBOARD if state.key == "data" else FocusArea.ROSTER)
         state.detail_scroll, state.detail_selected = 0, 0
-
-    # Effects are dispatched from the successful mutation result, not from a
-    # button or shortcut path. Any UI route that reaches this transaction gets
-    # exactly the same visual consequence.
-    if form.mode == "delete" and delete_effect is not None:
-        play_student_roster_effect(delete_effect)
-    elif state.key == "students" and form.mode == "create" and record_id is not None and created_visible:
-        create_effect = capture_student_roster_effect(state, catalog, record_id, "print")
-        play_student_roster_effect(create_effect)
 
     return record_id
 

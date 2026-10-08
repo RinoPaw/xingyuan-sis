@@ -1,11 +1,9 @@
 """Terminal animation primitives and decorative effects."""
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
 import math
 import os
 import re
-import time
 
 from .screen import (
     _ANSI_RE,
@@ -13,16 +11,12 @@ from .screen import (
     _DECORATIVE_GOLD,
     _ansi,
     _cell_width,
-    _display_width,
     _hit_action,
-    _paint,
-    _paint_region,
     MouseClick,
     ScreenFrame,
 )
 
 
-_TRANSIENT_FRAME_INTERVAL = 1 / 60
 _SPARKLE_DOTS = ("⠁", "⠂", "⠄", "⠈", "⠐", "⠠", "⡀", "⢀")
 _SPARKLE_FRAME = 0.150
 _SPARKLE_BG = 38
@@ -31,37 +25,6 @@ _SPARKLE_DENSITY_DENOMINATOR = 10
 _RING_INNER_SCALE = 1.8
 _RING_OUTER_SCALE = 2.12
 _RING_MINOR_SCALE = 0.48
-
-
-def play_region_frames(
-    base_lines: Sequence[str],
-    x: int,
-    y: int,
-    width: int,
-    frames: Iterable[str],
-) -> None:
-    """Play transient canvases without repainting the application between frames."""
-    _paint(base_lines)
-    previous_top = y + 1
-
-    for frame in frames:
-        rows = frame.split("\n")
-        top = y - len(rows) + 1
-
-        # If the new canvas is shorter, restore only rows uncovered by it. The
-        # rest of the application never needs to be repainted during an effect.
-        for target_y in range(previous_top, min(top, y)):
-            if 1 <= target_y <= len(base_lines):
-                base = base_lines[target_y - 1]
-                _paint_region(1, target_y, max(1, _display_width(base)), base)
-
-        for offset, row in enumerate(rows):
-            target_y = top + offset
-            if 1 <= target_y <= len(base_lines):
-                _paint_region(x, target_y, width, row)
-
-        previous_top = top
-        time.sleep(_TRANSIENT_FRAME_INTERVAL)
 
 
 def _ring_band_contains(u: float, v: float, radius: float) -> bool:

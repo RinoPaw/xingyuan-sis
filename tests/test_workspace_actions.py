@@ -43,6 +43,27 @@ class WorkspaceActionTests(unittest.TestCase):
         save = next(region for region in creating.regions if region.action == "save")
         self.assertEqual(save.y, 34)
 
+    def test_create_student_commits_and_focuses_saved_record_without_animation(self):
+        state = workspace.Workspace("students")
+        sample = state.current(self.catalog)
+        workspace_forms.open_form(state, self.catalog, "create")
+        state.form.values.update(
+            student_no="29999998",
+            name="无动画新增测试",
+            family=sample["family"],
+            branch=sample["branch"],
+            enrollment_year=sample["enrollment_year"],
+        )
+
+        record_id = workspace_forms.apply_form(state, self.catalog)
+
+        created = self.catalog.service.student_by_no("29999998")
+        self.assertIsNotNone(created)
+        self.assertEqual(created["id"], record_id)
+        self.assertIsNone(state.form)
+        self.assertEqual(state.focus, workspace.FocusArea.INSPECTOR)
+        self.assertEqual(state.current(self.catalog)["id"], record_id)
+
     def test_delete_shortcut_preserves_selected_record(self):
         state = workspace.Workspace("students", selected=15)
         captured = []
