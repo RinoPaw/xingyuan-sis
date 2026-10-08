@@ -4,7 +4,7 @@ from pathlib import Path
 import sqlite3
 from typing import Any
 
-from .auth import DEMO_STUDENT_PASSWORD, hash_password, reset_student_password as reset_password
+from .auth import INITIAL_STUDENT_PASSWORD, hash_initial_student_password, hash_password, reset_student_password as reset_password
 from .csv_io import ImportResult, export_students_csv, import_students_csv
 from .reports import summary
 from .repository import Repository
@@ -251,8 +251,7 @@ class XingyuanService:
     # ----- students -------------------------------------------------------
     def register_student(self, **values: Any) -> tuple[int, str]:
         """Create a student and first-login credentials in one database insert."""
-        password = str(values.get("student_no", "")).strip()
-        return self.create_student(**values, initial_password=password), password
+        return self.create_student(**values, initial_password=INITIAL_STUDENT_PASSWORD), INITIAL_STUDENT_PASSWORD
 
     def create_student(
         self,
@@ -296,7 +295,10 @@ class XingyuanService:
             values.pop(field)
         return self.repository.add_student(
             species_branch_id=int(species["id"]), class_id=class_id,
-            password_hash=hash_password(initial_password) if initial_password is not None else None,
+            password_hash=(
+                hash_initial_student_password() if initial_password == INITIAL_STUDENT_PASSWORD
+                else hash_password(initial_password) if initial_password is not None else None
+            ),
             **values,
         )
 
@@ -482,7 +484,7 @@ class XingyuanService:
             students=STUDENTS,
             courses=COURSES,
             enrollments=ENROLLMENTS,
-            student_password_hash=hash_password(DEMO_STUDENT_PASSWORD),
+            student_password_hash=hash_initial_student_password(),
             reset=reset,
         )
         return SeedResult(
