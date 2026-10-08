@@ -94,12 +94,12 @@ def render_dashboard(board: Board, state: Workspace, catalog: Catalog) -> None:
     layout = WorkspaceLayout(board.width, board.height)
     top = layout.panel_heading_row("data")
     capacity = max(1, board.height - top - 2)
-    state.detail_scroll = min(
-        state.detail_scroll,
+    scroll = min(
+        max(0, state.detail_scroll),
         max(0, max(len(panel[2]) for panel in panels) - capacity),
     )
     for x, panel_width, content in panels:
         for index, (text, style, action) in enumerate(
-            content[state.detail_scroll:state.detail_scroll + capacity]
+            content[scroll:scroll + capacity]
         ):
             board.put(x, top + index, text, style, action, panel_width)
