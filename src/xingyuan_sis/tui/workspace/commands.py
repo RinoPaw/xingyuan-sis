@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 SEARCH = Command("search", "搜索", "/")
 CREATE = Command("create", "增加", "a")
 DELETE = Command("delete", "删除", "d")
-RESET_PASSWORD = Command("reset-password", "重置密码")
+RESET_PASSWORD = Command("reset-password", "重置密码", "r")
 IMPORT = Command("import", "导入", "i")
 EXPORT = Command("export", "导出", "o")
 SEED = Command("seed", "演示", "g")
@@ -34,6 +34,3 @@ def available(catalog: Catalog, key: str) -> tuple[Command, ...]:
         commands += (RESET_PASSWORD, IMPORT_STUDENTS, SEED_STUDENTS)
     return commands
 
-
-def toolbar(catalog: Catalog, key: str) -> tuple[Command, ...]:
-    return tuple(command for command in available(catalog, key) if command.toolbar)
