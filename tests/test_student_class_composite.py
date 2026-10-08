@@ -50,6 +50,47 @@ class StudentClassCompositeTests(unittest.TestCase):
                 line = next(line for line in lines if line and line[0][0].startswith(label))
                 self.assertEqual([action for _, _, action in line if action], actions)
 
+    def test_unset_composite_children_remain_visible_and_focusable(self):
+        groups = (
+            ("family", ("family", "branch"), ("branch",)),
+            ("major_code", ("major_code", "class_number"), ("class_number",)),
+            ("primary_element", ("primary_element", "primary_affinity"), ("primary_affinity",)),
+            ("dorm_area", ("dorm_area", "dorm_building", "dorm_room"),
+             ("dorm_building", "dorm_room")),
+        )
+        for anchor, keys, missing in groups:
+            with self.subTest(group=anchor):
+                state = Workspace("students")
+                field_session.start(state, self.catalog, anchor)
+                for key in missing:
+                    state.field_session.values[key] = None
+                row = next(
+                    line for line in student_inspector.lines(
+                        state.current(self.catalog), self.catalog, state
+                    )
+                    if sum(action.startswith("field:") for _, _, action in line) == len(keys)
+                    and any(action == f"field:{anchor}" for _, _, action in line)
+                )
+                segments = [(value, action) for value, _, action in row if action]
+                self.assertEqual([action for _, action in segments], [f"field:{key}" for key in keys])
+                for key in missing:
+                    self.assertIn(("未指定", f"field:{key}"), segments)
+
+                # The visible placeholders must also survive when every part
+                # of the semantic field is empty.
+                for key in keys:
+                    state.field_session.values[key] = None
+                empty = next(
+                    line for line in student_inspector.lines(
+                        state.current(self.catalog), self.catalog, state
+                    )
+                    if any(action == f"field:{anchor}" for _, _, action in line)
+                )
+                self.assertEqual(
+                    [(value, action) for value, _, action in empty if action],
+                    [("未指定", f"field:{key}") for key in keys],
+                )
+
     def test_create_form_parent_choice_never_auto_advances_to_child(self):
         for first, second in (
             ("family", "branch"),
