@@ -60,6 +60,16 @@ UI 不写 SQL；Repository 不依赖 UI；业务校验进入 Service / Schema；
 
 读取投影与渲染必须无副作用。`Workspace.rows()`、`Workspace.current()` 和 render 路径只读取事实，不借读取之名修正 `selected / roster_gap / roster_scroll`。当搜索、导航、刷新或数据 mutation 可能使名册状态失效时，由对应事件 / 事务边界显式调用 `reconcile_roster()`；这样“谁改变了 Workspace”始终可追踪。
 
+### 门户交互契约
+
+菜单结构只有 `tui/portal.py` 中的 `MenuSection / MenuItem` 一份权威数据；权限决定可见子项，`MenuItem.action` 决定业务动作。菜单序号只是当前显示位置，不能用 `selected == N` 表示退出、个人资料等业务含义，也不能在鼠标和键盘各写一套激活分支。
+
+- 一级和二级菜单的焦点与选中项分离；Tab 仅在**当前层级**循环，不擅自进入或退出。
+- Enter / → 从一级进入有子项的菜单；Enter 或鼠标点击二级项激活相同的 `action`；Esc 从二级返回其一级菜单。
+- `portal.navigate()` 负责导航状态转移；`app._portal_home()` 负责输入与动作分派，不能隐式重写导航规则。
+- 退出会话必须清除身份及其子菜单位置，不能让新账号继承旧账号的交互状态。
+- 交互测试应覆盖角色、终端尺寸、菜单层级与按键组合，比较键鼠动作结果，并验证状态不变式和渲染纯度。CI 通过不等于设计经过验证。
+
 ## 4. Field 不因编辑改变身份
 
 档案字段必须区分：
