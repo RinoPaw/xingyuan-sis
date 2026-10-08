@@ -165,6 +165,49 @@ class PortalLayoutTests(unittest.TestCase):
                 self.assertEqual(navigate(1, "primary", 1, "down"), (2, "primary", 1))
                 self.assertEqual(navigate(1, "secondary", 0, "right"), (1, "secondary", 1))
 
+    def test_portal_state_machine_preserves_menu_level_invariants(self) -> None:
+        identities = (
+            Identity("Administrator", "admin"),
+            Identity("20260001", "student", "20260001"),
+        )
+        keys = (
+            "focus", "up", "down", "left", "right", "home", "end",
+            "select", "back", "1", "2", "3",
+        )
+        for identity in identities:
+            for width, height in ((100, 24), (26, 18)):
+                columns = portal.secondary_columns(width - 1, height=height)
+                for primary in range(len(portal.PRIMARY_LABELS)):
+                    items = portal.secondary_items(identity, primary)
+                    for focus in (("primary", "secondary") if items else ("primary",)):
+                        for index in range(len(items) if focus == "secondary" else 1):
+                            for key in keys:
+                                with self.subTest(
+                                    role=identity.role, width=width, primary=primary,
+                                    focus=focus, index=index, key=key,
+                                ):
+                                    next_primary, next_focus, next_secondary = portal.navigate(
+                                        identity, primary, focus, index, key, columns,
+                                    )
+                                    self.assertIn(next_primary, range(len(portal.PRIMARY_LABELS)))
+                                    self.assertIn(next_focus, ("primary", "secondary"))
+                                    if next_focus == "secondary":
+                                        next_items = portal.secondary_items(identity, next_primary)
+                                        self.assertTrue(next_items)
+                                        self.assertIn(next_secondary, range(len(next_items)))
+                                    if key == "focus":
+                                        self.assertEqual(next_focus, focus)
+                                        if focus == "primary":
+                                            self.assertEqual(
+                                                next_primary,
+                                                (primary + 1) % len(portal.PRIMARY_LABELS),
+                                            )
+                                        else:
+                                            self.assertEqual(next_primary, primary)
+                                            self.assertEqual(next_secondary, (index + 1) % len(items))
+                                    if key == "back" and focus == "secondary":
+                                        self.assertEqual((next_primary, next_focus), (primary, "primary"))
+
     def test_portal_tab_is_processed_by_event_loop(self) -> None:
         identity = Identity("Administrator", "admin")
         preferences: dict[str, object] = {
