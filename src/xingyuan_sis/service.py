@@ -271,7 +271,7 @@ class XingyuanService:
         contact: str | None = None,
         dormitory: str | None = None,
         notes: str | None = None,
-        initial_password: str | None = None,
+        initial_password: str | None = INITIAL_STUDENT_PASSWORD,
     ) -> int:
         values = validate_values("students", {
             "student_no": student_no, "name": name, "family": family, "branch": branch,
