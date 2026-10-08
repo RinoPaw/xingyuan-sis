@@ -191,11 +191,7 @@ def _open_options(state: Workspace, catalog: Catalog) -> bool:
             if not any(value == session.values.get(session.active_key) for value, _ in options):
                 session.values[session.active_key] = None
             session.options = options
-            session.option_index = next(
-                (i for i, (value, _) in enumerate(options)
-                 if value == session.values.get(session.active_key)),
-                0,
-            )
+            session.option_index = 0
             prepare_candidates(session)
             state.notice = ""
             return True
@@ -213,11 +209,7 @@ def _open_options(state: Workspace, catalog: Catalog) -> bool:
     if session.active_key in session.values:
         session.values[session.active_key] = values.get(session.active_key)
     session.options = options
-    session.option_index = next(
-        (i for i, (value, _) in enumerate(options)
-         if value == session.values.get(session.active_key)),
-        0,
-    )
+    session.option_index = 0
     prepare_candidates(session)
     state.notice = ""
     return True
