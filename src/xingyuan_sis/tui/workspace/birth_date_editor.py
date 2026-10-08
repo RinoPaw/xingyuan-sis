@@ -104,9 +104,14 @@ def options(field_key: str, values: Mapping[str, Any]) -> list[tuple[int | None,
         return None
 
     month = values.get("birth_month")
-    if month is None:
-        return [(None, "未指定")]
     year = values.get("birth_year")
-    check_year = 2000 if year is None else int(year)
-    days = monthrange(check_year, int(month))[1]
-    return [(day, str(day)) for day in range(1, days + 1)]
+    # Unknown month admits any day. Unknown year permits February 29.
+    # Incomplete/invalid slots remain unconstrained until input becomes valid.
+    days = 31
+    try:
+        if month is not None and 1 <= int(month) <= 12:
+            check_year = 2000 if year is None or not 1 <= int(year) <= 9999 else int(year)
+            days = monthrange(check_year, int(month))[1]
+    except (TypeError, ValueError):
+        pass
+    return [(None, "未指定")] + [(day, str(day)) for day in range(1, days + 1)]
