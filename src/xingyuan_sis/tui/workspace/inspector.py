@@ -8,7 +8,6 @@ from ..layout import WorkspaceLayout, visible_start
 from ..view_common import Board, identity, panel_heading, safe
 from .data import Catalog
 from .field_geometry import control_text, control_width
-from .picker import prepare_candidates
 from .presentation import display_value
 from .state import FieldSession, FocusArea, Workspace
 
@@ -50,7 +49,6 @@ def expand_options(lines: list[Line], session: FieldSession | None) -> list[Line
     if session is None or session.options is None:
         return lines
 
-    prepare_candidates(session)
     target = f"field:{session.active_key}"
     insert_at = next(
         (i + 1 for i, line in enumerate(lines) if any(action == target for _, _, action in line)),
