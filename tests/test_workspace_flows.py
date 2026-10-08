@@ -82,6 +82,33 @@ class WorkspaceFlowTests(unittest.TestCase):
                 self.assertEqual(keyboard.detail_selected, mouse.detail_selected)
                 self.assertEqual(keyboard.detail_scroll, mouse.detail_scroll)
 
+    def test_arrow_navigation_scrolls_only_when_selection_crosses_viewport_edge(self):
+        from xingyuan_sis.tui.layout import WorkspaceLayout
+        from xingyuan_sis.tui.workspace.roster import roster_window
+
+        size = (120, 20)
+        with patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
+            capacity = WorkspaceLayout.measure().roster_capacity("students")
+        state = Workspace("students", selected=capacity - 1, roster_scroll=0)
+
+        self.assertEqual(roster_window(state, len(state.rows(self.catalog)), capacity), 0)
+        self.interact(state, ["down", "refresh"], size)
+        self.assertEqual(state.selected, capacity)
+        self.assertEqual(state.roster_scroll, 1)
+
+        self.interact(state, ["up", "refresh"], size)
+        self.assertEqual(state.selected, capacity - 1)
+        self.assertEqual(state.roster_scroll, 1)
+
+        for _ in range(capacity - 2):
+            self.interact(state, ["up", "refresh"], size)
+        self.assertEqual(state.selected, 1)
+        self.assertEqual(state.roster_scroll, 1)
+
+        self.interact(state, ["up", "refresh"], size)
+        self.assertEqual(state.selected, 0)
+        self.assertEqual(state.roster_scroll, 0)
+
     def test_cancel_delete_preserves_student_and_returns_to_current_record(self):
         state = Workspace("students", selected=21)
         original = state.current(self.catalog).copy()
