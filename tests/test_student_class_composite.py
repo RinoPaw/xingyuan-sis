@@ -6,6 +6,8 @@ from xingyuan_sis.database import initialize_database
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui.workspace import field_session, forms, student_inspector
 from xingyuan_sis.tui.workspace.data import Catalog
+from xingyuan_sis.tui.workspace.presentation import display_value
+from xingyuan_sis.tui.workspace.student_layout import STUDENT_FIELD_ROWS
 from xingyuan_sis.tui.workspace.state import FieldSessionOwner, Workspace
 
 
@@ -90,6 +92,20 @@ class StudentClassCompositeTests(unittest.TestCase):
                     [(value, action) for value, _, action in empty if action],
                     [("未指定", f"field:{key}") for key in keys],
                 )
+
+    def test_unset_composite_fields_are_labeled_in_create_form_too(self):
+        state = Workspace("students")
+        forms.open_form(state, self.catalog, "create")
+        values = dict(state.form.values)
+        for row in STUDENT_FIELD_ROWS:
+            if len(row.keys) < 2:
+                continue
+            for key in row.keys:
+                with self.subTest(group=row.label, field=key):
+                    self.assertEqual(
+                        display_value(self.catalog, "students", values | {key: None}, key),
+                        "未指定",
+                    )
 
     def test_create_form_parent_choice_never_auto_advances_to_child(self):
         for first, second in (
