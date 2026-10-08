@@ -70,8 +70,8 @@ def reconcile(
             for dependency in dependencies:
                 old_domain = options_for(dependency.field, before)
                 new_domain = options_for(dependency.field, values)
-                old_choices = tuple(value for value, _ in old_domain or ())
-                new_choices = tuple(value for value, _ in new_domain or ())
+                old_choices = {value for value, _ in old_domain or ()}
+                new_choices = {value for value, _ in new_domain or ()}
                 if old_choices == new_choices:
                     continue
                 current = values.get(dependency.field)

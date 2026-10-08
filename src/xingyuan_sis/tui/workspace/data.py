@@ -288,18 +288,6 @@ class Catalog:
     def edit_group(self, key: str, field_key: str) -> tuple[Field, ...]:
         return self.field_group(key, field_key, editing=True)
 
-    def normalize_option_value(
-        self,
-        key: str,
-        field_key: str,
-        values: dict[str, Any],
-    ) -> list[tuple[Any, str]] | None:
-        """Keep a dependent option value valid under the current projected values."""
-        options = self.options(key, field_key, values)
-        if options is not None and not any(value == values.get(field_key) for value, _ in options):
-            values[field_key] = None
-        return options
-
     def _field(self, key: str, field_key: str) -> Field | None:
         extra = (_STUDENT_CLASS_FIELDS + _STUDENT_DORM_FIELDS) if key == "students" else ()
         fields = COLLECTIONS[key].fields + extra

@@ -191,8 +191,6 @@ def _open_options(state: Workspace, catalog: Catalog) -> bool:
         values.update(session.values)
         options = birth_options(session.active_key, values)
         if options is not None:
-            if not any(value == session.values.get(session.active_key) for value, _ in options):
-                session.values[session.active_key] = None
             session.options = options
             session.option_index = 0
             prepare_candidates(session)
@@ -205,12 +203,10 @@ def _open_options(state: Workspace, catalog: Catalog) -> bool:
         return False
 
     values = projected_values(state, catalog)
-    options = catalog.normalize_option_value(collection, session.active_key, values)
+    options = catalog.options(collection, session.active_key, values)
     if options is None:
         session.options = None
         return False
-    if session.active_key in session.values:
-        session.values[session.active_key] = values.get(session.active_key)
     session.options = options
     session.option_index = 0
     prepare_candidates(session)
