@@ -65,6 +65,25 @@ class DetailFocusTests(unittest.TestCase):
                     self.assertEqual(first.lines, second.lines)
                     self.assertEqual(first.regions, second.regions)
 
+    def test_entire_workspace_render_is_pure_across_record_types_and_forms(self):
+        from xingyuan_sis.tui.workspace import forms
+        from xingyuan_sis.tui.workspace.data import COLLECTIONS
+
+        for collection in COLLECTIONS:
+            for mode in ("browse", "create"):
+                for size in ((120, 35), (30, 12)):
+                    with self.subTest(collection=collection, mode=mode, size=size):
+                        state = workspace.Workspace(collection)
+                        if mode == "create":
+                            forms.open_form(state, self.catalog, "create")
+                        before = dict(vars(state))
+                        with patch.object(screen, "_terminal_size", return_value=os.terminal_size(size)):
+                            first = workspace_view.render(state, self.catalog)
+                            second = workspace_view.render(state, self.catalog)
+                        self.assertEqual(vars(state), before)
+                        self.assertEqual(first.lines, second.lines)
+                        self.assertEqual(first.regions, second.regions)
+
     def test_selected_marker_sits_beside_the_specific_inspector_field(self):
         state = workspace.Workspace(
             "students",
