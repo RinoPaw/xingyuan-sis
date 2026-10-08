@@ -1,3 +1,4 @@
+from copy import deepcopy
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import os
@@ -8,7 +9,7 @@ from xingyuan_sis.database import initialize_database
 from xingyuan_sis.schema import Field
 from xingyuan_sis.seed_data import seed_demo
 from xingyuan_sis.tui import screen, workspace
-from xingyuan_sis.tui.workspace import field_session, student_inspector, view
+from xingyuan_sis.tui.workspace import field_session, forms, student_inspector, view
 from xingyuan_sis.tui.workspace.data import Catalog
 from xingyuan_sis.tui.workspace.picker import prepare_candidates
 from xingyuan_sis.tui.workspace.state import FieldSession
@@ -45,6 +46,43 @@ class PickerCandidateTests(unittest.TestCase):
         ]
         self.assertTrue(candidates)
         self.assertTrue(all(style == screen._TEXT_SECONDARY for _, style, _ in candidates))
+
+    def test_picker_is_normalized_before_any_render(self):
+        state = workspace.Workspace("students")
+        current = state.current(self.catalog)["primary_affinity"]
+        field_session.start(state, self.catalog, "primary_affinity")
+        field_session.edit_current(state, self.catalog)
+
+        session = state.field_session
+        self.assertIsNotNone(session.options)
+        self.assertNotIn(current, [value for value, _ in session.options])
+        self.assertEqual(session.option_index, 0)
+
+    def test_rendering_open_record_and_form_pickers_is_read_only(self):
+        for mode in ("record", "form"):
+            for dimensions in ((120, 35), (30, 12)):
+                with self.subTest(mode=mode, dimensions=dimensions):
+                    state = workspace.Workspace("students")
+                    if mode == "record":
+                        field_session.start(state, self.catalog, "primary_affinity")
+                    else:
+                        forms.open_form(state, self.catalog, "create")
+                        index = next(
+                            i for i, field in enumerate(state.form.fields)
+                            if field.key == "family"
+                        )
+                        field_session.start_form(state, self.catalog, index)
+                    field_session.edit_current(state, self.catalog)
+                    self.assertIsNotNone(state.field_session.options)
+                    original_session = deepcopy(state.field_session)
+                    original_form = deepcopy(state.form)
+                    with patch.object(screen, "_terminal_size", return_value=os.terminal_size(dimensions)):
+                        first = view.render(state, self.catalog)
+                        second = view.render(state, self.catalog)
+                    self.assertEqual(state.field_session, original_session)
+                    self.assertEqual(state.form, original_form)
+                    self.assertEqual(first.lines, second.lines)
+                    self.assertEqual(first.regions, second.regions)
 
     def test_dependent_picker_also_excludes_the_value_already_shown_in_field(self):
         session = FieldSession(
