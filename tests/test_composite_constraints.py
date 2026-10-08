@@ -25,6 +25,31 @@ class CompositeConstraintTests(unittest.TestCase):
         seed_demo(db)
         self.catalog = Catalog(db)
 
+    def _controlled_options(self, key: str, field: str, values: dict | None = None):
+        """Small domains whose changes are independent of the seed fixtures."""
+        values = values or {}
+        if key == "students":
+            if field == "branch":
+                return [(name, name) for name in (
+                    ("拉布拉多犬",) if values.get("family") == "犬科" else ("灰狼",)
+                )]
+            if field == "class_number":
+                return [(name, name) for name in (
+                    ("01",) if values.get("major_code") == "OLD" else ("02",)
+                )]
+            if field == "dorm_building":
+                return [(None, "未指定")] + [
+                    (name, name) for name in (
+                        ("2",) if values.get("dorm_area") == "A区" else ("3",)
+                    )
+                ]
+            if field == "dorm_room":
+                room = "201" if (
+                    values.get("dorm_area"), values.get("dorm_building")
+                ) == ("A区", "2") else "301"
+                return [(None, "未指定"), (room, room)]
+        return self._original_options(key, field, values)
+
     def test_parent_changes_clear_declared_dependents_only(self) -> None:
         changes = (
             ("family", {"family": "犬科", "branch": "拉布拉多犬"}, {"branch": None}),
@@ -36,16 +61,18 @@ class CompositeConstraintTests(unittest.TestCase):
             ("primary_element", {"primary_element": "风", "primary_affinity": "A"},
              {"primary_affinity": "A"}),
         )
-        for parent, initial, expected in changes:
-            with self.subTest(parent=parent):
-                state = Workspace("students")
-                field_session.start(state, self.catalog, parent)
-                session = state.field_session
-                session.values.update(initial)
-                field_session._set_value(state, self.catalog, parent, "NEW")
-                for name, value in expected.items():
-                    self.assertEqual(session.values[name], value)
-                self.assertEqual(session.active_key, parent)
+        self._original_options = self.catalog.options
+        with patch.object(self.catalog, "options", side_effect=self._controlled_options):
+            for parent, initial, expected in changes:
+                with self.subTest(parent=parent):
+                    state = Workspace("students")
+                    field_session.start(state, self.catalog, parent)
+                    session = state.field_session
+                    session.values.update(initial)
+                    field_session._set_value(state, self.catalog, parent, "NEW")
+                    for name, value in expected.items():
+                        self.assertEqual(session.values[name], value)
+                    self.assertEqual(session.active_key, parent)
 
     def test_unchanged_parent_does_not_erase_child(self) -> None:
         state = Workspace("students")
@@ -65,12 +92,35 @@ class CompositeConstraintTests(unittest.TestCase):
         )
         first = next(i for i, field in enumerate(state.form.fields) if field.key == "dorm_area")
         field_session.start_form(state, self.catalog, first)
-        field_session._set_value(state, self.catalog, "dorm_building", "3")
+        self._original_options = self.catalog.options
+        with patch.object(self.catalog, "options", side_effect=self._controlled_options):
+            field_session._set_value(state, self.catalog, "dorm_building", "3")
         self.assertEqual(state.field_session.values["dorm_area"], "A区")
         self.assertIsNone(state.field_session.values["dorm_room"])
-        field_session._set_value(state, self.catalog, "dorm_area", "B区")
+        with patch.object(self.catalog, "options", side_effect=self._controlled_options):
+            field_session._set_value(state, self.catalog, "dorm_area", "B区")
         self.assertIsNone(state.field_session.values["dorm_building"])
         self.assertIsNone(state.field_session.values["dorm_room"])
+
+    def test_no_normalization_when_dependent_domain_does_not_change(self) -> None:
+        state = Workspace("students")
+        field_session.start(state, self.catalog, "primary_element")
+        state.field_session.values.update(primary_element="风", primary_affinity="A")
+        with patch.object(field_session, "reconcile_dependencies") as normalize:
+            field_session._set_value(state, self.catalog, "primary_element", "火")
+            normalize.assert_not_called()
+        self.assertEqual(state.field_session.values["primary_affinity"], "A")
+
+        field_session.start(state, self.catalog, "family")
+        state.field_session.values.update(family="犬科", branch="拉布拉多犬")
+        original = self.catalog.options
+        def unchanged_options(collection, key, values=None):
+            if key == "branch":
+                return [("拉布拉多犬", "拉布拉多犬")]
+            return original(collection, key, values)
+        with patch.object(self.catalog, "options", side_effect=unchanged_options):
+            field_session._set_value(state, self.catalog, "family", "其他族系")
+        self.assertEqual(state.field_session.values["branch"], "拉布拉多犬")
 
     def test_year_and_month_determine_day_domain(self) -> None:
         scenarios = (
