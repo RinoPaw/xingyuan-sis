@@ -127,10 +127,13 @@ def navigate(
             focus = "secondary"
         return selected, focus, secondary
 
-    columns = max(1, columns)
-    if key == "up":
-        secondary = max(0, secondary - columns)
-    elif key == "down":
+    # Match the grid's actual column count and do not move sideways when
+    # there is no row above/below the selected item.
+    columns = max(1, min(columns, len(items)))
+    row = secondary // columns
+    if key == "up" and row > 0:
+        secondary -= columns
+    elif key == "down" and (row + 1) * columns < len(items):
         secondary = min(len(items) - 1, secondary + columns)
     elif key == "left":
         if secondary % columns == 0:
