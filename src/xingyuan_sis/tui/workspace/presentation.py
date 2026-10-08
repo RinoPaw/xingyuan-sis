@@ -44,24 +44,21 @@ def display_semantic_fields(
     values: Mapping[str, Any],
     field_keys: tuple[str, ...],
 ) -> tuple[tuple[str, str], ...]:
-    """Project one user-facing semantic row from one or more implementation fields.
+    """Retain every semantic subfield and its hit target, including unset ones.
 
-    Missing subfields are presentation detail, not separate archive values. A row
-    with no value at all is shown once as an em dash; partially populated rows
-    show only the parts that actually exist. Picker labels such as ``未指定`` stay
-    inside pickers and never leak into the archive view.
+    Composite rows have a stable shape: an unset child is still visible and
+    independently focusable. Only a standalone empty field uses the compact
+    em-dash placeholder.
     """
     if not field_keys:
         return ()
-
-    visible = tuple(
-        (key, display_value(catalog, collection, values, key))
+    if len(field_keys) == 1:
+        key = field_keys[0]
+        return ((key, display_value(catalog, collection, values, key)),)
+    return tuple(
+        (key, "未指定" if values.get(key) in (None, "") else display_value(catalog, collection, values, key))
         for key in field_keys
-        if values.get(key) not in {None, ""}
     )
-    if visible:
-        return visible
-    return ((field_keys[0], "—"),)
 
 
 def delete_impacts(
