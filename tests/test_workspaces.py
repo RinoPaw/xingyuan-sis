@@ -60,11 +60,11 @@ class WorkspaceTests(unittest.TestCase):
 
     def test_student_workspace_header_has_no_ghost_rows(self):
         plain = [screen._ANSI_RE.sub("", line) for line in self.render(workspace.Workspace("students")).lines]
-        self.assertIn("搜索", plain[3])
-        self.assertTrue(plain[4].lstrip().startswith("─"))
-        self.assertIn("名册", plain[5])
-        self.assertIn("档案", plain[5])
-        self.assertNotIn("学生档案", "\n".join(plain[:6]))
+        self.assertTrue(plain[2].lstrip().startswith("─"))
+        self.assertIn("名册", plain[3])
+        self.assertIn("档案", plain[3])
+        self.assertNotIn("搜索", "\n".join(plain[:4]))
+        self.assertNotIn("学生档案", "\n".join(plain[:4]))
 
     def test_wheel_scrolls_panel_under_pointer(self):
         state = workspace.Workspace("students")
