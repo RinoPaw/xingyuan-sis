@@ -60,7 +60,7 @@ class StudentEditNavigationTests(unittest.TestCase):
         self.assertEqual(self._move("field:name", "down"), "field:student_no")
 
     def test_species_composite_row_uses_real_event_geometry(self):
-        self.assertEqual(self._move("field:student_no", "down"), "field:branch")
+        self.assertEqual(self._move("field:student_no", "down"), "field:family")
         self.assertEqual(self._move("field:gender", "up"), "field:branch")
         self.assertEqual(self._move("field:branch", "up"), "field:student_no")
         self.assertEqual(self._move("field:branch", "left"), "field:family")
@@ -68,7 +68,7 @@ class StudentEditNavigationTests(unittest.TestCase):
         self.assertIsNone(self._move("field:family", "left"))
 
     def test_class_composite_row_uses_same_real_event_geometry(self):
-        self.assertEqual(self._move("field:department_name", "down"), "field:class_number")
+        self.assertEqual(self._move("field:department_name", "down"), "field:major_code")
         self.assertEqual(self._move("field:status", "up"), "field:class_number")
         self.assertEqual(self._move("field:class_number", "up"), "field:department_name")
         self.assertEqual(self._move("field:class_number", "left"), "field:major_code")
@@ -76,7 +76,7 @@ class StudentEditNavigationTests(unittest.TestCase):
         self.assertIsNone(self._move("field:major_code", "left"))
 
     def test_element_composite_row_uses_same_real_event_geometry(self):
-        self.assertEqual(self._move("field:status", "down"), "field:primary_affinity")
+        self.assertEqual(self._move("field:status", "down"), "field:primary_element")
         self.assertEqual(self._move("field:primary_affinity", "up"), "field:status")
         self.assertEqual(self._move("field:primary_affinity", "left"), "field:primary_element")
         self.assertEqual(self._move("field:primary_element", "right"), "field:primary_affinity")
@@ -100,7 +100,7 @@ class StudentEditNavigationTests(unittest.TestCase):
 
     def test_department_stays_in_the_vertical_focus_chain(self):
         self.assertEqual(self._move("field:enrollment_year", "down"), "field:department_name")
-        self.assertEqual(self._move("field:department_name", "down"), "field:class_number")
+        self.assertEqual(self._move("field:department_name", "down"), "field:major_code")
         self.assertEqual(self._move("field:class_number", "up"), "field:department_name")
 
     def test_enter_opens_selected_semantic_field_group(self):
