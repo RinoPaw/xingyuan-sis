@@ -17,7 +17,7 @@ _SECONDARY_SLOT_WIDTH = 14
 _SECONDARY_CARD_WIDTH = 10
 _SECONDARY_MAX_COLUMNS = 4
 _WEEKDAYS = ("周一", "周二", "周三", "周四", "周五", "周六", "周日")
-TOGGLE_ANIMATION = Command("toggle-animation", "动画", "p", toolbar=False)
+TOGGLE_ANIMATION = Command("toggle-animation", "动画", "p")
 
 
 @dataclass(frozen=True)
