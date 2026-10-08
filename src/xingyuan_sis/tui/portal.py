@@ -85,6 +85,22 @@ def navigate(
     Enter or Right enters a submenu; Esc returns to its parent level.
     """
     items = secondary_items(identity, selected)
+
+    # Mouse hit actions use the same transition authority as keyboard navigation.
+    if isinstance(key, str) and key.startswith("primary:"):
+        target = key.removeprefix("primary:")
+        if target.isdecimal() and int(target) < len(PRIMARY_LABELS):
+            index = int(target)
+            if index == selected and focus == "primary" and items:
+                return selected, "secondary", secondary
+            return index, "primary", secondary
+        return selected, focus, secondary
+    if isinstance(key, str) and key.startswith("secondary:"):
+        target = key.removeprefix("secondary:")
+        if target.isdecimal() and int(target) < len(items):
+            return selected, "secondary", int(target)
+        return selected, focus, secondary
+
     if key == "focus":
         if focus == "secondary" and items:
             return selected, "secondary", (secondary + 1) % len(items)
