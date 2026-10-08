@@ -8,7 +8,8 @@ import unittest
 from unittest.mock import patch
 
 from xingyuan_sis import basic_ui, terminal_ui
-from xingyuan_sis.auth import INITIAL_STUDENT_PASSWORD, (
+from xingyuan_sis.auth import (
+    INITIAL_STUDENT_PASSWORD,
     Identity, authenticate, change_password, initialize_admin, read_session, write_session,
 )
 from xingyuan_sis.database import connect, initialize_database
