@@ -139,6 +139,48 @@ class PortalLayoutTests(unittest.TestCase):
         self.assertIn("P 动画", footers[0])
         self.assertTrue(all("P 动画" not in footer for footer in footers[1:]))
 
+    def test_tab_traverses_primary_and_secondary_choices(self) -> None:
+        admin = Identity("Administrator", "admin")
+        student = Identity("20260001", "student", "20260001")
+
+        for identity in (admin, student):
+            with self.subTest(role=identity.role):
+                selected, focus, secondary = 0, "primary", 0
+                selected, focus, secondary = portal.next_tab_target(identity, selected, focus, secondary)
+                self.assertEqual((selected, focus), (1, "primary"))
+                selected, focus, secondary = portal.next_tab_target(identity, selected, focus, secondary)
+                self.assertEqual((selected, focus, secondary), (1, "secondary", 0))
+
+                count = len(portal.secondary_items(identity, 1))
+                for index in range(1, count):
+                    selected, focus, secondary = portal.next_tab_target(identity, selected, focus, secondary)
+                    self.assertEqual((selected, focus, secondary), (1, "secondary", index))
+
+                self.assertEqual(portal.next_tab_target(identity, selected, focus, secondary), (2, "primary", 0))
+                self.assertEqual(portal.next_tab_target(identity, 2, "primary", 0), (2, "secondary", 0))
+                self.assertEqual(portal.next_tab_target(identity, 2, "secondary", 1), (3, "primary", 0))
+                self.assertEqual(portal.next_tab_target(identity, 3, "primary", 0), (0, "primary", 0))
+
+    def test_portal_tab_is_processed_by_event_loop(self) -> None:
+        identity = Identity("Administrator", "admin")
+        preferences: dict[str, object] = {
+            "identity": identity,
+            "portal_selected": 0,
+            "portal_focus": "primary",
+            "animate": False,
+        }
+        with patch("xingyuan_sis.service.XingyuanService") as service_type, \
+             patch.object(app.screen, "_clear"), patch.object(app.screen, "_paint"), \
+             patch.object(app.screen, "_terminal_size", return_value=os.terminal_size((100, 24))), \
+             patch.object(app.keys, "_mouse_tracking", return_value=nullcontext()), \
+             patch.object(app.keys, "_read_key", side_effect=["focus", "focus", "focus", "back", "back"]):
+            service_type.return_value.stats.return_value = {}
+            service_type.return_value.list_announcements.return_value = []
+            self.assertIsNone(app._portal_home(None, selected=0, preferences=preferences))
+        self.assertEqual(preferences["portal_selected"], 1)
+        self.assertEqual(preferences["portal_focus"], "primary")
+        self.assertEqual(preferences["portal_secondary"][1], 1)
+
     def test_home_animation_shortcut_is_resolved_in_portal_context(self) -> None:
         identity = Identity("Administrator", "admin")
         preferences: dict[str, object] = {
