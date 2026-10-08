@@ -9,6 +9,7 @@ from ..text_edit import TextBuffer, input_mode, read_event
 from .birth_date_editor import BIRTH_DATE_FIELDS, BIRTH_DATE_KEYS, canonical as birth_canonical
 from .birth_date_editor import options as birth_options, parts as birth_parts, projected as projected_birth_date
 from .data import COLLECTIONS, Catalog
+from .composite_constraints import reconcile as reconcile_dependencies
 from .picker import prepare_candidates
 from .presentation import project_record
 from .state import FieldSession, FieldSessionOwner, FocusArea, Workspace
@@ -241,25 +242,45 @@ def move_active_field(state: Workspace, direction: str) -> bool:
     return True
 
 
-def _normalize_following_fields(state: Workspace, catalog: Catalog) -> None:
-    """Clear dependent values that are no longer valid after one subfield changes."""
+def _normalize_changed_value(
+    state: Workspace,
+    catalog: Catalog,
+    field_key: str,
+    previous: object,
+    *,
+    year_complete: bool = True,
+) -> set[str]:
+    """Apply declared dependency rules as soon as the edited value changes."""
     session = state.field_session
-    if session is None or _is_birth_session(state, session):
-        return
+    if session is None:
+        return set()
     collection = _session_collection(state, session)
-    if collection not in COLLECTIONS:
-        return
+    if _is_birth_session(state, session):
+        def domain(key: str, values: dict) -> list[tuple[object, str]] | None:
+            context = dict(values)
+            if not year_complete:
+                context["birth_year"] = None
+            return birth_options(key, context)
+    else:
+        def domain(key: str, values: dict) -> list[tuple[object, str]] | None:
+            context = projected_values(state, catalog)
+            context.update(values)
+            return catalog.options(collection, key, context)
+    return reconcile_dependencies(collection, field_key, previous, session.values, domain)
 
-    values = projected_values(state, catalog)
-    for field in session.fields[session.active + 1:]:
-        options = catalog.normalize_option_value(collection, field.key, values)
-        if options is not None and field.key in session.values:
-            session.values[field.key] = values.get(field.key)
+
+def _set_value(state: Workspace, catalog: Catalog, key: str, value: object) -> None:
+    """Single mutation boundary for text and option-pick edits."""
+    session = state.field_session
+    if session is None:
+        return
+    previous = session.values.get(key)
+    session.values[key] = value
+    _normalize_changed_value(state, catalog, key, previous)
 
 
 def _finish_current_field(state: Workspace, catalog: Catalog) -> None:
     """Save one edited subfield when possible, without selecting a sibling automatically."""
-    _normalize_following_fields(state, catalog)
     try:
         commit(state, catalog)
     except ValueError as exc:
@@ -397,7 +418,6 @@ def _edit_birth_date(state: Workspace, catalog: Catalog) -> None:
     buffers = _birth_buffers(session)
 
     def redraw() -> None:
-        _sync_birth_buffers(session, buffers)
         frame = render(state, catalog)
         screen._paint(frame.lines)
         _position_birth_cursor(frame, session, buffers)
@@ -436,8 +456,22 @@ def _edit_birth_date(state: Workspace, catalog: Catalog) -> None:
                 redraw()
                 continue
 
-            buffer = buffers[session.active_key]
-            if _edit_birth_buffer(buffer, event, _BIRTH_SLOT_WIDTHS[session.active_key]):
+            key = session.active_key
+            buffer = buffers[key]
+            if _edit_birth_buffer(buffer, event, _BIRTH_SLOT_WIDTHS[key]):
+                previous = session.values.get(key)
+                _sync_birth_buffers(session, buffers)
+                changed_fields = _normalize_changed_value(
+                    state, catalog, key, previous,
+                    year_complete=len(buffers["birth_year"].value) == 4,
+                )
+                for changed_key in changed_fields:
+                    updated = session.values.get(changed_key)
+                    affected_buffer = buffers[changed_key]
+                    affected_buffer.chars = list("" if updated is None else str(updated))
+                    affected_buffer.cursor = min(
+                        affected_buffer.cursor, len(affected_buffer.chars)
+                    )
                 redraw()
 
 
@@ -469,7 +503,7 @@ def edit_current(state: Workspace, catalog: Catalog) -> None:
             initial_value="" if current is None else str(current),
         ).strip()
 
-    session.values[field.key] = field.parse(raw if raw else None)
+    _set_value(state, catalog, field.key, field.parse(raw if raw else None))
     _finish_current_field(state, catalog)
 
 
@@ -480,12 +514,9 @@ def accept_option(state: Workspace, catalog: Catalog, index: int) -> bool:
         return False
 
     field = session.field
-    session.values[field.key] = session.options[index][0]
+    selected = session.options[index][0]
     session.options = None
-
-    if _is_birth_session(state, session) and field.key == "birth_month" and session.values[field.key] is None:
-        session.values["birth_day"] = None
-
+    _set_value(state, catalog, field.key, selected)
     _finish_current_field(state, catalog)
     return False
 
