@@ -266,6 +266,8 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 cancel_field_session(state)
             elif state.form:
                 cancel_form(state)
+            elif state.search_context is not None:
+                state.clear_search()
             elif state.focus is FocusArea.INSPECTOR:
                 state.set_focus(FocusArea.ROSTER)
                 state.detail_scroll = 0
@@ -457,11 +459,10 @@ def interact(state: Workspace, catalog: Catalog) -> tuple[str, int] | None:
                 state.view, state.selected, state.roster_scroll = index, 0, 0
                 state.detail_scroll, state.detail_selected = 0, 0
         elif key == "search" and "search" in {command.action for command in commands}:
-            state.focus_content()
+            state.searching = True
             return "search", 0
         elif key == "reset-search":
-            state.query, state.selected, state.roster_scroll = "", 0, 0
-            state.detail_scroll, state.detail_selected = 0, 0
+            state.clear_search()
         elif key == "refresh":
             return "refresh", 0
         elif key in {"create", "delete", "reset-password", "import", "export", "seed"}:

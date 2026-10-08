@@ -4,7 +4,7 @@ from pathlib import Path
 
 from ...auth import INITIAL_STUDENT_PASSWORD
 from ...student_query import parse_student_query
-from ...terminal_input import input_style, read_input
+from ...terminal_input import input_style, read_inline_input
 from .. import screen
 from .data import Catalog, Field
 from .presentation import CONFIRMATION_MODES
@@ -155,36 +155,27 @@ def apply_form(state: Workspace, catalog: Catalog) -> int | None:
 
 
 def read_search(state: Workspace, catalog: Catalog) -> None:
-    """Read the workspace search query; transaction fields use FieldSession."""
-    from .view import render
+    """Edit the real footer cell; commit only after Enter and query validation."""
+    from .view import render, search_input_geometry
 
-    # Search filters the roster; its input must not inherit inspector selection.
-    state.set_focus(FocusArea.ROSTER)
-    if state.key == "students":
-        label = "搜索（可用 --name、--class、--year 等）"
-        state.notice = "学生搜索与 xy stu ls 使用同一套查询条件。Esc 取消。"
-    else:
-        label = "搜索姓名、编号、班级等"
-        state.notice = "支持多个关键词。Esc 取消。"
-    current = state.query
+    state.searching = True
+    try:
+        frame = render(state, catalog)
+        screen._paint(frame.lines)
+        column, field_width = search_input_geometry(screen._display_width(frame.lines[-1]))
+        with input_style(True):
+            raw = read_inline_input(
+                "搜索：", row=len(frame.lines), column=column, width=field_width,
+                initial_value=state.query,
+            ).strip()
 
-    frame = render(state, catalog)
-    screen._paint(frame.lines)
-    height = len(frame.lines)
-    screen.sys.stdout.write(f"\x1b[{max(1, height - 1)};1H")
-    screen.sys.stdout.flush()
-    with input_style(True):
-        raw = read_input(
-            screen._clip_cells(label, max(4, screen._terminal_size().columns - 8)) + " > ",
-            initial_value=current,
-        ).strip()
-
-    if state.key == "students":
-        try:
-            parse_student_query(raw)
-        except ValueError as exc:
-            state.notice = f"未完成：{exc}"
-            return
-    state.query, state.selected, state.roster_scroll = raw, 0, 0
-    state.detail_scroll, state.detail_selected = 0, 0
-    state.notice = f"搜索：{raw}" if raw else "已显示全部记录。"
+        if state.key == "students":
+            try:
+                parse_student_query(raw)
+            except ValueError as exc:
+                state.notice = f"未完成：{exc}"
+                return
+        state.commit_search(raw)
+        state.notice = f"搜索：{raw}" if raw else "已显示全部记录。"
+    finally:
+        state.searching = False

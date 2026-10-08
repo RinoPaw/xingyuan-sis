@@ -48,6 +48,7 @@ def run(
                 try:
                     read_search(state, catalog)
                 except KeyboardInterrupt:
+                    state.searching = False
                     state.notice = "已取消输入。"
             elif event[0] == "save":
                 apply_form(state, catalog)

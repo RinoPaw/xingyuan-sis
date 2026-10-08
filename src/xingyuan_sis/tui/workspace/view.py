@@ -91,7 +91,28 @@ def _breadcrumb(state: Workspace) -> list[tuple[str, str]]:
     return [("首页", "navigate:"), (COLLECTIONS[state.key].title if state.key != "data" else "数据", "")]
 
 
+def search_input_geometry(width: int) -> tuple[int, int]:
+    """1-based terminal column and width shared by footer and in-place editor."""
+    prefix = " 搜索 > "
+    available = max(3, width - screen._display_width(prefix) - 1)
+    hint_width = screen._display_width(" Enter 确认 · Esc 取消")
+    if available - hint_width >= 8:
+        available -= hint_width
+    return screen._display_width(prefix) + 1, available
+
+
+def _search_footer(width: int) -> str:
+    """Expose the footer as the editing surface, not a floating prompt."""
+    prefix = " 搜索 > "
+    column, field_width = search_input_geometry(width)
+    hint = " Enter 确认 · Esc 取消" if column - 1 + field_width + screen._display_width(" Enter 确认 · Esc 取消") <= width else ""
+    field = screen._ansi(" " * field_width, screen._SURFACE_SELECTED + screen._TEXT_ON_SELECTED)
+    return screen._ansi(prefix, screen._TEXT_ACCENT) + field + screen._ansi(hint, screen._TEXT_SECONDARY)
+
+
 def _footer(state: Workspace, catalog: Catalog, width: int) -> str:
+    if state.searching:
+        return _search_footer(width)
     if state.field_session is not None:
         enter = "选择" if state.field_session.options is not None else "确认"
         return theme.footer(width, enter=enter, escape="取消")
@@ -106,6 +127,8 @@ def _footer(state: Workspace, catalog: Catalog, width: int) -> str:
                 escape="取消",
             )
         return theme.footer(width, enter="确认", escape="取消")
+    if state.search_context is not None:
+        return theme.footer(width, escape="清除筛选", command_hints=("/ 修改搜索",))
     hints = tuple(
         command.hint for command in available_commands(catalog, state.key)
         if command.shortcut

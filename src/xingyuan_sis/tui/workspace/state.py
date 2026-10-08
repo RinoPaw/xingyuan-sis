@@ -84,6 +84,15 @@ class FieldSession:
 
 
 @dataclass(frozen=True)
+class SearchContext:
+    """Roster position to restore when a temporary filter is dismissed."""
+
+    query: str
+    selected: int
+    roster_scroll: int
+
+
+@dataclass(frozen=True)
 class Location:
     key: str
     view: int
@@ -95,6 +104,7 @@ class Location:
     content_panel: ContentPanel
     detail_scroll: int
     detail_selected: int
+    search_context: SearchContext | None = None
 
 
 @dataclass
@@ -102,6 +112,8 @@ class Workspace:
     key: str
     view: int = 0
     query: str = ""
+    search_context: SearchContext | None = None
+    searching: bool = False
     selected: int = 0
     roster_scroll: int = 0
     focus: FocusArea = FocusArea.ROSTER
@@ -133,6 +145,31 @@ class Workspace:
         if not 0 <= self.selected < len(rows):
             return None
         return rows[self.selected]
+
+    def commit_search(self, query: str) -> None:
+        """Apply a confirmed filter; preserve the original unfiltered viewport."""
+        if not query:
+            self.clear_search()
+            return
+        if self.search_context is None:
+            self.search_context = SearchContext(self.query, self.selected, self.roster_scroll)
+        self.query, self.selected, self.roster_scroll = query, 0, 0
+        self.detail_scroll, self.detail_selected = 0, 0
+        self.set_focus(FocusArea.ROSTER)
+
+    def clear_search(self) -> None:
+        """Dismiss the confirmed filter and restore the original roster."""
+        if self.search_context is not None:
+            context = self.search_context
+            self.query = context.query
+            self.selected = context.selected
+            self.roster_scroll = context.roster_scroll
+        else:
+            self.query, self.selected, self.roster_scroll = "", 0, 0
+        self.search_context = None
+        self.searching = False
+        self.detail_scroll, self.detail_selected = 0, 0
+        self.set_focus(FocusArea.ROSTER)
 
     def select_row(self, index: int) -> None:
         """Select a real roster record."""
@@ -183,6 +220,7 @@ class Workspace:
         self.content_panel = ContentPanel.ROSTER
         self.detail_scroll, self.detail_selected = 0, 0
         self.form, self.field_session = None, None
+        self.search_context, self.searching = None, False
 
     def visit(self, key: str, identifier: str, catalog: Catalog) -> None:
         row = self.current(catalog)
@@ -190,6 +228,7 @@ class Workspace:
             self.key, self.view, self.query, self.selected, self.roster_scroll,
             row["id"] if row else None, self.focus, self.content_panel,
             self.detail_scroll, self.detail_selected,
+            self.search_context,
         ))
         self.switch(key)
         rows = self.rows(catalog)
@@ -201,6 +240,7 @@ class Workspace:
         location = self.history.pop()
         self.switch(location.key)
         self.view, self.query = location.view, location.query
+        self.search_context = location.search_context
         rows = self.rows(catalog)
         self.selected = next((i for i, row in enumerate(rows)
                               if row["id"] == location.record_id), location.selected)
