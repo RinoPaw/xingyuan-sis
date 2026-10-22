@@ -55,15 +55,21 @@ class VectorCanvas(tk.Canvas):
                 shapes.append(f'<polyline points="{points}" fill="none" stroke={fill} stroke-width={stroke_width}/>')
             self.itemconfigure(item, state="hidden")
         background = quoteattr(self.cget("background"))
-        self.svg_source = (
+        source = (
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
             f'viewBox="0 0 {width} {height}">'
             f'<rect width="{width}" height="{height}" fill={background}/>'
             + "".join(shapes) + '</svg>'
         )
-        # Coordinates already include DPI and application zoom; do not scale twice.
-        self.image = tk.PhotoImage(master=self, data=self.svg_source,
-                                   format=("svg", "-scale", 1))
+        # Configure and state callbacks often redraw identical vector scenes.
+        # Reuse the decoded Tk image when only the Canvas item IDs changed.
+        # A new size, palette or geometry still produces a fresh SVG raster.
+        if source != self.svg_source or self.image is None:
+            # Coordinates already include DPI and zoom; do not scale twice.
+            image = tk.PhotoImage(master=self, data=source,
+                                  format=("svg", "-scale", 1))
+            self.image = image
+            self.svg_source = source
         layer = self.create_image(0, 0, image=self.image, anchor="nw", tags="vector-render")
         # Native Canvas text has no rectangular background. Keep it above the
         # SVG decoration instead of baking glyphs into an image.
