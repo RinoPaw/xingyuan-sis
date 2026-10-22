@@ -2,7 +2,7 @@
 
 ## 来源
 
-原例由用户提供，来源路径：`D:/xwechat_files/wxid_cyqybgl42dqw22_83eb/msg/file/2026-10/Notepad.py`。
+原例由用户提供。仓库保留未修改的原始副本，以便与课程要求的修改版对照。
 仓库保存字节不变的副本 `Notepad_original.py`，SHA-256：
 `21cacb55ff642f9dd6c131286feefb73525936e05ac77f6a70f5741ba5f65841`。
 
