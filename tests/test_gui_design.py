@@ -60,6 +60,18 @@ class StaticDesignColorTests(unittest.TestCase):
             colors = {canvas.image.get(x, y)[0] for y in range(2, height-2) for x in range(2, width-2)}
             self.assertTrue(any(0 < value < 255 for value in colors))
             self.assertEqual(len(set(self.root.tk.call("image", "names"))-before), 1)
+        # A Configure/state callback can reconstruct the same scene with new
+        # Canvas item IDs. SVG decoding must be skipped for identical artwork.
+        previous_image = canvas.image
+        previous_svg = canvas.svg_source
+        canvas.delete("all")
+        canvas.create_polygon(1, 1, width-1, height*.71, 1, height-1,
+                              fill="#ffffff", outline="")
+        canvas.create_text(20, 20, text="Native text", fill="red")
+        canvas.render()
+        self.assertIs(canvas.image, previous_image)
+        self.assertEqual(canvas.svg_source, previous_svg)
+        self.assertEqual(len(set(self.root.tk.call("image", "names"))-before), 1)
         canvas.destroy()
         self.assertEqual(set(self.root.tk.call("image", "names")), before)
 
