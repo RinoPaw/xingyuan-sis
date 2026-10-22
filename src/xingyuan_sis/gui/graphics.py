@@ -52,6 +52,8 @@ class CutNavigation(ttk.Frame):
             target.bind('<Leave>',lambda e:hover(False),add='+')
 
     def set_selected(self,selected):
+        if self.selected == selected:
+            return
         self.selected=selected
         self.button.configure(style='CutSelected.TButton' if selected else 'CutNav.TButton')
         self.draw()
