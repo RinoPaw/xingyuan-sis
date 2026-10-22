@@ -115,9 +115,16 @@ class ChapterHeading(ttk.Frame):
             action_width=sum(c.winfo_reqwidth()+px(self,8) for c in actions)
             compact=w < px(self,640)
             stacked=bool(actions) and w-action_width < px(self,180)
-            self.configure(height=px(self,102 if stacked or not compact else 64))
+            height = px(self, 102 if stacked or not compact else 64)
+            # Configure callbacks fire while Tk settles geometry. Reassigning
+            # unchanged frame dimensions and grid options can provoke additional
+            # geometry passes even when nothing on screen needs to move.
+            if int(self.cget('height')) != height:
+                self.configure(height=height)
+            target_row = 1 if stacked else 0
             for control in actions:
-                control.grid_configure(row=1 if stacked else 0)
+                if int(control.grid_info()['row']) != target_row:
+                    control.grid_configure(row=target_row)
             width=w-px(self,52) if stacked else w-action_width-px(self,52)
             width=min(width,w*.65-px(self,36))
             art.create_text(px(self,18),h*.49,text=title,anchor='w',fill=p.paper,
