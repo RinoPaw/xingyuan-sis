@@ -1,7 +1,7 @@
 星原 GUI 字体资源
 
 MFLiHei_Noncommercial-Regular.otf
-  用户从 D:\Rino\Fonts 提供的造字工房力黑原始文件，未修改字形或名称。
+  随包附带的原始字库文件，未修改字形或内部名称。
   Tk 字体族：MFLiHeiNoncommercial。
 
 BarlowCondensed-Black.ttf
