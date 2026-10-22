@@ -326,7 +326,14 @@ class MainWindow(ttk.Frame):
         self.tree.grid(row=0, column=0, sticky="nsew")
         # Fit the initial column proportions to the reading space, while allowing
         # manual resizing until the window/pane itself changes size again.
+        last_fit = [None]
         def fit_columns(event):
+            # A pane can receive several Configure events at the same width.
+            # Avoid reassigning every Treeview column and restarting geometry.
+            signature = (self.collection, event.width)
+            if last_fit[0] == signature:
+                return
+            last_fit[0] = signature
             columns = [c for c in COLLECTIONS[self.collection].columns if self.collection != "announcements" or c[0] == "title"]
             available = max(1, event.width - 4)
             minimum = px(self, 70)
@@ -665,13 +672,17 @@ class MainWindow(ttk.Frame):
         buttons = []
         for label, action in (("导入学生 CSV…", self.import_csv), ("导出学生 CSV…", self.export_csv), ("导出完整 JSON…", self.export_json), ("空库导入 JSON…", self.import_json), ("空库载入校园示例…", self.seed_demo)):
             buttons.append(ttk.Button(tools, text=label, command=action))
+        action_grid = {}
         def wrap_actions(event):
             row = column = used = 0
             for button in buttons:
                 width = button.winfo_reqwidth()+8
                 if column and used+width > event.width:
                     row, column, used = row+1, 0, 0
-                button.grid(row=row, column=column, sticky="w", padx=(0, 8), pady=(0, 8))
+                position = (row, column)
+                if action_grid.get(button) != position:
+                    button.grid(row=row, column=column, sticky="w", padx=(0, 8), pady=(0, 8))
+                    action_grid[button] = position
                 column, used = column+1, used+width
         tools.bind("<Configure>", wrap_actions)
         frame, _ = reading_text(self.content, "学生 CSV\n用于交换学生资料。导入结果逐行报告错误，并列出已创建的账号；导出不包含密码。\n\n"
