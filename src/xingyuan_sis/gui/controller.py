@@ -5,7 +5,7 @@ from ..auth import Identity, change_password, write_session
 from ..schema import FIELDS, Field
 from ..service import XingyuanService
 from ..student_filters import query_students
-from ..record_projection import project_record
+from ..record_projection import project_records
 
 
 @dataclass(frozen=True)
@@ -58,7 +58,7 @@ class CampusController:
                 self.identity.student_no if self.identity.is_student else None)}
         reader = readers.get(key) or getattr(self.service, f"list_{key}")
         needle = search.strip().casefold()
-        result = [project_record(self.service, key, row) for row in reader()]
+        result = project_records(self.service, key, reader())
         return [row for row in result if not needle or needle in " ".join(str(v) for v in row.values()).casefold()]
 
     def student_grades(self, no):
