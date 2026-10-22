@@ -11,6 +11,22 @@ class Repository:
     def __init__(self, db_path: Path | str | None = None) -> None:
         self.db_path = db_path
 
+    def restore_archive(self, data: dict[str, list[dict]]) -> None:
+        """Insert a Service-validated archive as one transaction, into an empty DB."""
+        from .file_storage import TABLES
+        with connect(self.db_path) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            if any(connection.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone() for table in TABLES):
+                raise ValueError("仅允许向空库导入完整档案")
+            for table in TABLES:
+                allowed = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})")}
+                for row in data[table]:
+                    if not row.keys() <= allowed:
+                        raise ValueError("档案含有未知字段")
+                    columns = ", ".join(row)
+                    placeholders = ", ".join("?" for _ in row)
+                    connection.execute(f"INSERT INTO {table} ({columns}) VALUES ({placeholders})", tuple(row.values()))
+
     def _fetch_all(self, sql: str, parameters: Iterable[Any] = ()) -> list[sqlite3.Row]:
         with connect(self.db_path) as connection:
             return list(connection.execute(sql, tuple(parameters)).fetchall())

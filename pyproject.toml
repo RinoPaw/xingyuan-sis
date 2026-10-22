@@ -15,3 +15,8 @@ xingyuan-sis = "xingyuan_sis.entry:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["xingyuan_sis", "xingyuan_sis.*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+"xingyuan_sis.gui" = ["assets/fonts/*.otf", "assets/fonts/*.ttf", "assets/fonts/*.txt"]

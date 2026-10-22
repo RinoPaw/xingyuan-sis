@@ -9,7 +9,7 @@ from tkinter import ttk
 from ..auth import Identity, read_session
 from .login import LoginView
 from .main_window import MainWindow
-from .theme import configure_styles
+from .theme import configure_styles, install_icon
 
 
 class Application:
@@ -20,6 +20,7 @@ class Application:
         self.db_path = db_path
         self.current_view: ttk.Frame | None = None
         configure_styles(root)
+        install_icon(root)
 
         identity = read_session(db_path)
         if identity is None:
@@ -28,12 +29,12 @@ class Application:
             self.show_main(identity)
 
     def show_login(self) -> None:
-        self.root.title("星原 SIS · 登录")
+        self.root.title("星原 SiS · 登录")
         self.root.configure(menu="")
         self._mount(LoginView(self.root, self.db_path, on_success=self.show_main))
 
     def show_main(self, identity: Identity) -> None:
-        self.root.title("星原 SIS")
+        self.root.title("星原 SiS")
         self._mount(
             MainWindow(
                 self.root,
@@ -54,8 +55,8 @@ def run(db_path: Path | str | None = None) -> None:
     _enable_windows_dpi_awareness()
     root = tk.Tk()
     _sync_windows_tk_scaling(root)
-    root.minsize(900, 600)
-    _center_window(root, 1120, 720)
+    root.minsize(960, 640)
+    _center_window(root, 1280, 820)
     Application(root, db_path)
     root.mainloop()
 
@@ -112,6 +113,11 @@ def _sync_windows_tk_scaling(root: tk.Tk) -> None:
 
 def _center_window(root: tk.Tk, width: int, height: int) -> None:
     root.update_idletasks()
+    ratio = float(root.tk.call("tk", "scaling")) / (96 / 72)
+    width, height = round(width * ratio), round(height * ratio)
+    width = min(width, max(640, root.winfo_screenwidth() - 48))
+    height = min(height, max(480, root.winfo_screenheight() - 100))
+    root.minsize(min(round(960 * ratio), width), min(round(640 * ratio), height))
     x = max(0, (root.winfo_screenwidth() - width) // 2)
     y = max(0, (root.winfo_screenheight() - height) // 2)
     root.geometry(f"{width}x{height}+{x}+{y}")

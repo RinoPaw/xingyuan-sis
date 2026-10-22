@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 import tkinter as tk
+import sqlite3
 from tkinter import ttk
 from typing import Callable
+from .theme import palette
+from .graphics import Brandmark, CampusSeal, px
 
 from ..auth import (
     ADMIN_USERNAME,
@@ -37,31 +40,38 @@ class LoginView(ttk.Frame):
         self.password_var = tk.StringVar()
         self.confirm_var = tk.StringVar()
 
-        self.columnconfigure(0, weight=4)
-        self.columnconfigure(1, weight=5)
+        self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
 
+        # A narrow, consistent brand rail anchors the app; the form has a bounded line length.
         self._build_hero()
-        self.form = ttk.Frame(self, style="Surface.TFrame", padding=(64, 56))
-        self.form.grid(row=0, column=1, sticky="nsew")
+        work = ttk.Frame(self, style="Surface.TFrame")
+        work.grid(row=0, column=1, sticky="nsew")
+        work.columnconfigure(0, weight=1)
+        work.columnconfigure(2, weight=1)
+        work.rowconfigure(0, weight=1)
+        work.rowconfigure(2, weight=1)
+        self.form = ttk.Frame(work, style="Surface.TFrame", padding=(0, 24))
+        self.form.grid(row=1, column=1, sticky="ew")
         self.form.columnconfigure(0, weight=1)
+        def fit_form(event):
+            width = min(px(self, 440), max(260, event.width-px(self, 48)))
+            work.columnconfigure(1, minsize=width)
+            for label in self.form.winfo_children():
+                if isinstance(label, ttk.Label):
+                    label.configure(wraplength=width)
+        work.bind("<Configure>", fit_form)
         self._render_form()
 
     def _build_hero(self) -> None:
-        hero = ttk.Frame(self, style="Sidebar.TFrame", padding=(56, 56))
+        hero = ttk.Frame(self, style="Rail.TFrame", width=px(self, 360))
         hero.grid(row=0, column=0, sticky="nsew")
-        hero.columnconfigure(0, weight=1)
-        hero.rowconfigure(3, weight=1)
-
-        ttk.Label(hero, text="✦", style="LoginHeroTitle.TLabel").grid(
-            row=0, column=0, sticky="w"
-        )
-        ttk.Label(hero, text="星原 SIS", style="LoginHeroTitle.TLabel").grid(
-            row=1, column=0, sticky="w", pady=(8, 0)
-        )
-        ttk.Label(hero, text="学生信息系统", style="LoginHeroBody.TLabel").grid(
-            row=2, column=0, sticky="w", pady=(8, 0)
-        )
+        hero.pack_propagate(False)
+        Brandmark(hero).pack(anchor="nw", fill="x", padx=24, pady=(24,0))
+        CampusSeal(hero).pack(fill="both",expand=True,padx=24,pady=(32,48))
+        def fit_hero(event):
+            hero.configure(width=min(px(self,360),max(150,event.width//3)))
+        self.bind("<Configure>",fit_hero)
 
     def _render_form(self) -> None:
         for child in self.form.winfo_children():
@@ -104,7 +114,7 @@ class LoginView(ttk.Frame):
         password.focus_set()
 
     def _render_login(self) -> None:
-        self._heading("登录", "使用管理员账号或学生学号进入星原 SIS。")
+        self._heading("登录", "输入管理员账号或学生学号。")
         self._field_label(2, "账号")
         username = ttk.Entry(self.form, textvariable=self.username_var)
         username.grid(row=3, column=0, sticky="ew", pady=(6, 18))
@@ -182,7 +192,7 @@ class LoginView(ttk.Frame):
             return
         try:
             initialize_admin(password)
-        except ValueError as error:
+        except (ValueError, OSError, sqlite3.Error) as error:
             self._set_status(str(error))
             return
         clear_session()
@@ -193,7 +203,11 @@ class LoginView(ttk.Frame):
 
     def _submit_login(self) -> None:
         username = self.username_var.get().strip()
-        identity = authenticate(self.db_path, username, self.password_var.get())
+        try:
+            identity = authenticate(self.db_path, username, self.password_var.get())
+        except (ValueError, OSError, sqlite3.Error) as error:
+            self._set_status(str(error))
+            return
         if identity is None:
             self.password_var.set("")
             self._set_status("账号或密码错误。")
@@ -217,12 +231,16 @@ class LoginView(ttk.Frame):
             return
         try:
             updated = change_password(self.db_path, identity, password)
-        except ValueError as error:
+        except (ValueError, OSError, sqlite3.Error) as error:
             self._set_status(str(error))
             return
         self.pending_identity = None
         self._finish(updated)
 
     def _finish(self, identity: Identity) -> None:
-        write_session(identity, self.db_path)
+        try:
+            write_session(identity, self.db_path)
+        except OSError as error:
+            self._set_status(str(error))
+            return
         self.on_success(identity)

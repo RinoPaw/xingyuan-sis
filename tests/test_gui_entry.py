@@ -7,6 +7,15 @@ from xingyuan_sis import entry
 
 
 class GuiEntryTests(unittest.TestCase):
+    def test_gui_flag_routes_to_the_installed_native_application(self):
+        from pathlib import Path
+        from xingyuan_sis.gui import app
+        expected = Path(__file__).resolve().parents[1] / "src" / "xingyuan_sis" / "gui" / "app.py"
+        self.assertEqual(Path(app.__file__).resolve(), expected)
+        with patch.object(entry, "initialize_database"), patch.object(app, "run") as run:
+            self.assertEqual(entry.main(["--gui"]), 0)
+        run.assert_called_once_with(None)
+
     def test_missing_tkinter_shows_install_hint_without_traceback(self):
         original_import = __import__
 

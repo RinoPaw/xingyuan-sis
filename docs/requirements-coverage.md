@@ -6,7 +6,7 @@
 
 交付现有终端系统的完整功能：CLI、数字输入基础菜单、即时键盘 TUI，数据保存在 SQLite。学生、学院、专业、班级、课程、成绩、公告和数据工作台均纳入当前实现与验证。
 
-指导书中的内存、JSON、SQLite 是课程递进阶段，本项目使用 SQLite 持久化。后续 Tkinter GUI、Flask Web 等章节属于另外的应用形态，不计入当前终端版的完成范围。
+本页保留终端版的交互覆盖说明。现已增加 Tkinter GUI、Notepad 修改练习，以及内存 → JSON → SQLite 的可运行存储阶段演示；第二大项目的逐项证据与限制见 [GUI 课程交付](gui-delivery.md)。Flask Web 仍不在本次范围内。
 
 ## 需求对应
 

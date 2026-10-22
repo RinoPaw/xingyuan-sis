@@ -34,28 +34,14 @@
 ```bash
 git clone https://github.com/RinoPaw/xingyuan-sis.git
 cd xingyuan-sis
-python -m venv .venv
-```
-
-Windows PowerShell：
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e .
-```
-
-Linux / macOS：
-
-```bash
-source .venv/bin/activate
-python -m pip install -e .
+uv sync
 ```
 
 然后可以运行：
 
 ```bash
-xy
-xy --gui
+uv run xy
+uv run xy --gui
 ```
 
 首次运行会在当前目录的 `data/` 下创建 SQLite 数据库，并引导设置管理员 `Administrator` 的密码。
@@ -63,15 +49,15 @@ xy --gui
 默认启动会检测终端能力：支持 TTY、ANSI 和即时按键时进入 TUI，否则自动退回基础数字菜单。也可以显式指定：
 
 ```bash
-xy --tui
-xy --basic
-xy --gui
+uv run xy --tui
+uv run xy --basic
+uv run xy --gui
 ```
 
 临时使用其他数据库：
 
 ```bash
-xy --db data/demo.db
+uv run xy --db data/demo.db
 ```
 
 ## Tkinter GUI
@@ -81,7 +67,7 @@ GUI 使用 Python 标准库中的 Tkinter / `ttk`，不需要通过 pip 安装�
 先检查当前 Python 是否带有 Tkinter：
 
 ```bash
-python -m tkinter
+uv run python -m tkinter
 ```
 
 正常情况下会弹出一个 Tk 测试窗口。如果出现 `No module named 'tkinter'`，说明当前 Python 安装没有包含 Tcl/Tk 组件。
@@ -97,10 +83,27 @@ Tkinter 不是 PyPI 包，因此不要运行 `pip install tkinter`。
 GUI 启动命令：
 
 ```bash
-xy --gui
+uv run xy --gui
 ```
 
 如果缺少 Tkinter，星原会直接输出对应的安装提示，不再显示 Python traceback。
+
+GUI 采用受 P5R 启发的黑白红拼贴：整页红底、黑白章节签、黑名册与纸面资料；Canvas/SVG 负责抗锯齿形状和无底色的展示文字，原生 Tk/ttk 负责菜单、输入与表格。当前没有使用 AI 生成图片。管理员可以维护学生、学院、专业、班级、族系、课程、选课成绩和公告，学生可以查询、阅读本班公告和修改自己的密码。
+
+中文标题使用随包附带的造字工房力黑，英文与章节编号使用 Barlow Condensed Black。Windows 启动时仅在应用进程内加载，无需安装系统字体；正文使用系统中文字体。其他平台使用已安装字体及系统后备。页面只保留一个任务标题，小窗口改用独立详情。位置、颜色及交互状态的依据见 [控件设计决策](docs/gui-control-decisions.md) 和 [逐控件清单](docs/gui-control-inventory.md)。
+
+滚轮只滚动当前内容，不修改下拉值或切换页签；细滚动条有内容溢出时按需显示，闲置自动隐藏。
+
+常用键：`Ctrl+F` 搜索、`Ctrl+N` 新建、`Ctrl+E` 编辑、`F5` 刷新。小窗口或大字号下使用内嵌“列表／资料”页签，编辑等动作仍在“记录”菜单；“查看”菜单提供日间/夜间主题和 100/125/150% 字号。数据手册提供学生 CSV、完整校园 JSON 和空库示例导入。
+
+课程第二大项目的 Notepad 练习独立保存在 `examples/notepad/`，包含用户原例、修改版与分析。存储演进演示：
+
+```powershell
+uv run python examples/notepad/Notepad.py
+uv run python -X utf8 examples/storage_stages.py --file .tmp/demo-campus.json --db .tmp/demo-campus.db
+```
+
+存储演示使用新路径，展示内存 → JSON 重启修改 → SQLite；完整 JSON 不保留登录密码，导入后学生使用初始密码并强制改密。详见 [GUI 课程交付](docs/gui-delivery.md)、[当前视觉设计](docs/gui-punk-design.md)和 [Notepad 分析](examples/notepad/README.md)。
 
 ## TUI 使用方式
 
@@ -151,43 +154,43 @@ xy --gui
 CLI 使用业务编号，不要求直接操作数据库内部 ID。
 
 ```bash
-xy stu ls
-xy stu show 20260001
-xy stu add
-xy stu edit 20260001 --status 休学
-xy stu rm 20260001
+uv run xy stu ls
+uv run xy stu show 20260001
+uv run xy stu add
+uv run xy stu edit 20260001 --status 休学
+uv run xy stu rm 20260001
 
-xy college ls
-xy major ls
-xy class ls
+uv run xy college ls
+uv run xy major ls
+uv run xy class ls
 
-xy course ls
-xy course show ELS101
-xy grade ls
+uv run xy course ls
+uv run xy course show ELS101
+uv run xy grade ls
 
-xy data stats
-xy data export data/students.csv
-xy data import data/students.csv
+uv run xy data stats
+uv run xy data export data/students.csv
+uv run xy data import data/students.csv
 
-xy notice ls
-xy notice add --class ELS2601 --title "班会通知" --body "周五下午召开班会。"
-xy notice show 1
-xy notice rm 1
+uv run xy notice ls
+uv run xy notice add --class ELS2601 --title "班会通知" --body "周五下午召开班会。"
+uv run xy notice show 1
+uv run xy notice rm 1
 ```
 
 学生查询支持全字段模糊搜索和结构化过滤：
 
 ```bash
-xy stu ls --name 林
-xy stu ls --branch 牧羊
-xy stu ls --major 元素 --year 2026 --status 在读
-xy stu ls --element 风 --element 雷 --status 在读
+uv run xy stu ls --name 林
+uv run xy stu ls --branch 牧羊
+uv run xy stu ls --major 元素 --year 2026 --status 在读
+uv run xy stu ls --element 风 --element 雷 --status 在读
 ```
 
 同一字段重复时按 OR 组合，不同字段之间按 AND 组合。输出可选择 table 或 CSV，也可以写入文件：
 
 ```bash
-xy stu ls --major 元素 --format csv -o students.csv
+uv run xy stu ls --major 元素 --format csv -o students.csv
 ```
 
 ## 演示数据
@@ -195,7 +198,7 @@ xy stu ls --major 元素 --format csv -o students.csv
 空数据库可以写入项目自带的演示校园：
 
 ```bash
-xy data seed
+uv run xy data seed
 ```
 
 当前 seed 包含 4 个学院、10 个专业、26 个班级、113 名学生、20 门课程和 452 条选课 / 成绩记录。
@@ -207,7 +210,7 @@ xy data seed
 已有业务数据时普通 `seed` 会拒绝覆盖。明确需要清空并恢复演示数据时：
 
 ```bash
-xy data seed --reset
+uv run xy data seed --reset
 ```
 
 `--reset` 会删除当前学院、专业、班级、学生、课程、选课和公告数据，然后重新生成演示校园。
@@ -237,7 +240,7 @@ entry ───────────┼─ Basic UI
 优先运行与修改范围相关的测试；跨模块重构、数据库 / Service / Repository 主链或核心交互状态机修改再运行完整测试：
 
 ```bash
-python -m unittest discover -s tests -v
+uv run python -X utf8 -m unittest discover -s tests -v
 ```
 
 ## 文档

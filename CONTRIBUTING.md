@@ -7,7 +7,7 @@
 ```bash
 git clone https://github.com/RinoPaw/xingyuan-sis.git
 cd xingyuan-sis
-pip install -e .
+uv sync
 ```
 
 从最新 `main` 创建自己的分支：
@@ -66,7 +66,7 @@ CLI / Basic UI / TUI
 优先运行与你修改范围直接相关的测试。跨模块重构、数据库 / Service / Repository 主链修改或核心交互状态机修改，再运行完整测试：
 
 ```bash
-python -m unittest discover -s tests -v
+uv run python -X utf8 -m unittest discover -s tests -v
 ```
 
 测试保护当前稳定行为，不应为了保留已经退出生产路径的私有函数或旧实现而增加兼容层。

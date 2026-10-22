@@ -1,4 +1,5 @@
 from contextlib import redirect_stderr, redirect_stdout
+from contextlib import closing
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -95,7 +96,7 @@ class SeedDataTests(unittest.TestCase):
 
     def test_cli_reset_replaces_legacy_schema_without_migration(self) -> None:
         legacy_db = self.db_path.with_name("legacy.db")
-        with sqlite3.connect(legacy_db) as connection:
+        with closing(sqlite3.connect(legacy_db)) as connection, connection:
             connection.execute(
                 "CREATE TABLE students (id INTEGER PRIMARY KEY, "
                 "student_no TEXT NOT NULL, species_branch_id INTEGER NOT NULL)"

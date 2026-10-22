@@ -14,8 +14,8 @@ from .schema import FIELDS, is_complete_birth_date, validate_values
 class XingyuanService:
     """Application-facing operations shared by CLI, TUI and the basic UI."""
 
-    def __init__(self, db_path: Path | str | None = None) -> None:
-        self.repository = Repository(db_path)
+    def __init__(self, db_path: Path | str | None = None, *, repository=None) -> None:
+        self.repository = Repository(db_path) if repository is None else repository
 
     @property
     def db_path(self) -> Path | str | None:
@@ -374,6 +374,8 @@ class XingyuanService:
         self.repository.delete_student(int(row["id"]))
 
     def reset_student_password(self, student_no: str, password: str | None = None) -> str:
+        if not isinstance(self.repository, Repository):
+            raise ValueError("内存/JSON 阶段演示只处理业务资料，账号登录与重置使用最终 SQLite 应用")
         return reset_password(self.db_path, student_no, password)
 
     # ----- class announcements -------------------------------------------
@@ -490,6 +492,8 @@ class XingyuanService:
 
     # ----- data -----------------------------------------------------------
     def stats(self) -> dict[str, Any]:
+        if not isinstance(self.repository, Repository):
+            raise ValueError("统计报表由最终 SQLite 应用提供")
         return summary(self.db_path)
 
     def seed_demo(self, *, reset: bool = False):
@@ -534,3 +538,12 @@ class XingyuanService:
 
     def import_students(self, path: Path | str) -> ImportResult:
         return import_students_csv(path, self.register_student)
+
+    def export_archive(self, path: Path | str) -> None:
+        from .file_storage import export_archive
+        export_archive(self, path)
+
+    def import_archive(self, path: Path | str) -> None:
+        from .file_storage import read_archive
+        data = read_archive(path)
+        self.repository.restore_archive(data)
