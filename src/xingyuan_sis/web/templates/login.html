@@ -16,7 +16,7 @@
     <div class="static-starfield" aria-hidden="true"></div>
     <header class="auth-header">
       <a class="brand" href="{{ url_for('web.login') }}">{{ brand_mark(46) }}<span><strong>星原大学</strong><small>XINGYUAN UNIVERSITY</small></span></a>
-      <div class="system-signal"><i></i><span>校园终端在线</span><b>LIVE</b></div>
+      <div class="system-signal"><span>本地校园入口</span><b>SIS</b></div>
     </header>
 
     <section class="login-intro" aria-labelledby="login-title">
@@ -57,7 +57,7 @@
       {% elif not has_admin %}
       <a class="setup-link" href="{{ url_for('web.setup') }}">首次使用？初始化管理员 {{ icon('arrow', 16) }}</a>
       {% endif %}
-      <div class="terminal-note"><i></i> CONNECTION ENCRYPTED · SESSION READY</div>
+      <div class="terminal-note">{{ 'HTTPS CONNECTION' if request.is_secure else 'HTTP CONNECTION' }} · 登录后建立会话</div>
     </section>
 
     <footer class="auth-footer"><span>XY / SIS · WEB INTERFACE</span><span>POINTER REACTIVE STARFIELD</span></footer>

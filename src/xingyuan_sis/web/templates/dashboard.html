@@ -7,7 +7,7 @@
   <div>
     <div class="section-code">MISSION CONTROL / 2026—2027</div>
     <h1>校园总览<span class="title-dot">.</span></h1>
-    <p>{{ '上午好，教务管理员。今天的校园数据已同步。' if identity.is_admin else '欢迎回来，' + student.name + '。你的本学期轨迹已更新。' }}</p>
+    <p>{{ '欢迎回来，教务管理员。校园数据都在这里查阅。' if identity.is_admin else '欢迎回来，' + student.name + '。你的本学期记录在这里汇总。' }}</p>
   </div>
   <div class="semester-stamp"><span>CURRENT TERM</span><strong>2026—2027</strong><small>第一学期 / AUTUMN</small></div>
 </header>
@@ -17,12 +17,12 @@
   <div class="static-starfield" aria-hidden="true"></div>
   <div class="hero-grid-lines" aria-hidden="true"></div>
   <div class="hero-copy">
-    <div class="live-label"><i></i> CAMPUS FREQUENCY CONNECTED</div>
+    <div class="live-label">CAMPUS DATA DIRECTORY</div>
     <h2>{% if identity.is_admin %}每一份档案，<br><em>都有轨迹。</em>{% else %}沿自己的轨道，<br><em>继续前进。</em>{% endif %}</h2>
     <p>{{ '从学生名册到成绩记录，所有校园节点都在这里汇合。' if identity.is_admin else '查看课程、成绩与班级公告，掌握本学期的每一步。' }}</p>
     <a class="push-button primary-button" href="{{ url_for('web.students' if identity.is_admin else 'web.grades') }}"><span>{{ '进入学生名册' if identity.is_admin else '查看我的成绩' }}</span>{{ icon('arrow', 21) }}</a>
   </div>
-  <div class="hero-orbit" aria-label="平均成绩 {{ stats.average_score or '暂无' }}">
+  <div class="hero-orbit" aria-label="平均成绩 {{ stats.average_score if stats.average_score is not none else '暂无' }}">
     <svg viewBox="0 0 230 230" fill="none" aria-hidden="true">
       <circle cx="115" cy="115" r="103" stroke="currentColor" stroke-width="1" stroke-dasharray="2 7"/>
       <circle cx="115" cy="115" r="83" stroke="currentColor" stroke-width="1" opacity=".4"/>
@@ -31,7 +31,7 @@
     </svg>
     <div><small>{{ 'GLOBAL AVERAGE' if identity.is_admin else 'MY AVERAGE' }}</small><strong>{{ stats.average_score if stats.average_score is not none else '—' }}</strong><span>平均成绩 / AVG</span></div>
   </div>
-  <div class="hero-coordinate" aria-hidden="true">X:26.11 / Y:113.08<br>STARFIELD ACTIVE</div>
+  <div class="hero-coordinate" aria-hidden="true">X:26.11 / Y:113.08<br>STARFIELD VISUAL</div>
 </section>
 
 {% if identity.is_admin %}
@@ -44,7 +44,7 @@
 {% else %}
 <section class="stat-strip student-stat-strip" aria-label="我的学习统计">
   <a href="{{ url_for('web.courses') }}"><small>本学期课程</small><strong>{{ stats.courses }}</strong><span>查看课程矩阵 ↗</span></a>
-  <a href="{{ url_for('web.grades') }}"><small>已出成绩</small><strong>{{ stats.graded }}</strong><span>平均 {{ stats.average_score or '—' }} 分 ↗</span></a>
+  <a href="{{ url_for('web.grades') }}"><small>已出成绩</small><strong>{{ stats.graded }}</strong><span>平均 {{ stats.average_score if stats.average_score is not none else '—' }} 分 ↗</span></a>
   <div><small>等待评分</small><strong>{{ stats.pending }}</strong><span>保持关注</span></div>
 </section>
 {% endif %}
@@ -72,7 +72,7 @@
         {% for row in course_stats %}
         <a href="{{ url_for('web.courses', course_code=row.course_code) }}">
           <span class="rank">{{ '%02d'|format(loop.index) }}</span><span class="course-code">{{ row.course_code }}</span><strong>{{ row.name }}</strong>
-          <span class="rank-track"><i style="--bar-size: {{ row.average_score or 0 }}%"></i></span><b>{{ row.average_score or '—' }}</b>
+          <span class="rank-track"><i style="--bar-size: {{ row.average_score or 0 }}%"></i></span><b>{{ row.average_score if row.average_score is not none else '—' }}</b>
         </a>
         {% else %}<p class="empty-inline">还没有可统计的成绩。</p>{% endfor %}
       </div>

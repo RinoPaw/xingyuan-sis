@@ -1,15 +1,17 @@
 {% extends 'base.html' %}
-{% from 'macros.html' import icon, pagination_nav, dialog_close %}
+{% from 'macros.html' import icon, pagination_nav, dialog_close, form_error %}
 {% block title %}课程矩阵{% endblock %}
 {% block breadcrumb %}课程矩阵{% endblock %}
 
-{% macro course_fields(course=None, prefix='new') %}
+{% macro course_fields(course=None, prefix='new', draft=None) %}
+{% set original = dict(course) if course else {} %}
+{% set values = draft['values'] if draft else original %}
 <div class="form-grid">
-  <div><label class="field-label" for="{{ prefix }}-course-code">课程编号 *</label><input id="{{ prefix }}-course-code" name="course_code" required value="{{ course.course_code if course else '' }}" {% if course %}disabled{% endif %} placeholder="例如 ELS101"></div>
-  <div><label class="field-label" for="{{ prefix }}-course-name">课程名称 *</label><input id="{{ prefix }}-course-name" name="name" required value="{{ course.name if course else '' }}" placeholder="课程名称"></div>
-  <div><label class="field-label" for="{{ prefix }}-department">开课学院</label><select id="{{ prefix }}-department" name="department_code"><option value="">未指定</option>{% for row in departments %}<option value="{{ row.code }}" {% if course and course.department_name == row.name %}selected{% endif %}>{{ row.code }} · {{ row.name }}</option>{% endfor %}</select></div>
-  <div><label class="field-label" for="{{ prefix }}-credits">学分 *</label><input id="{{ prefix }}-credits" name="credits" type="number" min="0" step="0.5" required value="{{ course.credits if course else '3.0' }}"></div>
-  <div><label class="field-label" for="{{ prefix }}-hours">学时 *</label><input id="{{ prefix }}-hours" name="hours" type="number" min="0" required value="{{ course.hours if course else 48 }}"></div>
+  <div><label class="field-label" for="{{ prefix }}-course-code">课程编号 *</label><input id="{{ prefix }}-course-code" name="course_code" required value="{{ values.get('course_code', original.get('course_code', '')) }}" {% if course %}disabled{% endif %} placeholder="例如 ELS101"></div>
+  <div><label class="field-label" for="{{ prefix }}-course-name">课程名称 *</label><input id="{{ prefix }}-course-name" name="name" required value="{{ values.get('name', original.get('name', '')) }}" placeholder="课程名称"></div>
+  <div><label class="field-label" for="{{ prefix }}-department">开课学院</label><select id="{{ prefix }}-department" name="department_code"><option value="">未指定</option>{% for row in departments %}<option value="{{ row.code }}" {% if values.get('department_code') == row.code %}selected{% endif %}>{{ row.code }} · {{ row.name }}</option>{% endfor %}</select></div>
+  <div><label class="field-label" for="{{ prefix }}-credits">学分 *</label><input id="{{ prefix }}-credits" name="credits" type="number" min="0" step="0.5" required value="{{ values.get('credits', '3.0') }}"></div>
+  <div><label class="field-label" for="{{ prefix }}-hours">学时 *</label><input id="{{ prefix }}-hours" name="hours" type="number" min="0" required value="{{ values.get('hours', 48) }}"></div>
 </div>
 {% endmacro %}
 
@@ -26,11 +28,11 @@
 </form>
 
 <div class="courses-layout">
-  <section class="course-catalog" aria-label="课程列表">
+  <section class="course-catalog" id="record-list" tabindex="-1" aria-label="课程列表">
     <div class="panel-topline"><span>AVAILABLE COURSES</span><strong>{{ pagination.total }} MODULES</strong></div>
     <div class="course-grid">
       {% for course in courses %}
-      <a class="course-tile{% if selected and selected.course_code == course.course_code %} is-selected{% endif %}" href="{{ url_for('web.courses', course_code=course.course_code, q=request.args.get('q')) }}">
+      <a class="course-tile{% if selected and selected.course_code == course.course_code %} is-selected{% endif %}" href="{{ record_url(course_code=course.course_code, page=pagination.page) }}#record-detail">
         <div class="course-tile-top"><span>{{ course.course_code }}</span>{{ icon('arrow', 18) }}</div>
         <h2>{{ course.name }}</h2><p>{{ course.department_name or '通识课程' }}</p>
         <div class="course-metrics"><span><strong>{{ course.credits }}</strong> 学分</span><span><strong>{{ course.hours }}</strong> 学时</span></div>
@@ -41,15 +43,16 @@
     {{ pagination_nav(pagination) }}
   </section>
 
-  <aside class="course-inspector">
+  <aside class="course-inspector" id="record-detail" tabindex="-1">
     {% if selected %}
+    <a class="detail-back" href="#record-list"><span aria-hidden="true">←</span> 返回课程列表</a>
     <div class="inspector-code">COURSE FILE / {{ selected.course_code }}</div>
     <h2>{{ selected.name }}</h2><p>{{ selected.department_name or '通识课程' }}</p>
     <div class="credit-display"><strong>{{ selected.credits }}</strong><span>CREDITS<br>学分</span></div>
     <dl class="mini-record"><div><dt>课程编号</dt><dd>{{ selected.course_code }}</dd></div><div><dt>总学时</dt><dd>{{ selected.hours }} 小时</dd></div><div><dt>选课人数</dt><dd>{{ course_enrollments|length }} 人</dd></div></dl>
     {% if identity.is_admin %}<div class="inspector-actions"><button class="text-button" data-dialog-open="edit-course" type="button">{{ icon('edit', 16) }} 编辑课程</button><button class="text-button danger-text" data-dialog-open="delete-course" type="button">{{ icon('trash', 16) }} 删除课程</button></div>{% endif %}
     <section class="inspector-list"><h3>{{ '选课学生' if identity.is_admin else '我的成绩' }}</h3>
-      {% for row in course_enrollments %}<a href="{{ url_for('web.grades', id=row.id) }}"><span><strong>{{ row.student_name if identity.is_admin else row.course_code }}</strong><small>{{ row.student_no if identity.is_admin else row.semester }}</small></span><b class="score-chip">{{ row.score|score_text }}</b></a>{% else %}<p class="empty-inline">暂时没有选课记录。</p>{% endfor %}
+      {% for row in course_enrollments %}<a href="{{ record_url('web.grades', id=row.id) }}#record-detail"><span><strong>{{ row.student_name if identity.is_admin else row.course_code }}</strong><small>{{ row.student_no if identity.is_admin else row.semester }}</small></span><b class="score-chip">{{ row.score|score_text }}</b></a>{% else %}<p class="empty-inline">暂时没有选课记录。</p>{% endfor %}
     </section>
     {% else %}<div class="empty-state">{{ icon('courses', 40) }}<h2>选择一门课程</h2><p>查看课程资料与选课记录。</p></div>{% endif %}
   </aside>
@@ -58,12 +61,12 @@
 {% if identity.is_admin %}
 <dialog id="new-course" class="editor-dialog" aria-labelledby="new-course-title" {% if request.args.get('create') %}data-auto-open{% endif %}>
   <div class="dialog-heading"><div><span>NEW COURSE / MODULE</span><h2 id="new-course-title">新建课程</h2></div>{{ dialog_close() }}</div>
-  <form method="post" action="{{ url_for('web.course_create') }}" class="editor-form"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">{{ course_fields() }}<div class="dialog-actions"><button type="button" class="plain-button" data-dialog-close>取消</button><button type="submit" class="push-button primary-button"><span>加入课程矩阵</span>{{ icon('arrow', 19) }}</button></div></form>
+  <form method="post" action="{{ url_for('web.course_create') }}" class="editor-form" data-editor-form><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">{{ form_error(drafts.get('new-course')) }}{{ course_fields(draft=drafts.get('new-course')) }}<div class="dialog-actions"><button type="button" class="plain-button" data-dialog-close>取消</button><button type="submit" class="push-button primary-button"><span>加入课程矩阵</span>{{ icon('arrow', 19) }}</button></div></form>
 </dialog>
 {% if selected %}
-<dialog id="edit-course" class="editor-dialog" aria-labelledby="edit-course-title">
+<dialog id="edit-course" class="editor-dialog" aria-labelledby="edit-course-title" {% if request.args.get('edit') %}data-auto-open{% endif %}>
   <div class="dialog-heading"><div><span>UPDATE COURSE / {{ selected.course_code }}</span><h2 id="edit-course-title">编辑课程资料</h2></div>{{ dialog_close() }}</div>
-  <form method="post" action="{{ url_for('web.course_edit', course_code=selected.course_code) }}" class="editor-form"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">{{ course_fields(selected, 'edit') }}<div class="dialog-actions"><button type="button" class="plain-button" data-dialog-close>取消</button><button type="submit" class="push-button primary-button"><span>保存课程</span>{{ icon('arrow', 19) }}</button></div></form>
+  <form method="post" action="{{ url_for('web.course_edit', course_code=selected.course_code) }}" class="editor-form" data-editor-form><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">{{ form_error(drafts.get('edit-course')) }}{{ course_fields(selected, 'edit', drafts.get('edit-course')) }}<div class="dialog-actions"><button type="button" class="plain-button" data-dialog-close>取消</button><button type="submit" class="push-button primary-button"><span>保存课程</span>{{ icon('arrow', 19) }}</button></div></form>
 </dialog>
 <dialog id="delete-course" class="editor-dialog confirm-dialog" aria-labelledby="delete-course-title"><div class="danger-mark">{{ icon('trash', 34) }}</div><h2 id="delete-course-title">删除 {{ selected.name }}？</h2><p>这门课程的全部选课与成绩记录也会被删除。</p><form method="post" action="{{ url_for('web.course_delete', course_code=selected.course_code) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><div class="dialog-actions"><button type="button" class="plain-button" data-dialog-close>保留课程</button><button type="submit" class="danger-button">确认删除</button></div></form></dialog>
 {% endif %}

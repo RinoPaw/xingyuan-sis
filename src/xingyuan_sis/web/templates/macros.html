@@ -54,6 +54,12 @@
 {% endif %}
 {% endmacro %}
 
+{% macro form_error(draft=None) %}
+{% if draft and draft.message %}
+<div class="form-alert alert-error" role="alert" data-form-error>{{ draft.message }}</div>
+{% endif %}
+{% endmacro %}
+
 {% macro dialog_close() %}
 <button type="button" class="icon-button dialog-close" data-dialog-close aria-label="关闭对话框">{{ icon('close', 22) }}</button>
 {% endmacro %}

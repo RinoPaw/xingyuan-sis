@@ -29,7 +29,7 @@
         {% endfor %}
       </nav>
       <div class="sidebar-bottom">
-        <div class="system-signal"><i></i><span>校园网络在线</span><b>LIVE</b></div>
+        <div class="system-signal"><span>本地校园终端</span><b>LOCAL</b></div>
         <p>XY / ACADEMIC OS<br>BUILD 2026.11</p>
       </div>
     </aside>
@@ -45,7 +45,8 @@
             <input type="search" name="q" placeholder="搜索学生 / 学号" aria-label="全局搜索学生" value="{{ request.args.get('q', '') if request.endpoint == 'web.students' else '' }}">
             <kbd>Ctrl K</kbd>
           </form>
-          <a class="identity-link" href="{{ url_for('web.password') }}" title="修改密码">
+          <button class="icon-button mobile-search-toggle" type="button" data-mobile-search-toggle aria-controls="mobile-search" aria-expanded="false" aria-label="打开全局搜索">{{ icon('search', 20) }}</button>
+          <a class="identity-link" href="{{ url_for('web.password') }}" title="修改密码" aria-label="账号与修改密码：{{ identity.username }}">
             <span class="identity-avatar">{{ identity.username[0] }}</span>
             <span><strong>{{ identity.username }}</strong><small>{{ '教务管理员' if identity.is_admin else '学生账号' }}</small></span>
           </a>
@@ -55,6 +56,12 @@
           </form>
         </div>
       </header>
+
+      <form id="mobile-search" class="mobile-search-panel" action="{{ url_for('web.students') }}" method="get" role="search" hidden>
+        {{ icon('search', 18) }}
+        <input type="search" name="q" placeholder="搜索学生 / 学号" aria-label="全局搜索学生" value="{{ request.args.get('q', '') if request.endpoint == 'web.students' else '' }}">
+        <button type="submit" aria-label="执行搜索">{{ icon('arrow', 18) }}</button>
+      </form>
 
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -74,7 +81,7 @@
       </main>
       <footer class="app-footer">
         <span>XINGYUAN UNIVERSITY · STUDENT INFORMATION SYSTEM</span>
-        <span><i></i> LOCAL SQLITE / SECURE SESSION</span>
+        <span>LOCAL SQLITE / {{ 'HTTPS CONNECTION' if request.is_secure else 'HTTP CONNECTION' }}</span>
       </footer>
     </div>
 

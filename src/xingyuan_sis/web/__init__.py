@@ -95,8 +95,36 @@ def create_app(db_path: Path | str | None = None, *, demo: bool | None = None) -
     @app.template_global()
     def page_url(page: int) -> str:
         values = request.args.to_dict(flat=True)
+        # Moving to another page intentionally leaves the selected record and
+        # dialog re-open flags behind, while search/filter state stays intact.
+        reset_fields = {
+            "web.students": ("student_no",),
+            "web.courses": ("course_code",),
+            "web.grades": ("id",),
+            "web.notices": ("id",),
+        }.get(request.endpoint or "", ())
+        for name in (*reset_fields, "create", "edit"):
+            values.pop(name, None)
         values["page"] = page
         return url_for(request.endpoint or "web.dashboard", **values)
+
+    @app.template_global()
+    def record_url(target: str | None = None, **changes: object) -> str:
+        """Build a same-state link for a list record.
+
+        Existing query parameters (search, filters, page) are preserved. Empty
+        changes remove the corresponding key so links stay canonical.
+        """
+        values = request.args.to_dict(flat=True)
+        for name in ("create", "edit"):
+            values.pop(name, None)
+        for name, value in changes.items():
+            if value is None or value == "":
+                values.pop(name, None)
+            else:
+                values[name] = str(value)
+        endpoint = target or request.endpoint or "web.dashboard"
+        return url_for(endpoint, **values)
 
     return app
 

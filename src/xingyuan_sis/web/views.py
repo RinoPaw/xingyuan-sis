@@ -128,13 +128,21 @@ def admin_required(view: T) -> T:
     return wrapped  # type: ignore[return-value]
 
 
-def _paginate(items: list[Any], per_page: int) -> tuple[list[Any], dict[str, Any]]:
+def _paginate(
+    items: list[Any],
+    per_page: int,
+    selected_index: int | None = None,
+) -> tuple[list[Any], dict[str, Any]]:
     total = len(items)
     pages = max(1, math.ceil(total / per_page))
     try:
         page = int(request.args.get("page", 1))
     except ValueError:
         page = 1
+    if selected_index is not None:
+        # An explicit record wins over a stale page number. Direct links and
+        # links from another page therefore always show a highlighted record.
+        page = selected_index // per_page + 1
     page = min(max(page, 1), pages)
     start = (page - 1) * per_page
     return items[start : start + per_page], {
@@ -146,6 +154,84 @@ def _paginate(items: list[Any], per_page: int) -> tuple[list[Any], dict[str, Any
         "prev": page - 1,
         "next": page + 1,
     }
+
+
+# Only non-sensitive, explicitly declared fields are kept as one-shot drafts.
+# Passwords, CSRF tokens, and hidden routing fields are never persisted.
+_FORM_DRAFT_FIELDS = {
+    "new-student": (
+        "student_no", "name", "family", "branch", "enrollment_year", "class_code",
+        "gender", "birth_date", "age", "status", "primary_element",
+        "primary_affinity", "contact", "dormitory", "notes",
+    ),
+    "edit-student": (
+        "family", "branch", "enrollment_year", "class_code", "gender", "birth_date",
+        "age", "status", "primary_element", "primary_affinity", "contact",
+        "dormitory", "notes",
+    ),
+    "new-course": ("course_code", "name", "department_code", "credits", "hours"),
+    "edit-course": ("name", "department_code", "credits", "hours"),
+    "new-grade": ("student_no", "course_code", "semester", "score"),
+    "edit-grade": ("semester", "score"),
+    "new-notice": ("class_code", "title", "body"),
+}
+_DRAFT_TEXT_LIMIT = 800
+_DRAFT_MESSAGE_LIMIT = 300
+# Flask's signed session cookie is small. Keep the complete one-shot draft
+# comfortably below the browser cookie limit, even after URL-safe encoding.
+_DRAFT_TOTAL_LIMIT = 2800
+
+
+def _save_form_draft(dialog: str, error: Exception) -> None:
+    fields = _FORM_DRAFT_FIELDS.get(dialog)
+    if fields is None:
+        return
+    values: dict[str, str] = {}
+    used = 0
+    for name in fields:
+        remaining = _DRAFT_TOTAL_LIMIT - used
+        value = request.form.get(name, "")[: min(_DRAFT_TEXT_LIMIT, max(remaining, 0))]
+        values[name] = value
+        used += len(value)
+    message = str(error)[:_DRAFT_MESSAGE_LIMIT]
+    drafts = dict(session.get("_form_drafts") or {})
+    drafts[dialog] = {
+        "message": message,
+        "values": values,
+    }
+    session["_form_drafts"] = drafts
+    session.modified = True
+
+
+def _clear_form_draft(dialog: str) -> None:
+    drafts = session.get("_form_drafts")
+    if isinstance(drafts, dict) and dialog in drafts:
+        drafts.pop(dialog)
+        session["_form_drafts"] = drafts
+        session.modified = True
+
+
+def _consume_form_drafts() -> dict[str, dict[str, Any]]:
+    raw = session.pop("_form_drafts", None)
+    drafts: dict[str, dict[str, Any]] = {}
+    if not isinstance(raw, dict):
+        return drafts
+    for dialog, data in raw.items():
+        if not isinstance(data, dict):
+            continue
+        message = data.get("message", "")
+        values = data.get("values", {})
+        drafts[str(dialog)] = {
+            "message": str(message)[:_DRAFT_MESSAGE_LIMIT],
+            "values": {
+                str(name): str(value)[:_DRAFT_TEXT_LIMIT]
+                for name, value in values.items()
+                if isinstance(name, str) and isinstance(value, str)
+            },
+        }
+    if raw:
+        session.modified = True
+    return drafts
 
 
 def _form_int(name: str, *, optional: bool = False) -> int | None:
@@ -318,11 +404,18 @@ def students():
         if element:
             rows = [row for row in rows if row["primary_element"] == element]
 
-    visible, pagination = _paginate(rows, 12)
     selected_no = request.args.get("student_no", "")
-    selected = next((row for row in rows if row["student_no"] == selected_no), None)
-    if selected is None and visible:
-        selected = visible[0]
+    selected_index = next(
+        (index for index, row in enumerate(rows) if row["student_no"] == selected_no),
+        None,
+    )
+    visible, pagination = _paginate(rows, 12, selected_index)
+    if selected_index is not None:
+        selected = rows[selected_index]
+    elif selected_no:
+        selected = None
+    else:
+        selected = visible[0] if visible else None
     enrollments = (
         svc.enrollments_for_student(selected["student_no"]) if selected is not None else []
     )
@@ -335,6 +428,7 @@ def students():
         classes=svc.list_classes(),
         families=svc.list_species_families(),
         branches=svc.list_species_branches(),
+        drafts=_consume_form_drafts(),
     )
 
 
@@ -362,9 +456,11 @@ def student_create():
             notes=_optional_form("notes"),
         )
         flash("新学生档案已写入名册；初始密码为 123456", "success")
+        _clear_form_draft("new-student")
         return redirect(url_for("web.students", student_no=student_no))
     except (ValueError, sqlite3.Error) as error:
         _mutation_error(error)
+        _save_form_draft("new-student", error)
         return redirect(url_for("web.students", create=1))
 
 
@@ -389,9 +485,12 @@ def student_edit(student_no: str):
             notes=_optional_form("notes"),
         )
         flash("档案修改已保存", "success")
+        _clear_form_draft("edit-student")
     except (ValueError, sqlite3.Error) as error:
         _mutation_error(error)
-    return redirect(url_for("web.students", student_no=student_no, edit=1 if request.form.get("_retry") else None))
+        _save_form_draft("edit-student", error)
+        return redirect(url_for("web.students", student_no=student_no, edit=1))
+    return redirect(url_for("web.students", student_no=student_no))
 
 
 @bp.post("/students/<student_no>/delete")
@@ -433,11 +532,18 @@ def courses():
             row for row in rows
             if keyword in f"{row['course_code']} {row['name']} {row['department_name'] or ''}".lower()
         ]
-    visible, pagination = _paginate(rows, 9)
     selected_code = request.args.get("course_code", "")
-    selected = next((row for row in rows if row["course_code"] == selected_code), None)
-    if selected is None and visible:
-        selected = visible[0]
+    selected_index = next(
+        (index for index, row in enumerate(rows) if row["course_code"] == selected_code),
+        None,
+    )
+    visible, pagination = _paginate(rows, 9, selected_index)
+    if selected_index is not None:
+        selected = rows[selected_index]
+    elif selected_code:
+        selected = None
+    else:
+        selected = visible[0] if visible else None
     if selected is not None:
         course_enrollments = (
             svc.enrollments_for_course(selected["course_code"])
@@ -456,6 +562,7 @@ def courses():
         course_enrollments=course_enrollments,
         pagination=pagination,
         departments=svc.list_departments(),
+        drafts=_consume_form_drafts(),
     )
 
 
@@ -472,9 +579,11 @@ def course_create():
             department_code=_optional_form("department_code"),
         )
         flash("课程已加入课程矩阵", "success")
+        _clear_form_draft("new-course")
         return redirect(url_for("web.courses", course_code=code))
     except (ValueError, sqlite3.Error) as error:
         _mutation_error(error)
+        _save_form_draft("new-course", error)
         return redirect(url_for("web.courses", create=1))
 
 
@@ -490,8 +599,11 @@ def course_edit(course_code: str):
             department_code=_optional_form("department_code"),
         )
         flash("课程资料已更新", "success")
+        _clear_form_draft("edit-course")
     except (ValueError, sqlite3.Error) as error:
         _mutation_error(error)
+        _save_form_draft("edit-course", error)
+        return redirect(url_for("web.courses", course_code=course_code, edit=1))
     return redirect(url_for("web.courses", course_code=course_code))
 
 
@@ -523,14 +635,22 @@ def grades():
             if keyword in f"{row['student_no']} {row['student_name']} {row['course_code']} {row['course_name']}".lower()
         ]
     scores = [float(row["score"]) for row in rows if row["score"] is not None]
-    visible, pagination = _paginate(rows, 14)
+    requested_id = request.args.get("id", "")
     try:
-        selected_id = int(request.args.get("id", 0))
+        selected_id = int(requested_id or 0)
     except ValueError:
         selected_id = 0
-    selected = next((row for row in rows if row["id"] == selected_id), None)
-    if selected is None and visible:
-        selected = visible[0]
+    selected_index = next(
+        (index for index, row in enumerate(rows) if row["id"] == selected_id),
+        None,
+    )
+    visible, pagination = _paginate(rows, 14, selected_index)
+    if selected_index is not None:
+        selected = rows[selected_index]
+    elif requested_id:
+        selected = None
+    else:
+        selected = visible[0] if visible else None
     distribution = {
         "90+": len([score for score in scores if score >= 90]),
         "80–89": len([score for score in scores if 80 <= score < 90]),
@@ -549,6 +669,7 @@ def grades():
         pending=len(rows) - len(scores),
         students=svc.list_students() if identity.is_admin else [],
         course_options=svc.list_courses(),
+        drafts=_consume_form_drafts(),
     )
 
 
@@ -563,9 +684,11 @@ def grade_create():
             score=_form_float("score", optional=True),
         )
         flash("选课与成绩记录已添加", "success")
+        _clear_form_draft("new-grade")
         return redirect(url_for("web.grades", id=enrollment_id))
     except (ValueError, sqlite3.Error) as error:
         _mutation_error(error)
+        _save_form_draft("new-grade", error)
         return redirect(url_for("web.grades", create=1))
 
 
@@ -584,8 +707,11 @@ def grade_edit(enrollment_id: int):
             score=_form_float("score", optional=True),
         )
         flash("成绩记录已更新", "success")
+        _clear_form_draft("edit-grade")
     except (ValueError, sqlite3.Error) as error:
         _mutation_error(error)
+        _save_form_draft("edit-grade", error)
+        return redirect(url_for("web.grades", id=enrollment_id, edit=1))
     return redirect(url_for("web.grades", id=enrollment_id))
 
 
@@ -613,18 +739,24 @@ def notices():
     keyword = request.args.get("q", "").strip().lower()
     if keyword:
         rows = [row for row in rows if keyword in f"{row['title']} {row['body']} {row['class_name']}".lower()]
+    requested_id = request.args.get("id", "")
     try:
-        selected_id = int(request.args.get("id", 0))
+        selected_id = int(requested_id or 0)
     except ValueError:
         selected_id = 0
-    selected = next((row for row in rows if row["id"] == selected_id), None)
-    if selected is None and rows:
-        selected = rows[0]
+    selected_index = next((index for index, row in enumerate(rows) if row["id"] == selected_id), None)
+    if selected_index is not None:
+        selected = rows[selected_index]
+    elif requested_id:
+        selected = None
+    else:
+        selected = rows[0] if rows else None
     return render_template(
         "notices.html",
         notices=rows,
         selected=selected,
         classes=svc.list_classes() if identity.is_admin else [],
+        drafts=_consume_form_drafts(),
     )
 
 
@@ -638,9 +770,11 @@ def notice_create():
             class_code=request.form.get("class_code", ""),
         )
         flash("班级公告已发布", "success")
+        _clear_form_draft("new-notice")
         return redirect(url_for("web.notices", id=notice_id))
     except (ValueError, sqlite3.Error) as error:
         _mutation_error(error)
+        _save_form_draft("new-notice", error)
         return redirect(url_for("web.notices", create=1))
 
 

@@ -2,18 +2,82 @@
   "use strict";
 
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const cleanSignatures = new WeakMap();
+
+  function formSignature(form) {
+    return [...form.elements]
+      .filter((element) => element instanceof Element && element.name && element.name !== "_csrf_token" && element.type !== "password")
+      .map((element) => {
+        const value = element.type === "checkbox" ? String(element.checked) : element.value;
+        return `${element.name}=${encodeURIComponent(value)}`;
+      })
+      .join("&");
+  }
+
+  function focusFirstProblem(dialog) {
+    const form = dialog.querySelector("form");
+    if (!form) return;
+    const invalid = form.querySelector(":invalid");
+    const fallback = form.querySelector(
+      "input:not([type='hidden']):not([disabled]), select:not([disabled]), textarea:not([disabled])"
+    );
+    const control = invalid instanceof HTMLElement && !invalid.disabled ? invalid : fallback;
+    if (control instanceof HTMLElement) control.focus();
+  }
 
   function openDialog(id) {
     const dialog = document.getElementById(id);
     if (!(dialog instanceof HTMLDialogElement) || dialog.open) return;
     dialog.showModal();
     document.body.dataset.dialogActive = "true";
+    if (dialog.querySelector("[data-form-error]")) focusFirstProblem(dialog);
   }
 
-  function closeDialog(dialog) {
+  function requestClose(dialog) {
     if (!(dialog instanceof HTMLDialogElement)) return;
+    const form = dialog.querySelector("[data-editor-form]");
+    const clean = form ? cleanSignatures.get(form) : undefined;
+    if (
+      form &&
+      clean !== undefined &&
+      dialog.dataset.submitted !== "true" &&
+      formSignature(form) !== clean &&
+      !window.confirm("表单还有未保存的内容，确定要关闭吗？")
+    ) {
+      return;
+    }
     dialog.close();
-    if (!document.querySelector("dialog[open]")) delete document.body.dataset.dialogActive;
+  }
+
+  function resetSubmitState(form) {
+    delete form.dataset.submitting;
+    form.removeAttribute("aria-busy");
+    form.querySelectorAll("button[type='submit']").forEach((button) => {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+    });
+  }
+
+  function initSubmitState(form) {
+    if ((form.getAttribute("method") || "get").toLowerCase() !== "post") return;
+    form.addEventListener("submit", (event) => {
+      if (form.dataset.submitting === "true") {
+        event.preventDefault();
+        return;
+      }
+      // Only buttons are disabled after the submit event starts. Named fields
+      // remain enabled so the browser still serializes every value.
+      form.dataset.submitting = "true";
+      form.setAttribute("aria-busy", "true");
+      const dialog = form.closest("dialog");
+      if (dialog) dialog.dataset.submitted = "true";
+      form.querySelectorAll("button[type='submit']").forEach((button) => {
+        // A named submit button is a form value, so it stays enabled; the
+        // submit guard above already prevents a second submission.
+        if (!button.name) button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+      });
+    });
   }
 
   document.addEventListener("click", (event) => {
@@ -30,7 +94,7 @@
     const closer = target.closest("[data-dialog-close]");
     if (closer) {
       event.preventDefault();
-      closeDialog(closer.closest("dialog"));
+      requestClose(closer.closest("dialog"));
       return;
     }
 
@@ -41,17 +105,42 @@
   });
 
   document.querySelectorAll("dialog").forEach((dialog) => {
+    const editorForm = dialog.querySelector("[data-editor-form]");
+    if (editorForm) cleanSignatures.set(editorForm, formSignature(editorForm));
     dialog.addEventListener("close", () => {
       if (!document.querySelector("dialog[open]")) delete document.body.dataset.dialogActive;
+    });
+    dialog.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      requestClose(dialog);
     });
     dialog.addEventListener("click", (event) => {
       if (event.target !== dialog) return;
       const rect = dialog.getBoundingClientRect();
       const outside = event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
-      if (outside) closeDialog(dialog);
+      if (outside) requestClose(dialog);
     });
   });
+
   document.querySelectorAll("[data-auto-open]").forEach((dialog) => openDialog(dialog.id));
+  document.querySelectorAll("form").forEach(initSubmitState);
+  window.addEventListener("pageshow", (event) => {
+    if (!event.persisted) return;
+    document.querySelectorAll("form[data-submitting]").forEach(resetSubmitState);
+    document.querySelectorAll("dialog[data-submitted]").forEach((dialog) => delete dialog.dataset.submitted);
+  });
+
+  const mobileSearchToggle = document.querySelector("[data-mobile-search-toggle]");
+  if (mobileSearchToggle) {
+    mobileSearchToggle.addEventListener("click", () => {
+      const panel = document.getElementById(mobileSearchToggle.getAttribute("aria-controls") || "");
+      if (!panel) return;
+      const opening = panel.hidden;
+      panel.hidden = !opening;
+      mobileSearchToggle.setAttribute("aria-expanded", String(opening));
+      if (opening) panel.querySelector("input")?.focus();
+    });
+  }
 
   document.querySelectorAll("[data-password-toggle]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -85,7 +174,7 @@
     const isTyping = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement || active?.isContentEditable;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
-      const input = [...document.querySelectorAll(".global-search input, .filter-search input")].find((item) => item.getClientRects().length);
+      const input = [...document.querySelectorAll(".global-search input, .mobile-search-panel input, .filter-search input")].find((item) => item.getClientRects().length);
       input?.focus();
       return;
     }
@@ -93,8 +182,9 @@
     if (event.key === "/") {
       event.preventDefault();
       const filterInput = document.querySelector(".filter-search input");
+      const mobileInput = document.querySelector(".mobile-search-panel:not([hidden]) input");
       const globalInput = document.querySelector(".global-search input");
-      const input = filterInput?.getClientRects().length ? filterInput : globalInput;
+      const input = filterInput?.getClientRects().length ? filterInput : mobileInput?.getClientRects().length ? mobileInput : globalInput;
       input?.focus();
     }
     if (event.key.toLowerCase() === "n") {

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 from tempfile import TemporaryDirectory
+from urllib.parse import quote
 import unittest
 from unittest.mock import patch
 
@@ -135,6 +137,223 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertIn("/login", response.headers["Location"])
         self.client.get("/login")
         self.assertEqual(self.post("/notices/1/delete").status_code, 302)
+
+
+    def test_record_urls_keep_page_filter_and_selected_state(self) -> None:
+        self.login_admin()
+        student_rows = XingyuanService(self.db_path).list_students()
+        self.assertGreater(len(student_rows), 24)
+        target = student_rows[12]
+
+        response = self.client.get(f"/students?student_no={target['student_no']}")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(target["name"].encode(), response.data)
+        self.assertIn(student_rows[12]["student_no"].encode(), response.data)
+        self.assertNotIn(student_rows[0]["student_no"].encode(), response.data)
+        record_links = [
+            href for href in re.findall(rb'href="([^"]+)"', response.data)
+            if b"/students?" in href and b"student_no=" in href
+        ]
+        self.assertTrue(record_links)
+        self.assertTrue(all(b"page=2" in href for href in record_links))
+        pagination_links = [
+            href for href in re.findall(rb'href="([^"]+)"', response.data)
+            if b"/students?" in href and b"page=3" in href
+        ]
+        self.assertTrue(pagination_links)
+        self.assertTrue(all(b"student_no=" not in href for href in pagination_links))
+
+        invalid = self.client.get("/students?student_no=NOT_EXISTS")
+        self.assertEqual(invalid.status_code, 200)
+        self.assertIn("选择一份档案".encode(), invalid.data)
+        self.assertNotIn(b"roster-item is-selected", invalid.data)
+
+        filtered = self.client.get("/students?q=%E9%9B%B7&student_no=" + target["student_no"])
+        self.assertEqual(filtered.status_code, 200)
+        record_links = [
+            href for href in re.findall(rb'href="([^"]+)"', filtered.data)
+            if b"/students?" in href and b"student_no=" in href
+        ]
+        self.assertTrue(record_links)
+        self.assertTrue(all(b"q=%E9%9B%B7" in href for href in record_links))
+
+    def test_course_and_grade_record_urls_keep_page_state(self) -> None:
+        self.login_admin()
+        svc = XingyuanService(self.db_path)
+        course_rows = svc.list_courses()
+        self.assertGreater(len(course_rows), 18)
+        course_target = course_rows[9]
+        response = self.client.get(f"/courses?course_code={course_target['course_code']}")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(course_target["name"].encode(), response.data)
+        self.assertIn(course_rows[9]["course_code"].encode(), response.data)
+        self.assertNotIn(course_rows[0]["course_code"].encode(), response.data)
+        record_links = [
+            href for href in re.findall(rb'href="([^"]+)"', response.data)
+            if b"/courses?" in href and b"course_code=" in href
+        ]
+        self.assertTrue(record_links)
+        self.assertTrue(all(b"page=2" in href for href in record_links))
+
+        grade_rows = svc.list_enrollments()
+        self.assertGreater(len(grade_rows), 28)
+        grade_target = grade_rows[14]
+        response = self.client.get(f"/grades?id={grade_target['id']}")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(grade_target["student_name"].encode(), response.data)
+        self.assertIn(grade_rows[14]["student_no"].encode(), response.data)
+        record_links = [
+            href for href in re.findall(rb'href="([^"]+)"', response.data)
+            if b"/grades?" in href and b"id=" in href
+        ]
+        self.assertTrue(record_links)
+        self.assertTrue(all(b"page=2" in href for href in record_links))
+
+    def test_student_create_failure_reopens_dialog_with_draft_and_error(self) -> None:
+        self.login_admin()
+        values = {
+            "student_no": "20260001",
+            "name": "重复学生",
+            "family": "犬科",
+            "branch": "灰狼",
+            "enrollment_year": "2026",
+            "class_code": "ELS2601",
+            "gender": "女",
+            "birth_date": "",
+            "age": "19",
+            "status": "在读",
+            "primary_element": "风",
+            "primary_affinity": "A",
+            "contact": "13800000000",
+            "dormitory": "北区 1-101",
+            "notes": "失败草稿",
+        }
+        response = self.post("/students/create", values)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("create=1", response.headers["Location"])
+        with self.client.session_transaction() as session:
+            drafts = session["_form_drafts"]
+        self.assertEqual(drafts["new-student"]["values"]["name"], "重复学生")
+        self.assertEqual(drafts["new-student"]["values"]["contact"], "13800000000")
+        self.assertNotIn("_csrf_token", drafts["new-student"]["values"])
+
+        rendered = self.client.get(response.headers["Location"])
+        self.assertEqual(rendered.status_code, 200)
+        self.assertIn(b"data-auto-open", rendered.data)
+        self.assertIn(b"data-form-error", rendered.data)
+        self.assertIn('value="重复学生"'.encode(), rendered.data)
+        self.assertIn(b'value="13800000000"', rendered.data)
+        with self.client.session_transaction() as session:
+            self.assertNotIn("_form_drafts", session)
+
+    def test_student_edit_failure_reopens_dialog_with_editable_draft(self) -> None:
+        self.login_admin()
+        response = self.post(
+            "/students/20260001/edit",
+            {
+                "family": "不存在的族系",
+                "branch": "",
+                "enrollment_year": "2026",
+                "class_code": "ELS2601",
+                "gender": "男",
+                "birth_date": "",
+                "age": "19",
+                "status": "在读",
+                "primary_element": "风",
+                "primary_affinity": "A",
+                "contact": "13900000000",
+                "dormitory": "北区 1-102",
+                "notes": "编辑失败草稿",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("edit=1", response.headers["Location"])
+        rendered = self.client.get(response.headers["Location"])
+        self.assertEqual(rendered.status_code, 200)
+        self.assertIn(b"data-auto-open", rendered.data)
+        self.assertIn(b"data-form-error", rendered.data)
+        self.assertIn(b'value="13900000000"', rendered.data)
+        self.assertIn("编辑失败草稿".encode(), rendered.data)
+        with self.client.session_transaction() as session:
+            self.assertNotIn("_form_drafts", session)
+
+    def test_course_create_failure_keeps_draft_and_success_clears_it(self) -> None:
+        self.login_admin()
+        response = self.post(
+            "/courses/create",
+            {
+                "course_code": "ELS101",
+                "name": "重复课程",
+                "credits": "3.0",
+                "hours": "48",
+                "department_code": "SCI",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("create=1", response.headers["Location"])
+        with self.client.session_transaction() as session:
+            drafts = session["_form_drafts"]
+        self.assertEqual(drafts["new-course"]["values"]["name"], "重复课程")
+        self.assertNotIn("_csrf_token", drafts["new-course"]["values"])
+
+        rendered = self.client.get(response.headers["Location"])
+        self.assertEqual(rendered.status_code, 200)
+        self.assertIn(b"data-auto-open", rendered.data)
+        self.assertIn(b"data-form-error", rendered.data)
+        self.assertIn('value="重复课程"'.encode(), rendered.data)
+
+        created = self.post(
+            "/courses/create",
+            {
+                "course_code": "WEB999",
+                "name": "网页测试课程",
+                "credits": "2.5",
+                "hours": "32",
+                "department_code": "SCI",
+            },
+        )
+        self.assertEqual(created.status_code, 302)
+        self.assertIsNotNone(XingyuanService(self.db_path).course_by_code("WEB999"))
+        with self.client.session_transaction() as session:
+            self.assertNotIn("_form_drafts", session)
+
+    def test_course_edit_failure_reopens_dialog_with_draft(self) -> None:
+        self.login_admin()
+        response = self.post(
+            "/courses/ELS101/edit",
+            {
+                "name": "更新失败课程",
+                "credits": "3.0",
+                "hours": "48",
+                "department_code": "NOPE",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("edit=1", response.headers["Location"])
+        rendered = self.client.get(response.headers["Location"])
+        self.assertEqual(rendered.status_code, 200)
+        self.assertIn(b"data-auto-open", rendered.data)
+        self.assertIn(b"data-form-error", rendered.data)
+        self.assertIn('value="更新失败课程"'.encode(), rendered.data)
+        with self.client.session_transaction() as session:
+            self.assertNotIn("_form_drafts", session)
+
+    def test_notice_record_links_keep_search_state(self) -> None:
+        self.login_admin()
+        notices = XingyuanService(self.db_path).list_announcements()
+        self.assertTrue(notices)
+        keyword = quote(str(notices[0]["title"][:2]))
+        response = self.client.get(f"/notices?q={keyword}&id={notices[0]['id']}")
+        self.assertEqual(response.status_code, 200)
+        record_links = [
+            href for href in re.findall(rb'href="([^"]+)"', response.data)
+            if b"/notices?" in href and b"id=" in href
+        ]
+        self.assertTrue(record_links)
+        self.assertTrue(all(keyword.encode() in href for href in record_links))
+        self.assertIn(b'id="record-list"', response.data)
+        self.assertIn(b'id="record-detail"', response.data)
+        self.assertIn(b'class="detail-back"', response.data)
 
 
 class WebEntryTests(unittest.TestCase):
