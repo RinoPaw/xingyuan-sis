@@ -16,6 +16,9 @@ def build_parser() -> argparse.ArgumentParser:
     modes.add_argument("--tui", action="store_true", help="强制启动即时键盘界面")
     modes.add_argument("--basic", action="store_true", help="启动基础菜单界面")
     modes.add_argument("--gui", action="store_true", help="启动 Tkinter 图形界面")
+    modes.add_argument("--web", action="store_true", help="启动 Flask 网页界面")
+    parser.add_argument("--host", help="Web 监听地址；默认 127.0.0.1，可用 HOST 环境变量覆盖")
+    parser.add_argument("--port", type=int, help="Web 监听端口；默认 3000，可用 PORT 环境变量覆盖")
 
     groups = parser.add_subparsers(dest="group")
 

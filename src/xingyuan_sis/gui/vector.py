@@ -76,5 +76,11 @@ class VectorCanvas(tk.Canvas):
         self.tag_lower(layer)
 
     def destroy(self):
-        super().destroy()
+        image = self.image
         self.image = None
+        self.svg_source = ""
+        super().destroy()
+        if image is not None:
+            # External references may keep the Python wrapper alive after the
+            # canvas is gone; explicitly release the Tk image as well.
+            self.tk.call("image", "delete", image.name)

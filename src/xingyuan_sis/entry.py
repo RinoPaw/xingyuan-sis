@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import sqlite3
 import sys
 from typing import Sequence
 
+from .bootstrap import ensure_default_state
 from .cli import build_parser, is_schema_reset, run as run_cli
 from .database import initialize_database
 from .terminal_capabilities import detect_terminal
@@ -18,7 +20,7 @@ Linux：安装当前 Python 对应的 Tk 包（Debian/Ubuntu 通常为 python3-t
 
 
 def _run_menu(db_path: Path | None, *, mode: str) -> int:
-    initialize_database(db_path)
+    ensure_default_state(db_path)
     capabilities = detect_terminal()
     if not capabilities.interactive:
         print("当前环境不是交互终端；请使用 xy <command>。", file=sys.stderr)
@@ -34,7 +36,7 @@ def _run_menu(db_path: Path | None, *, mode: str) -> int:
 
 
 def _run_gui(db_path: Path | None) -> int:
-    initialize_database(db_path)
+    ensure_default_state(db_path)
     try:
         from .gui.app import run
     except ImportError as error:
@@ -44,6 +46,23 @@ def _run_gui(db_path: Path | None) -> int:
         return 1
 
     run(db_path)
+    return 0
+
+
+def _run_web(db_path: Path | None, *, host: str | None, port: int | None) -> int:
+    ensure_default_state(db_path)
+    try:
+        from .web import run
+    except ImportError as error:
+        if getattr(error, "name", None) != "flask":
+            raise
+        print("无法启动 Web：请先安装项目依赖（pip install -e . 或 uv sync）。", file=sys.stderr)
+        return 1
+    run(
+        db_path,
+        host=host or os.environ.get("HOST", "127.0.0.1"),
+        port=port or int(os.environ.get("PORT", "3000")),
+    )
     return 0
 
 
@@ -61,6 +80,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.group is None:
             if args.gui:
                 return _run_gui(args.db)
+            if args.web:
+                return _run_web(args.db, host=args.host, port=args.port)
             mode = "tui" if args.tui else "basic" if args.basic else "auto"
             return _run_menu(args.db, mode=mode)
 

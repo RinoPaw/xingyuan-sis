@@ -12,7 +12,7 @@ class GuiEntryTests(unittest.TestCase):
         from xingyuan_sis.gui import app
         expected = Path(__file__).resolve().parents[1] / "src" / "xingyuan_sis" / "gui" / "app.py"
         self.assertEqual(Path(app.__file__).resolve(), expected)
-        with patch.object(entry, "initialize_database"), patch.object(app, "run") as run:
+        with patch.object(entry, "ensure_default_state"), patch.object(app, "run") as run:
             self.assertEqual(entry.main(["--gui"]), 0)
         run.assert_called_once_with(None)
 
@@ -26,7 +26,7 @@ class GuiEntryTests(unittest.TestCase):
 
         output = StringIO()
         with (
-            patch.object(entry, "initialize_database"),
+            patch.object(entry, "ensure_default_state"),
             patch("builtins.__import__", side_effect=fake_import),
             redirect_stderr(output),
         ):
@@ -46,7 +46,7 @@ class GuiEntryTests(unittest.TestCase):
                 raise ModuleNotFoundError("No module named 'other_package'", name="other_package")
             return original_import(name, globals, locals, fromlist, level)
 
-        with patch.object(entry, "initialize_database"), patch(
+        with patch.object(entry, "ensure_default_state"), patch(
             "builtins.__import__", side_effect=fake_import
         ):
             with self.assertRaises(ModuleNotFoundError):

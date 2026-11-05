@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icon, avatar %}
+{% block title %}校园总览{% endblock %}
+{% block breadcrumb %}校园总览{% endblock %}
+{% block content %}
+<header class="page-header dashboard-heading">
+  <div>
+    <div class="section-code">MISSION CONTROL / 2026—2027</div>
+    <h1>校园总览<span class="title-dot">.</span></h1>
+    <p>{{ '上午好，教务管理员。今天的校园数据已同步。' if identity.is_admin else '欢迎回来，' + student.name + '。你的本学期轨迹已更新。' }}</p>
+  </div>
+  <div class="semester-stamp"><span>CURRENT TERM</span><strong>2026—2027</strong><small>第一学期 / AUTUMN</small></div>
+</header>
+
+<section class="hero-stage" aria-label="校园状态">
+  <canvas id="starfield" class="starfield" aria-hidden="true"></canvas>
+  <div class="static-starfield" aria-hidden="true"></div>
+  <div class="hero-grid-lines" aria-hidden="true"></div>
+  <div class="hero-copy">
+    <div class="live-label"><i></i> CAMPUS FREQUENCY CONNECTED</div>
+    <h2>{% if identity.is_admin %}每一份档案，<br><em>都有轨迹。</em>{% else %}沿自己的轨道，<br><em>继续前进。</em>{% endif %}</h2>
+    <p>{{ '从学生名册到成绩记录，所有校园节点都在这里汇合。' if identity.is_admin else '查看课程、成绩与班级公告，掌握本学期的每一步。' }}</p>
+    <a class="push-button primary-button" href="{{ url_for('web.students' if identity.is_admin else 'web.grades') }}"><span>{{ '进入学生名册' if identity.is_admin else '查看我的成绩' }}</span>{{ icon('arrow', 21) }}</a>
+  </div>
+  <div class="hero-orbit" aria-label="平均成绩 {{ stats.average_score or '暂无' }}">
+    <svg viewBox="0 0 230 230" fill="none" aria-hidden="true">
+      <circle cx="115" cy="115" r="103" stroke="currentColor" stroke-width="1" stroke-dasharray="2 7"/>
+      <circle cx="115" cy="115" r="83" stroke="currentColor" stroke-width="1" opacity=".4"/>
+      <path d="M115 12a103 103 0 0 1 96 65" stroke="var(--acid)" stroke-width="4"/>
+      <path d="m115 2 4 11-4 11-4-11zM218 115l-11 4-11-4 11-4z" fill="var(--acid)"/>
+    </svg>
+    <div><small>{{ 'GLOBAL AVERAGE' if identity.is_admin else 'MY AVERAGE' }}</small><strong>{{ stats.average_score if stats.average_score is not none else '—' }}</strong><span>平均成绩 / AVG</span></div>
+  </div>
+  <div class="hero-coordinate" aria-hidden="true">X:26.11 / Y:113.08<br>STARFIELD ACTIVE</div>
+</section>
+
+{% if identity.is_admin %}
+<section class="stat-strip" aria-label="校园统计">
+  <a href="{{ url_for('web.students') }}"><small>学生总数 / STUDENTS</small><strong>{{ stats.students }}</strong><span>在册角色 <b>↗</b></span></a>
+  <a href="{{ url_for('web.courses') }}"><small>开设课程 / COURSES</small><strong>{{ stats.courses }}</strong><span>本学期矩阵 <b>↗</b></span></a>
+  <a href="{{ url_for('web.grades') }}"><small>选课记录 / RECORDS</small><strong>{{ stats.enrollments }}</strong><span>成绩与选课 <b>↗</b></span></a>
+  <div><small>教学班级 / CLASSES</small><strong>{{ stats.classes }}</strong><span>{{ stats.departments }} 个学院 · {{ stats.majors }} 个专业</span></div>
+</section>
+{% else %}
+<section class="stat-strip student-stat-strip" aria-label="我的学习统计">
+  <a href="{{ url_for('web.courses') }}"><small>本学期课程</small><strong>{{ stats.courses }}</strong><span>查看课程矩阵 ↗</span></a>
+  <a href="{{ url_for('web.grades') }}"><small>已出成绩</small><strong>{{ stats.graded }}</strong><span>平均 {{ stats.average_score or '—' }} 分 ↗</span></a>
+  <div><small>等待评分</small><strong>{{ stats.pending }}</strong><span>保持关注</span></div>
+</section>
+{% endif %}
+
+<div class="dashboard-grid">
+  <div class="dashboard-main">
+    {% if identity.is_admin %}
+    <section class="data-section element-section">
+      <header class="section-header"><div><span>ELEMENT FREQUENCY</span><h2>元素能量分布</h2></div><a href="{{ url_for('web.students') }}">查看名册 {{ icon('arrow', 15) }}</a></header>
+      {% set element_max = elements|map(attribute='student_count')|max if elements else 1 %}
+      <div class="element-bars">
+        {% for row in elements %}
+        <a class="element-row element-{{ row.element|element_slug }}" href="{{ url_for('web.students', element=row.element) }}">
+          <span class="element-symbol">{{ row.element }}</span>
+          <span class="element-track"><i style="--bar-size: {{ (row.student_count / element_max * 100)|round(1) }}%"></i></span>
+          <strong>{{ row.student_count }}</strong><small>STUDENTS</small>
+        </a>
+        {% else %}<p class="empty-inline">写入学生数据后，这里会显示元素分布。</p>{% endfor %}
+      </div>
+    </section>
+
+    <section class="data-section">
+      <header class="section-header"><div><span>COURSE PERFORMANCE</span><h2>课程平均分排行</h2></div><a href="{{ url_for('web.courses') }}">全部课程 {{ icon('arrow', 15) }}</a></header>
+      <div class="course-ranking">
+        {% for row in course_stats %}
+        <a href="{{ url_for('web.courses', course_code=row.course_code) }}">
+          <span class="rank">{{ '%02d'|format(loop.index) }}</span><span class="course-code">{{ row.course_code }}</span><strong>{{ row.name }}</strong>
+          <span class="rank-track"><i style="--bar-size: {{ row.average_score or 0 }}%"></i></span><b>{{ row.average_score or '—' }}</b>
+        </a>
+        {% else %}<p class="empty-inline">还没有可统计的成绩。</p>{% endfor %}
+      </div>
+    </section>
+    {% else %}
+    <section class="data-section">
+      <header class="section-header"><div><span>MY COURSE RECORD</span><h2>本学期成绩轨迹</h2></div><a href="{{ url_for('web.grades') }}">全部成绩 {{ icon('arrow', 15) }}</a></header>
+      <div class="compact-records">
+        {% for row in enrollments %}<a href="{{ url_for('web.grades', id=row.id) }}"><span class="course-code">{{ row.course_code }}</span><strong>{{ row.course_name }}</strong><span>{{ row.semester }}</span><b class="score-chip">{{ row.score|score_text }}</b></a>{% else %}<p class="empty-inline">本学期还没有选课记录。</p>{% endfor %}
+      </div>
+    </section>
+    {% endif %}
+  </div>
+
+  <aside class="dashboard-aside">
+    <section class="notice-section">
+      <header class="section-header"><div><span>CLASS BULLETIN</span><h2>最新公告</h2></div><a href="{{ url_for('web.notices') }}" aria-label="查看全部公告">{{ icon('arrow', 18) }}</a></header>
+      <div class="notice-list">
+        {% for notice in announcements %}
+        <a href="{{ url_for('web.notices', id=notice.id) }}"><small>{{ notice.class_code }} · {{ notice.created_at[:10] }}</small><strong>{{ notice.title }}</strong><span>阅读全文 ↗</span></a>
+        {% else %}<div class="empty-state compact-empty">{{ icon('notices', 28) }}<p>暂时没有公告。</p>{% if identity.is_admin %}<a href="{{ url_for('web.notices', create=1) }}">发布第一条公告</a>{% endif %}</div>{% endfor %}
+      </div>
+    </section>
+    {% if identity.is_admin %}
+    <section class="quick-actions">
+      <span class="section-code">QUICK DEPLOY</span><h2>快速任务</h2>
+      <a href="{{ url_for('web.students', create=1) }}">{{ icon('plus', 20) }}<span>新建学生档案<small>REGISTER STUDENT</small></span>{{ icon('arrow', 17) }}</a>
+      <a href="{{ url_for('web.grades', create=1) }}">{{ icon('grades', 20) }}<span>录入选课成绩<small>ADD SCORE RECORD</small></span>{{ icon('arrow', 17) }}</a>
+      <a href="{{ url_for('web.notices', create=1) }}">{{ icon('notices', 20) }}<span>发布班级公告<small>POST A NOTICE</small></span>{{ icon('arrow', 17) }}</a>
+    </section>
+    {% else %}
+    <section class="quick-actions"><span class="section-code">MY SHORTCUT</span><h2>我的入口</h2><a href="{{ url_for('web.students') }}">{{ icon('user', 20) }}<span>我的学籍档案<small>PERSONAL RECORD</small></span>{{ icon('arrow', 17) }}</a><a href="{{ url_for('web.password') }}">{{ icon('lock', 20) }}<span>更新访问密码<small>SECURITY</small></span>{{ icon('arrow', 17) }}</a></section>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

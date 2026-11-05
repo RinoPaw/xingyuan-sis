@@ -66,6 +66,10 @@ class ControllerTests(CampusFixture, unittest.TestCase):
         self.assertEqual(self.service.student_by_no(row["student_no"])["notes"], "新备注")
 
 
+@unittest.skipUnless(
+    os.environ.get("XINGYUAN_RUN_GUI_TESTS") == "1",
+    "慢速真实 GUI 工作流测试默认跳过；设置 XINGYUAN_RUN_GUI_TESTS=1 运行",
+)
 class RealTkWorkflowTests(CampusFixture, unittest.TestCase):
     @classmethod
     def setUpClass(cls):

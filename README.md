@@ -2,7 +2,7 @@
 
 一个使用 Python 和 SQLite 实现的本地学生信息系统课程项目。
 
-它提供四种入口：Tkinter 图形界面、适合日常操作的终端 TUI、低能力终端下的基础数字菜单，以及适合脚本和精确查询的 CLI。四种入口共享同一套 Service / Repository，不维护四份业务逻辑。
+它提供五种入口：Flask 网页界面、Tkinter 图形界面、适合日常操作的终端 TUI、低能力终端下的基础数字菜单，以及适合脚本和精确查询的 CLI。五种入口共享同一套 Service / Repository，不维护五份业务逻辑。
 
 > 当前定位：课程设计 / 学习项目，不是面向真实学校部署的生产级教务系统。
 
@@ -24,10 +24,11 @@
 
 - Python 3.14+
 - SQLite / `sqlite3`
+- Flask / Jinja 网页界面
 - Tkinter / `ttk` 图形界面
 - 自绘 ANSI 终端交互
 
-业务、持久化、CLI、TUI 和 Tkinter GUI 均使用 Python 标准库，无需额外 Python 运行时依赖。
+业务、持久化、CLI、TUI 和 Tkinter GUI 使用 Python 标准库；Web 入口额外使用 Flask，页面动效与 WebGL2 Shader 不依赖前端框架。
 
 ## 快速开始
 
@@ -42,9 +43,12 @@ uv sync
 ```bash
 uv run xy
 uv run xy --gui
+uv run xy --web
 ```
 
-首次运行会在当前目录的 `data/` 下创建 SQLite 数据库，并引导设置管理员 `Administrator` 的密码。
+网页界面默认监听 `http://127.0.0.1:3000`；可用 `--host`、`--port` 或 `HOST`、`PORT` 环境变量调整。
+
+首次启动界面会在当前目录的 `data/` 下自动创建 SQLite 数据库并写入演示校园，无需手动执行 `xy data seed`。默认管理员账号为 `Administrator`，密码为 `12345678`。
 
 默认启动会检测终端能力：支持 TTY、ANSI 和即时按键时进入 TUI，否则自动退回基础数字菜单。也可以显式指定：
 
@@ -104,6 +108,18 @@ uv run python -X utf8 examples/storage_stages.py --file .tmp/demo-campus.json --
 ```
 
 存储演示使用新路径，展示内存 → JSON 重启修改 → SQLite；完整 JSON 不保留登录密码，导入后学生使用初始密码并强制改密。详见 [GUI 课程交付](docs/gui-delivery.md)、[当前视觉设计](docs/gui-punk-design.md)和 [Notepad 分析](examples/notepad/README.md)。
+
+## Flask Web 界面
+
+```bash
+uv run xy --web
+```
+
+打开 `http://127.0.0.1:3000`，使用默认管理员 `Administrator / 12345678` 登录；首次启动已自动写入演示校园。Web 入口复用同一套认证、Service、Repository 和 SQLite，包含校园总览、学生档案、课程、成绩与班级公告；管理员和学生分别获得对应权限。
+
+视觉采用“星轨任务终端”：深空色、荧光高亮、名册与角色档案双栏、实体下压按钮，以及指针响应的 WebGL2 星场 Shader。Shader 限制在 30 FPS / 1.5 DPR，页面隐藏时暂停，并支持 `prefers-reduced-motion` 和静态星图降级。键盘按 `Ctrl+K` 搜索，名册页按 `N` 新建学生；所有编辑事务均使用服务端 CSRF 校验。
+
+本地演示或容器预览可设置 `XINGYUAN_DEMO_MODE=1`，此时登录页提供一键演示入口。不要在真实部署中开启该模式。生产环境还应设置独立的 `XINGYUAN_SECRET_KEY`，并在 HTTPS 下设置 `XINGYUAN_HTTPS=1`。
 
 ## TUI 使用方式
 
@@ -195,13 +211,13 @@ uv run xy stu ls --major 元素 --format csv -o students.csv
 
 ## 演示数据
 
-空数据库可以写入项目自带的演示校园：
+首次启动 Web、GUI、TUI 或基础菜单时，空数据库会自动写入项目自带的演示校园，无需手动 seed。需要通过 CLI 单独初始化其他空数据库时仍可执行：
 
 ```bash
 uv run xy data seed
 ```
 
-当前 seed 包含 4 个学院、10 个专业、26 个班级、113 名学生、20 门课程和 452 条选课 / 成绩记录。
+当前 seed 包含 4 个学院、10 个专业、26 个班级、113 名学生、20 门课程和 452 条选课 / 成绩记录。自动初始化只在数据库没有学生时执行，不会重置已有数据。
 
 新建、导入、重置及重新生成的演示学生统一使用临时密码 `123456`，首次登录必须设置至少 8 位的新密码。已有数据库不会在升级时悄悄覆盖学生自己设置的密码；如需重建旧版演示账号，可在备份后使用下方的 `--reset`。
 
@@ -221,6 +237,7 @@ uv run xy data seed --reset
                  ┌─ CLI
 entry ───────────┼─ Basic UI
                  ├─ TUI
+                 ├─ Flask Web
                  └─ Tkinter GUI
                     │
                     ▼
@@ -243,6 +260,8 @@ entry ───────────┼─ Basic UI
 uv run python -X utf8 -m unittest discover -s tests -v
 ```
 
+慢速真实 Tk GUI 工作流测试默认跳过，其余 GUI 测试正常执行。需要完整验证 GUI 时，设置 `XINGYUAN_RUN_GUI_TESTS=1` 再运行同一命令。
+
 ## 文档
 
 - [架构与模块边界](docs/architecture.md)
@@ -260,9 +279,11 @@ xingyuan-sis/
 ├── src/xingyuan_sis/
 │   ├── cli/                 # CLI 命令
 │   ├── gui/                 # Tkinter / ttk 图形界面
+│   ├── web/                 # Flask 路由、Jinja 模板、动效与 Shader
 │   ├── tui/                 # 即时键盘终端界面
 │   │   └── workspace/       # 工作台状态、事件、表单和档案
 │   ├── basic_ui.py          # 基础数字菜单
+│   ├── bootstrap.py         # 默认演示数据与管理员初始化
 │   ├── service.py           # 业务服务
 │   ├── repository.py        # SQLite 数据访问
 │   ├── schema.py            # 字段与校验契约

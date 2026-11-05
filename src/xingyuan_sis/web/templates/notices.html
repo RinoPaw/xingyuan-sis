@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icon, dialog_close %}
+{% block title %}班级公告{% endblock %}
+{% block breadcrumb %}班级公告{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div><div class="section-code">CAMPUS DISPATCH / {{ notices|length }}</div><h1>班级公告<span class="title-dot">.</span></h1><p>{{ '向指定班级发布通知，保留清晰、可追踪的信息记录。' if identity.is_admin else '来自你所在班级的最新通知。' }}</p></div>
+  {% if identity.is_admin %}<button class="push-button primary-button header-action" type="button" data-dialog-open="new-notice" aria-label="发布公告">{{ icon('plus', 20) }}<span>发布公告</span></button>{% endif %}
+</header>
+
+<form class="filter-deck compact-filter" method="get" action="{{ url_for('web.notices') }}"><div class="filter-search">{{ icon('search', 19) }}<input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="公告标题、内容、班级…" aria-label="搜索公告"></div><button type="submit" class="filter-submit">{{ icon('search', 17) }} 搜索</button>{% if request.args.get('q') %}<a class="clear-filter" href="{{ url_for('web.notices') }}">清除</a>{% endif %}</form>
+
+<div class="notices-layout">
+  <aside class="notice-catalog" aria-label="公告目录">
+    <div class="panel-topline"><span>DISPATCH LOG</span><strong>{{ notices|length }} POSTS</strong></div>
+    {% for notice in notices %}<a class="notice-catalog-item{% if selected and selected.id == notice.id %} is-selected{% endif %}" href="{{ url_for('web.notices', id=notice.id, q=request.args.get('q')) }}"><span class="notice-number">{{ '%02d'|format(loop.index) }}</span><span><small>{{ notice.class_code }} / {{ notice.created_at[:10] }}</small><strong>{{ notice.title }}</strong></span>{{ icon('chevron', 16) }}</a>{% else %}<div class="empty-state compact-empty">{{ icon('notices', 34) }}<h2>暂无公告</h2><p>{{ '发布第一条班级通知。' if identity.is_admin else '班级发布通知后会出现在这里。' }}</p></div>{% endfor %}
+  </aside>
+
+  <article class="notice-reader">
+    {% if selected %}
+    <header><div class="notice-meta"><span>{{ selected.class_code }}</span><span>{{ selected.class_name }}</span><time datetime="{{ selected.created_at }}">{{ selected.created_at[:10] }}</time></div><h2>{{ selected.title }}</h2><div class="notice-rule"><i></i><span>XINGYUAN CAMPUS DISPATCH</span><i></i></div></header>
+    <div class="notice-body">{% for paragraph in selected.body.split('\n') %}<p>{{ paragraph }}</p>{% endfor %}</div>
+    <footer><div><span>RECEIPT</span><strong>#{{ '%04d'|format(selected.id) }}</strong></div><span>星原大学 · 班级事务终端</span>{% if identity.is_admin %}<button type="button" class="text-button danger-text" data-dialog-open="delete-notice">{{ icon('trash', 16) }} 删除公告</button>{% endif %}</footer>
+    <div class="notice-watermark" aria-hidden="true">NOTICE</div>
+    {% else %}<div class="empty-state">{{ icon('notices', 44) }}<h2>选择一条公告</h2><p>从左侧目录打开完整内容。</p></div>{% endif %}
+  </article>
+</div>
+
+{% if identity.is_admin %}
+<dialog id="new-notice" class="editor-dialog" aria-labelledby="new-notice-title" {% if request.args.get('create') %}data-auto-open{% endif %}><div class="dialog-heading"><div><span>NEW DISPATCH / CLASS</span><h2 id="new-notice-title">发布班级公告</h2></div>{{ dialog_close() }}</div><form method="post" action="{{ url_for('web.notice_create') }}" class="editor-form"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><label class="field-label" for="notice-class">目标班级 *</label><select id="notice-class" name="class_code" required><option value="">选择班级</option>{% for row in classes %}<option value="{{ row.code }}">{{ row.code }} · {{ row.name }}</option>{% endfor %}</select><label class="field-label" for="notice-title">公告标题 *</label><input id="notice-title" name="title" required maxlength="120" placeholder="用一句话说明事项"><label class="field-label" for="notice-body">公告正文 *</label><textarea id="notice-body" name="body" required rows="7" placeholder="写明时间、地点与需要完成的事项"></textarea><div class="dialog-actions"><button type="button" class="plain-button" data-dialog-close>取消</button><button type="submit" class="push-button primary-button"><span>立即发布</span>{{ icon('arrow', 19) }}</button></div></form></dialog>
+{% if selected %}<dialog id="delete-notice" class="editor-dialog confirm-dialog" aria-labelledby="delete-notice-title"><div class="danger-mark">{{ icon('trash', 34) }}</div><h2 id="delete-notice-title">删除这条公告？</h2><p>「{{ selected.title }}」将从班级公告中移除。</p><form method="post" action="{{ url_for('web.notice_delete', notice_id=selected.id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><div class="dialog-actions"><button type="button" class="plain-button" data-dialog-close>保留公告</button><button type="submit" class="danger-button">确认删除</button></div></form></dialog>{% endif %}
+{% endif %}
+{% endblock %}

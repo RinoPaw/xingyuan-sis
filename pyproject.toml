@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Xingyuan University student information system"
 readme = "README.md"
 requires-python = ">=3.14"
+dependencies = ["Flask>=3.1,<4"]
 
 [project.scripts]
 xy = "xingyuan_sis.entry:main"
@@ -20,3 +21,4 @@ namespaces = false
 
 [tool.setuptools.package-data]
 "xingyuan_sis.gui" = ["assets/fonts/*.otf", "assets/fonts/*.ttf", "assets/fonts/*.txt"]
+"xingyuan_sis.web" = ["templates/*.html", "static/*.css", "static/*.js", "static/*.svg"]

@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icon, pagination_nav, dialog_close %}
+{% block title %}成绩记录{% endblock %}
+{% block breadcrumb %}成绩记录{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div><div class="section-code">SCORE ARCHIVE / {{ pagination.total }}</div><h1>成绩记录<span class="title-dot">.</span></h1><p>{{ '录入选课与成绩，追踪每门课程的学习结果。' if identity.is_admin else '你的选课、成绩与待评分记录。' }}</p></div>
+  {% if identity.is_admin %}<button class="push-button primary-button header-action" type="button" data-dialog-open="new-grade" aria-label="录入成绩">{{ icon('plus', 20) }}<span>录入成绩</span></button>{% endif %}
+</header>
+
+<section class="score-ticket" aria-label="成绩统计">
+  <div class="score-main"><span>AVERAGE SCORE</span><strong>{{ average if average is not none else '—' }}</strong><small>当前范围平均分</small></div>
+  <div class="score-secondary"><div><span>最高分</span><strong>{{ highest if highest is not none else '—' }}</strong></div><div><span>待评分</span><strong>{{ pending }}</strong></div></div>
+  <div class="score-distribution">
+    {% set score_max = distribution.values()|max if distribution else 1 %}
+    {% for label, count in distribution.items() %}<div><span>{{ label }}</span><i><b style="--bar-size: {{ (count / (score_max or 1) * 100)|round(1) }}%"></b></i><strong>{{ count }}</strong></div>{% endfor %}
+  </div>
+  <div class="ticket-stamp" aria-hidden="true">XY<br><span>VERIFIED</span></div>
+</section>
+
+<form class="filter-deck compact-filter" method="get" action="{{ url_for('web.grades') }}">
+  <div class="filter-search">{{ icon('search', 19) }}<input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="学生、学号、课程…" aria-label="搜索成绩"></div><button type="submit" class="filter-submit">{{ icon('search', 17) }} 搜索</button>{% if request.args.get('q') %}<a class="clear-filter" href="{{ url_for('web.grades') }}">清除</a>{% endif %}
+</form>
+
+<div class="grades-layout">
+  <section class="grade-ledger" aria-label="成绩列表">
+    <div class="panel-topline"><span>ACADEMIC LEDGER</span><strong>{{ pagination.total }} ENTRIES</strong></div>
+    <div class="grade-table" role="table" aria-label="选课与成绩">
+      <div class="grade-row grade-head" role="row"><span role="columnheader">学生 / 学号</span><span role="columnheader">课程</span><span role="columnheader">学期</span><span role="columnheader">成绩</span></div>
+      {% for grade in grades %}
+      <a class="grade-row{% if selected and selected.id == grade.id %} is-selected{% endif %}" role="row" href="{{ url_for('web.grades', id=grade.id, q=request.args.get('q')) }}">
+        <span role="cell"><strong>{{ grade.student_name }}</strong><small>{{ grade.student_no }}</small></span>
+        <span role="cell"><strong>{{ grade.course_name }}</strong><small>{{ grade.course_code }}</small></span>
+        <span role="cell" class="semester-cell">{{ grade.semester }}</span>
+        <span role="cell"><b class="score-chip {% if grade.score is none %}is-pending{% elif grade.score < 60 %}is-low{% endif %}">{{ grade.score|score_text }}</b>{{ icon('chevron', 16) }}</span>
+      </a>
+      {% else %}<div class="empty-state">{{ icon('grades', 38) }}<h2>没有匹配的成绩</h2><p>调整关键词，或录入一条新的选课记录。</p></div>{% endfor %}
+    </div>
+    {{ pagination_nav(pagination) }}
+  </section>
+
+  <aside class="grade-inspector">
+    {% if selected %}
+    <div class="inspector-code">SCORE RECEIPT / #{{ '%04d'|format(selected.id) }}</div>
+    <div class="big-score {% if selected.score is none %}is-pending{% endif %}"><span>SCORE</span><strong>{{ selected.score|score_text }}</strong><small>/ 100</small></div>
+    <h2>{{ selected.course_name }}</h2><p>{{ selected.course_code }} · {{ selected.semester }}</p>
+    <dl class="mini-record"><div><dt>学生</dt><dd>{{ selected.student_name }}</dd></div><div><dt>学号</dt><dd>{{ selected.student_no }}</dd></div><div><dt>状态</dt><dd>{{ '已评分' if selected.score is not none else '等待评分' }}</dd></div></dl>
+    {% if identity.is_admin %}<div class="inspector-actions"><button class="text-button" data-dialog-open="edit-grade" type="button">{{ icon('edit', 16) }} 修改成绩</button><button class="text-button danger-text" data-dialog-open="delete-grade" type="button">{{ icon('trash', 16) }} 删除记录</button></div>{% endif %}
+    <a class="inspector-link" href="{{ url_for('web.students', student_no=selected.student_no) if identity.is_admin else url_for('web.students') }}">查看学生档案 {{ icon('arrow', 16) }}</a>
+    {% else %}<div class="empty-state">{{ icon('grades', 40) }}<h2>选择一条记录</h2><p>成绩凭条会在这里展开。</p></div>{% endif %}
+  </aside>
+</div>
+
+{% if identity.is_admin %}
+<dialog id="new-grade" class="editor-dialog" aria-labelledby="new-grade-title" {% if request.args.get('create') %}data-auto-open{% endif %}>
+  <div class="dialog-heading"><div><span>NEW ENTRY / SCORE</span><h2 id="new-grade-title">录入选课与成绩</h2></div>{{ dialog_close() }}</div>
+  <form method="post" action="{{ url_for('web.grade_create') }}" class="editor-form"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><div class="form-grid">
+    <div class="form-span"><label class="field-label" for="grade-student">学生 *</label><select id="grade-student" name="student_no" required><option value="">选择学生</option>{% for student in students %}<option value="{{ student.student_no }}">{{ student.student_no }} · {{ student.name }}</option>{% endfor %}</select></div>
+    <div class="form-span"><label class="field-label" for="grade-course">课程 *</label><select id="grade-course" name="course_code" required><option value="">选择课程</option>{% for course in course_options %}<option value="{{ course.course_code }}">{{ course.course_code }} · {{ course.name }}</option>{% endfor %}</select></div>
+    <div><label class="field-label" for="grade-semester">学期 *</label><input id="grade-semester" name="semester" required value="2026-2027-1" placeholder="2026-2027-1"></div><div><label class="field-label" for="grade-score">成绩</label><input id="grade-score" name="score" type="number" min="0" max="100" step="0.1" placeholder="留空表示待评分"></div>
+  </div><div class="dialog-actions"><button type="button" class="plain-button" data-dialog-close>取消</button><button type="submit" class="push-button primary-button"><span>保存成绩记录</span>{{ icon('arrow', 19) }}</button></div></form>
+</dialog>
+{% if selected %}
+<dialog id="edit-grade" class="editor-dialog" aria-labelledby="edit-grade-title"><div class="dialog-heading"><div><span>UPDATE ENTRY / #{{ selected.id }}</span><h2 id="edit-grade-title">修改成绩凭条</h2></div>{{ dialog_close() }}</div>
+  <form method="post" action="{{ url_for('web.grade_edit', enrollment_id=selected.id) }}" class="editor-form"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="student_no" value="{{ selected.student_no }}"><input type="hidden" name="course_code" value="{{ selected.course_code }}"><input type="hidden" name="original_semester" value="{{ selected.semester }}"><div class="form-grid"><div><label class="field-label" for="edit-semester">学期</label><input id="edit-semester" name="semester" required value="{{ selected.semester }}"></div><div><label class="field-label" for="edit-score">成绩</label><input id="edit-score" name="score" type="number" min="0" max="100" step="0.1" value="{{ selected.score if selected.score is not none else '' }}" placeholder="留空表示待评分"></div></div><p class="form-hint">{{ selected.student_name }} · {{ selected.course_name }}</p><div class="dialog-actions"><button type="button" class="plain-button" data-dialog-close>取消</button><button type="submit" class="push-button primary-button"><span>保存成绩</span>{{ icon('arrow', 19) }}</button></div></form>
+</dialog>
+<dialog id="delete-grade" class="editor-dialog confirm-dialog" aria-labelledby="delete-grade-title"><div class="danger-mark">{{ icon('trash', 34) }}</div><h2 id="delete-grade-title">删除这条选课记录？</h2><p>{{ selected.student_name }} 的「{{ selected.course_name }}」成绩将一并删除。</p><form method="post" action="{{ url_for('web.grade_delete', enrollment_id=selected.id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="student_no" value="{{ selected.student_no }}"><input type="hidden" name="course_code" value="{{ selected.course_code }}"><input type="hidden" name="semester" value="{{ selected.semester }}"><div class="dialog-actions"><button type="button" class="plain-button" data-dialog-close>保留记录</button><button type="submit" class="danger-button">确认删除</button></div></form></dialog>
+{% endif %}
+{% endif %}
+{% endblock %}

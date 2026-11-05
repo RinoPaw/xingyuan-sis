@@ -1,0 +1,16 @@
+.git
+.github
+.superdesign
+.local-backups
+.tmp
+data
+*.db
+*.sqlite*
+__pycache__
+*.pyc
+.venv
+build
+dist
+tests
+docs
+examples

@@ -21,8 +21,8 @@ def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     if args.group is None:
         parser.print_help()
         return 2
-    if args.basic or args.tui:
-        parser.error("--basic / --tui 不能与 CLI 子命令同时使用")
+    if args.basic or args.tui or args.gui or args.web:
+        parser.error("界面启动参数不能与 CLI 子命令同时使用")
 
     if not is_schema_reset(args):
         initialize_database(args.db)

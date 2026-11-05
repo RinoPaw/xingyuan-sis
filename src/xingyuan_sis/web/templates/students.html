@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icon, avatar, pagination_nav, dialog_close %}
+{% block title %}学生名册{% endblock %}
+{% block breadcrumb %}学生名册{% endblock %}
+
+{% macro student_fields(student=None, prefix='new') %}
+<div class="form-grid">
+  <div><label class="field-label" for="{{ prefix }}-student-no">学号 *</label><input id="{{ prefix }}-student-no" name="student_no" required value="{{ student.student_no if student else '' }}" {% if student %}disabled{% endif %} placeholder="例如 20260088"></div>
+  <div><label class="field-label" for="{{ prefix }}-student-name">姓名 *</label><input id="{{ prefix }}-student-name" name="name" required value="{{ student.name if student else '' }}" {% if student %}disabled{% endif %} placeholder="学生姓名"></div>
+  <div><label class="field-label" for="{{ prefix }}-family">族系 *</label><select id="{{ prefix }}-family" name="family" required data-family-select><option value="">请选择族系</option>{% for row in families %}<option value="{{ row.name }}" {% if student and student.family == row.name %}selected{% endif %}>{{ row.name }}</option>{% endfor %}</select></div>
+  <div><label class="field-label" for="{{ prefix }}-branch">支系</label><select id="{{ prefix }}-branch" name="branch" data-branch-select><option value="">未指定</option>{% for row in branches %}<option value="{{ row.name }}" data-family="{{ row.family_name }}" {% if student and student.branch == row.name %}selected{% endif %}>{{ row.family_name }} · {{ row.name }}</option>{% endfor %}</select></div>
+  <div><label class="field-label" for="{{ prefix }}-year">入学年份 *</label><input id="{{ prefix }}-year" name="enrollment_year" type="number" min="1900" max="2200" required value="{{ student.enrollment_year if student else 2026 }}"></div>
+  <div><label class="field-label" for="{{ prefix }}-class">班级</label><select id="{{ prefix }}-class" name="class_code"><option value="">未分配</option>{% for row in classes %}<option value="{{ row.code }}" {% if student and student.class_code == row.code %}selected{% endif %}>{{ row.code }} · {{ row.name }}</option>{% endfor %}</select></div>
+  <div><label class="field-label" for="{{ prefix }}-gender">性别</label><select id="{{ prefix }}-gender" name="gender"><option value="">未填写</option>{% for value in ['男', '女', '其他'] %}<option value="{{ value }}" {% if student and student.gender == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></div>
+  <div><label class="field-label" for="{{ prefix }}-status">学籍状态</label><select id="{{ prefix }}-status" name="status">{% for value in ['在读', '休学', '保留学籍', '毕业'] %}<option value="{{ value }}" {% if student and student.status == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></div>
+  <div><label class="field-label" for="{{ prefix }}-birth">出生资料</label><input id="{{ prefix }}-birth" name="birth_date" value="{{ student.birth_date if student and student.birth_date else '' }}" placeholder="YYYY-MM-DD / YYYY / --MM-DD"></div>
+  <div><label class="field-label" for="{{ prefix }}-age">年龄</label><input id="{{ prefix }}-age" name="age" type="number" min="0" value="{{ student.age if student and student.age is not none else '' }}" placeholder="完整日期存在时自动计算"></div>
+  <div><label class="field-label" for="{{ prefix }}-element">主元素</label><select id="{{ prefix }}-element" name="primary_element"><option value="">未测定</option>{% for value in ['风', '水', '火', '雷', '岩', '光'] %}<option value="{{ value }}" {% if student and student.primary_element == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></div>
+  <div><label class="field-label" for="{{ prefix }}-affinity">元素亲和</label><select id="{{ prefix }}-affinity" name="primary_affinity"><option value="">未测定</option>{% for value in ['A', 'B', 'C'] %}<option value="{{ value }}" {% if student and student.primary_affinity == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></div>
+  <div><label class="field-label" for="{{ prefix }}-contact">联系方式</label><input id="{{ prefix }}-contact" name="contact" value="{{ student.contact if student and student.contact else '' }}" placeholder="手机或邮箱"></div>
+  <div><label class="field-label" for="{{ prefix }}-dormitory">宿舍</label><input id="{{ prefix }}-dormitory" name="dormitory" value="{{ student.dormitory if student and student.dormitory else '' }}" placeholder="校区 楼栋-房间"></div>
+  <div class="form-span"><label class="field-label" for="{{ prefix }}-notes">备注</label><textarea id="{{ prefix }}-notes" name="notes" rows="3" placeholder="档案补充说明">{{ student.notes if student and student.notes else '' }}</textarea></div>
+</div>
+{% endmacro %}
+
+{% block content %}
+<header class="page-header">
+  <div><div class="section-code">CHARACTER DATABASE / {{ '%03d'|format(pagination.total) }}</div><h1>学生名册<span class="title-dot">.</span></h1><p>{{ '查询、维护每一位学生的学籍与元素档案。' if identity.is_admin else '你的学籍、元素与课程记录。' }}</p></div>
+  {% if identity.is_admin %}<button class="push-button primary-button header-action" type="button" data-dialog-open="new-student" data-new-student aria-label="新建学生">{{ icon('plus', 20) }}<span>新建学生</span></button>{% endif %}
+</header>
+
+{% if identity.is_admin %}
+<form class="filter-deck" method="get" action="{{ url_for('web.students') }}">
+  <div class="filter-search">{{ icon('search', 19) }}<input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="姓名、学号、学院、元素…" aria-label="搜索学生"></div>
+  <select name="class" aria-label="按班级筛选"><option value="">全部班级</option>{% for row in classes %}<option value="{{ row.code }}" {% if request.args.get('class') == row.code %}selected{% endif %}>{{ row.code }}</option>{% endfor %}</select>
+  <select name="status" aria-label="按学籍筛选"><option value="">全部学籍</option>{% for value in ['在读', '休学', '保留学籍', '毕业'] %}<option value="{{ value }}" {% if request.args.get('status') == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select>
+  <select name="element" aria-label="按元素筛选"><option value="">全部元素</option>{% for value in ['风', '水', '火', '雷', '岩', '光'] %}<option value="{{ value }}" {% if request.args.get('element') == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select>
+  <button type="submit" class="filter-submit">{{ icon('filter', 17) }} 筛选</button>
+  {% if request.args.get('q') or request.args.get('class') or request.args.get('status') or request.args.get('element') %}<a class="clear-filter" href="{{ url_for('web.students') }}">清除</a>{% endif %}
+</form>
+{% endif %}
+
+<div class="records-layout">
+  <section class="roster-panel" aria-label="学生列表">
+    <div class="panel-topline"><span>STUDENT ROSTER</span><strong>{{ pagination.total }} RECORDS</strong></div>
+    <div class="roster-columns" aria-hidden="true"><span>角色 / 学号</span><span>班级</span><span>元素</span></div>
+    <div class="roster-list">
+      {% for student in students %}
+      <a class="roster-item{% if selected and selected.student_no == student.student_no %} is-selected{% endif %}" href="{{ url_for('web.students', student_no=student.student_no, q=request.args.get('q'), class=request.args.get('class'), status=request.args.get('status'), element=request.args.get('element')) }}">
+        {{ avatar(student) }}
+        <span class="roster-name"><strong>{{ student.name }}</strong><small>{{ student.student_no }} · {{ student.family }}</small></span>
+        <span class="roster-class"><strong>{{ student.class_code or '未分班' }}</strong><small>{{ student.status }}</small></span>
+        <span class="element-token element-{{ student.primary_element|element_slug }}">{{ student.primary_element or '—' }}</span>
+        {{ icon('chevron', 17) }}
+      </a>
+      {% else %}
+      <div class="empty-state">{{ icon('search', 36) }}<h2>没有匹配的学生</h2><p>尝试更换关键词或清除筛选条件。</p><a href="{{ url_for('web.students') }}">回到完整名册</a></div>
+      {% endfor %}
+    </div>
+    {{ pagination_nav(pagination) }}
+  </section>
+
+  <section class="profile-panel" aria-label="学生档案">
+    {% if selected %}
+    <div class="profile-hero element-{{ selected.primary_element|element_slug }}">
+      <div class="profile-index">CHARACTER FILE <span>NO. {{ selected.student_no }}</span></div>
+      {{ avatar(selected, true) }}
+      <div class="profile-title"><div class="profile-tags"><span>{{ selected.status }}</span><span>{{ selected.primary_element or '未测定' }}元素</span><span>亲和 {{ selected.primary_affinity or '—' }}</span></div><h2>{{ selected.name }}</h2><p>{{ selected.department_name or '未分配学院' }} / {{ selected.major_name or '未分配专业' }}</p></div>
+      <div class="profile-watermark" aria-hidden="true">{{ selected.name[0] }}</div>
+    </div>
+    <div class="profile-actions">
+      <span><i></i> 档案已同步</span>
+      {% if identity.is_admin %}
+      <button type="button" class="text-button" data-dialog-open="edit-student">{{ icon('edit', 16) }} 编辑档案</button>
+      <button type="button" class="text-button" data-dialog-open="reset-password">{{ icon('reset', 16) }} 重置密码</button>
+      <button type="button" class="text-button danger-text" data-dialog-open="delete-student">{{ icon('trash', 16) }} 删除</button>
+      {% endif %}
+    </div>
+    <dl class="record-grid">
+      <div><dt>学号</dt><dd>{{ selected.student_no }}</dd></div><div><dt>入学年份</dt><dd>{{ selected.enrollment_year }}</dd></div>
+      <div><dt>物种</dt><dd>{{ selected.family }} · {{ selected.branch or '未指定' }}</dd></div><div><dt>性别 / 年龄</dt><dd>{{ selected.gender or '未填写' }} / {{ selected.age if selected.age is not none else '—' }}</dd></div>
+      <div><dt>班级</dt><dd>{{ selected.class_name or '未分配' }}</dd></div><div><dt>出生资料</dt><dd>{{ selected.birth_date or '未填写' }}</dd></div>
+      <div><dt>联系方式</dt><dd>{{ selected.contact or '未填写' }}</dd></div><div><dt>宿舍</dt><dd>{{ selected.dormitory or '未填写' }}</dd></div>
+      {% if selected.notes %}<div class="record-span"><dt>备注</dt><dd>{{ selected.notes }}</dd></div>{% endif %}
+    </dl>
+    <section class="profile-courses">
+      <header class="section-header"><div><span>ENROLLMENT LOG</span><h3>选课与成绩</h3></div><strong>{{ enrollments|length }} 条记录</strong></header>
+      {% for row in enrollments %}<a href="{{ url_for('web.grades', id=row.id) }}"><span class="course-code">{{ row.course_code }}</span><strong>{{ row.course_name }}</strong><small>{{ row.semester }}</small><b class="score-chip {% if row.score is none %}is-pending{% elif row.score < 60 %}is-low{% endif %}">{{ row.score|score_text }}</b></a>{% else %}<p class="empty-inline">这位学生还没有选课记录。</p>{% endfor %}
+    </section>
+    {% else %}<div class="empty-state profile-empty">{{ icon('students', 44) }}<h2>选择一份档案</h2><p>从左侧名册选择学生后，在这里查看完整资料。</p></div>{% endif %}
+  </section>
+</div>
+
+{% if identity.is_admin %}
+<dialog id="new-student" class="editor-dialog wide-dialog" aria-labelledby="new-student-title" {% if request.args.get('create') %}data-auto-open{% endif %}>
+  <div class="dialog-heading"><div><span>NEW CHARACTER / REGISTER</span><h2 id="new-student-title">新建学生档案</h2></div>{{ dialog_close() }}</div>
+  <form method="post" action="{{ url_for('web.student_create') }}" class="editor-form">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    {{ student_fields() }}
+    <p class="form-hint">带 * 为必填项。新学生的初始登录密码为 123456，首次登录必须修改。</p>
+    <div class="dialog-actions"><button type="button" class="plain-button" data-dialog-close>取消</button><button type="submit" class="push-button primary-button"><span>写入学生名册</span>{{ icon('arrow', 19) }}</button></div>
+  </form>
+</dialog>
+{% if selected %}
+<dialog id="edit-student" class="editor-dialog wide-dialog" aria-labelledby="edit-student-title" {% if request.args.get('edit') %}data-auto-open{% endif %}>
+  <div class="dialog-heading"><div><span>UPDATE CHARACTER / {{ selected.student_no }}</span><h2 id="edit-student-title">编辑 {{ selected.name }} 的档案</h2></div>{{ dialog_close() }}</div>
+  <form method="post" action="{{ url_for('web.student_edit', student_no=selected.student_no) }}" class="editor-form">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">{{ student_fields(selected, 'edit') }}
+    <p class="form-hint">学号与姓名是创建后的只读身份字段。</p>
+    <div class="dialog-actions"><button type="button" class="plain-button" data-dialog-close>取消</button><button type="submit" class="push-button primary-button"><span>保存档案修改</span>{{ icon('arrow', 19) }}</button></div>
+  </form>
+</dialog>
+<dialog id="delete-student" class="editor-dialog confirm-dialog" aria-labelledby="delete-student-title">
+  <div class="danger-mark">{{ icon('trash', 34) }}</div><h2 id="delete-student-title">删除 {{ selected.name }}？</h2><p>这会同时删除该学生的选课与成绩记录，操作无法撤销。</p>
+  <form method="post" action="{{ url_for('web.student_delete', student_no=selected.student_no) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><div class="dialog-actions"><button type="button" class="plain-button" data-dialog-close>保留档案</button><button type="submit" class="danger-button">确认删除</button></div></form>
+</dialog>
+<dialog id="reset-password" class="editor-dialog confirm-dialog" aria-labelledby="reset-password-title">
+  <div class="dialog-heading"><div><span>CREDENTIAL RESET</span><h2 id="reset-password-title">重置访问密码</h2></div>{{ dialog_close() }}</div><p>将 {{ selected.name }} 的密码恢复为 123456，并要求下次登录时修改。</p>
+  <form method="post" action="{{ url_for('web.student_reset_password', student_no=selected.student_no) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><div class="dialog-actions"><button type="button" class="plain-button" data-dialog-close>取消</button><button type="submit" class="push-button primary-button"><span>确认重置</span>{{ icon('reset', 18) }}</button></div></form>
+</dialog>
+{% endif %}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#050810">
+  <title>{% block title %}校园终端{% endblock %} · 星原 SIS</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <script defer src="{{ url_for('static', filename='app.js') }}"></script>
+</head>
+<body class="app-body">
+  {% from 'macros.html' import icon, brand_mark %}
+  <a class="skip-link" href="#main-content">跳至主要内容</a>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="主导航">
+      <a class="brand" href="{{ url_for('web.dashboard') }}" aria-label="星原校园总览">
+        {{ brand_mark(42) }}
+        <span><strong>星原</strong><small>XINGYUAN SIS</small></span>
+      </a>
+      <div class="nav-caption">SELECT DESTINATION</div>
+      <nav class="side-nav">
+        {% for endpoint, icon_name, label, english in navigation %}
+        <a href="{{ url_for(endpoint) }}" class="nav-link{% if request.endpoint == endpoint %} is-active{% endif %}" {% if request.endpoint == endpoint %}aria-current="page"{% endif %}>
+          {{ icon(icon_name, 21) }}
+          <span class="nav-copy"><span>{{ label }}</span><span>{{ label }}</span></span>
+          <small>{{ english }}</small>
+        </a>
+        {% endfor %}
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="system-signal"><i></i><span>校园网络在线</span><b>LIVE</b></div>
+        <p>XY / ACADEMIC OS<br>BUILD 2026.11</p>
+      </div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <div class="breadcrumb">
+          <span>星原大学</span>{{ icon('chevron', 12) }}<strong>{% block breadcrumb %}校园终端{% endblock %}</strong>
+        </div>
+        <div class="top-actions">
+          <form class="global-search" action="{{ url_for('web.students') }}" method="get" role="search">
+            {{ icon('search', 17) }}
+            <input type="search" name="q" placeholder="搜索学生 / 学号" aria-label="全局搜索学生" value="{{ request.args.get('q', '') if request.endpoint == 'web.students' else '' }}">
+            <kbd>Ctrl K</kbd>
+          </form>
+          <a class="identity-link" href="{{ url_for('web.password') }}" title="修改密码">
+            <span class="identity-avatar">{{ identity.username[0] }}</span>
+            <span><strong>{{ identity.username }}</strong><small>{{ '教务管理员' if identity.is_admin else '学生账号' }}</small></span>
+          </a>
+          <form action="{{ url_for('web.logout') }}" method="post">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button class="icon-button" type="submit" title="退出登录" aria-label="退出登录">{{ icon('logout', 20) }}</button>
+          </form>
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="toast-stack" aria-live="polite">
+          {% for category, message in messages %}
+          <div class="toast toast-{{ category }}" role="status">
+            <span>{{ message }}</span>
+            <button type="button" class="icon-button" data-dismiss aria-label="关闭提示">{{ icon('close', 17) }}</button>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      {% endwith %}
+
+      <main id="main-content" class="main-content">
+        {% block content %}{% endblock %}
+      </main>
+      <footer class="app-footer">
+        <span>XINGYUAN UNIVERSITY · STUDENT INFORMATION SYSTEM</span>
+        <span><i></i> LOCAL SQLITE / SECURE SESSION</span>
+      </footer>
+    </div>
+
+    <nav class="mobile-nav" aria-label="移动端主导航">
+      {% for endpoint, icon_name, label, english in navigation %}
+      <a href="{{ url_for(endpoint) }}" class="{% if request.endpoint == endpoint %}is-active{% endif %}" {% if request.endpoint == endpoint %}aria-current="page"{% endif %}>
+        {{ icon(icon_name, 21) }}<span>{{ label[:2] }}</span>
+      </a>
+      {% endfor %}
+    </nav>
+  </div>
+</body>
+</html>

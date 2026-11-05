@@ -69,6 +69,8 @@ CLI / Basic UI / TUI
 uv run python -X utf8 -m unittest discover -s tests -v
 ```
 
+慢速真实 Tk GUI 工作流测试默认跳过；需要完整验证 GUI 时设置 `XINGYUAN_RUN_GUI_TESTS=1` 再运行上述命令。其他 GUI 单元测试仍会正常执行。
+
 测试保护当前稳定行为，不应为了保留已经退出生产路径的私有函数或旧实现而增加兼容层。
 
 ## 协作约定

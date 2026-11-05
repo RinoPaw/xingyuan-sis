@@ -1,0 +1,59 @@
+{% macro icon(name, size=20) %}
+<svg class="icon" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  {% if name == 'campus' %}<path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9M9 20v-6h6v6"/><path d="M2 20h20"/>
+  {% elif name == 'students' %}<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 4.5a3 3 0 0 1 0 5.8M17 14a5 5 0 0 1 4 4.9V20"/>
+  {% elif name == 'courses' %}<path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H11v18H6.5A2.5 2.5 0 0 0 4 22zM20 4.5A2.5 2.5 0 0 0 17.5 2H13v18h4.5A2.5 2.5 0 0 1 20 22z"/>
+  {% elif name == 'grades' %}<path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/><path d="m3 5 5-3 6 4 7-4"/>
+  {% elif name == 'notices' %}<path d="M21 15a3 3 0 0 1-3 3H8l-5 3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3z"/><path d="M8 8h8M8 12h5"/>
+  {% elif name == 'search' %}<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>
+  {% elif name == 'plus' %}<path d="M12 5v14M5 12h14"/>
+  {% elif name == 'arrow' %}<path d="M4 12h15M14 6l6 6-6 6"/>
+  {% elif name == 'logout' %}<path d="M10 4H4v16h6M14 8l4 4-4 4M8 12h10"/>
+  {% elif name == 'close' %}<path d="m5 5 14 14M19 5 5 19"/>
+  {% elif name == 'edit' %}<path d="m14 5 5 5M4 20l3.5-.7L20 6.8 17.2 4 4.7 16.5z"/>
+  {% elif name == 'trash' %}<path d="M4 7h16M9 7V3h6v4M6 7l1 14h10l1-14M10 11v6M14 11v6"/>
+  {% elif name == 'spark' %}<path d="m12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8zM19 17l.7 2.3L22 20l-2.3.7L19 23l-.7-2.3L16 20l2.3-.7z"/>
+  {% elif name == 'lock' %}<rect x="4" y="10" width="16" height="11" rx="1"/><path d="M8 10V6a4 4 0 0 1 8 0v4M12 14v3"/>
+  {% elif name == 'user' %}<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>
+  {% elif name == 'reset' %}<path d="M20 7v5h-5M4 17v-5h5"/><path d="M18.5 9A7 7 0 0 0 6 6.5L4 9M5.5 15A7 7 0 0 0 18 17.5l2-2.5"/>
+  {% elif name == 'chevron' %}<path d="m9 5 7 7-7 7"/>
+  {% elif name == 'filter' %}<path d="M3 5h18l-7 8v6l-4 2v-8z"/>
+  {% else %}<circle cx="12" cy="12" r="8"/>
+  {% endif %}
+</svg>
+{% endmacro %}
+
+{% macro brand_mark(size=44) %}
+<svg width="{{ size }}" height="{{ size }}" viewBox="0 0 48 48" fill="none" aria-hidden="true" class="brand-mark">
+  <path d="M24 2 29 17 46 12 34 25 46 36 29 31 24 46 19 31 2 36 14 24 2 12 19 17Z" fill="currentColor"/>
+  <circle cx="24" cy="24" r="6" fill="var(--space)"/>
+  <circle cx="24" cy="24" r="3" fill="currentColor"/>
+</svg>
+{% endmacro %}
+
+{% macro avatar(student, large=false) %}
+<div class="avatar avatar-{{ student.primary_element|element_slug }}{% if large %} avatar-large{% endif %}" aria-hidden="true">
+  <svg viewBox="0 0 180 180" fill="none" class="avatar-orbits">
+    <circle cx="90" cy="90" r="69" stroke="currentColor" stroke-width="1" stroke-dasharray="3 8"/>
+    <ellipse cx="90" cy="90" rx="78" ry="35" transform="rotate(-28 90 90)" stroke="currentColor" stroke-width="1.5"/>
+    <path d="M22 122 153 49M43 22l89 137" stroke="currentColor" stroke-width="1" opacity=".45"/>
+    <circle cx="147" cy="57" r="6" fill="currentColor"/>
+  </svg>
+  <span>{{ student.name[0] }}</span>
+  <small>{{ student.primary_element or 'UN' }}</small>
+</div>
+{% endmacro %}
+
+{% macro pagination_nav(pagination) %}
+{% if pagination.pages > 1 %}
+<nav class="pagination" aria-label="分页">
+  {% if pagination.has_prev %}<a href="{{ page_url(pagination.prev) }}" aria-label="上一页">←</a>{% else %}<span class="is-disabled">←</span>{% endif %}
+  <span><strong>{{ '%02d'|format(pagination.page) }}</strong> / {{ '%02d'|format(pagination.pages) }}</span>
+  {% if pagination.has_next %}<a href="{{ page_url(pagination.next) }}" aria-label="下一页">→</a>{% else %}<span class="is-disabled">→</span>{% endif %}
+</nav>
+{% endif %}
+{% endmacro %}
+
+{% macro dialog_close() %}
+<button type="button" class="icon-button dialog-close" data-dialog-close aria-label="关闭对话框">{{ icon('close', 22) }}</button>
+{% endmacro %}
