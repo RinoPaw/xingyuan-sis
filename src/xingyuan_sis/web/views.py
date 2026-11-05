@@ -261,10 +261,11 @@ def _mutation_error(error: Exception) -> None:
 def login():
     if g.identity is not None:
         return redirect(url_for("web.dashboard"))
+    username = request.form.get("username", "").strip() if request.method == "POST" else ""
     if request.method == "POST":
         identity = authenticate(
             current_app.config["DB_PATH"],
-            request.form.get("username", ""),
+            username,
             request.form.get("password", ""),
         )
         if identity is None:
@@ -273,7 +274,7 @@ def login():
             _store_identity(identity)
             flash("身份确认，欢迎回到星原", "success")
             return redirect(url_for("web.password" if identity.must_change_password else "web.dashboard"))
-    return render_template("login.html")
+    return render_template("login.html", username=username)
 
 
 @bp.route("/setup", methods=("GET", "POST"))

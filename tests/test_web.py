@@ -53,6 +53,25 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertEqual(response.headers["Location"], "/")
         self.assertEqual(self.client.get("/").status_code, 200)
 
+    def test_invalid_login_retains_username_without_password(self) -> None:
+        self.client.get("/login")
+        response = self.post(
+            "/login",
+            {"username": "Administrator", "password": "incorrect-secret-value"},
+        )
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn('value="Administrator"', page)
+        self.assertIn("\u8d26\u53f7\u6216\u5bc6\u7801\u4e0d\u6b63\u786e", page)
+        self.assertNotIn("incorrect-secret-value", page)
+        with self.client.session_transaction() as session:
+            self.assertNotIn("identity", session)
+        # Login name is HTML-escaped even when supplied by an untrusted browser.
+        response = self.post("/login", {"username": '<script>alert(1)</script>',
+                                         "password": "incorrect-secret-value"})
+        self.assertIn('&lt;script&gt;', response.get_data(as_text=True))
+        self.assertNotIn('value="<script>', response.get_data(as_text=True))
+
     def test_demo_login_renders_all_real_data_pages(self) -> None:
         response = self.client.get("/login")
         self.assertEqual(response.status_code, 200)

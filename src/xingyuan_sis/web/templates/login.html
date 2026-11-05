@@ -39,7 +39,7 @@
       <form method="post" class="auth-form">
         <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <label class="field-label" for="username">账号 / 学号</label>
-        <div class="input-wrap">{{ icon('user', 20) }}<input id="username" name="username" autocomplete="username" required autofocus placeholder="Administrator / 20260001"></div>
+        <div class="input-wrap">{{ icon('user', 20) }}<input id="username" name="username" autocomplete="username" value="{{ username|default('', true) }}" required autofocus placeholder="Administrator / 20260001"></div>
         <label class="field-label" for="password">密码</label>
         <div class="input-wrap">{{ icon('lock', 20) }}<input id="password" type="password" name="password" autocomplete="current-password" required placeholder="输入你的访问密码"><button type="button" class="password-toggle" data-password-toggle="password" aria-label="显示密码">SHOW</button></div>
         <button type="submit" class="push-button primary-button"><span>进入校园终端</span>{{ icon('arrow', 22) }}</button>

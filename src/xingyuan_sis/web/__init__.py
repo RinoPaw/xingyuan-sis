@@ -5,6 +5,7 @@ from pathlib import Path
 import secrets
 
 from flask import Flask, jsonify, request, send_from_directory, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from ..auth import auth_dir
 from ..bootstrap import ensure_default_state
@@ -45,7 +46,8 @@ def _persistent_secret() -> str:
 
 
 def create_app(db_path: Path | str | None = None, *, demo: bool | None = None) -> Flask:
-    resolved_db = Path(db_path).expanduser().resolve() if db_path else DB_PATH.resolve()
+    configured_db = db_path or os.environ.get("XINGYUAN_DB_PATH") or DB_PATH
+    resolved_db = Path(configured_db).expanduser().resolve()
     ensure_default_state(resolved_db)
     demo_mode = (
         os.environ.get("XINGYUAN_DEMO_MODE", "").lower() in {"1", "true", "yes"}
@@ -59,15 +61,22 @@ def create_app(db_path: Path | str | None = None, *, demo: bool | None = None) -
         static_folder="static",
         static_url_path="/static",
     )
+    prefix = "/" + os.environ.get("XINGYUAN_URL_PREFIX", "").strip("/")
     app.config.update(
         DB_PATH=str(resolved_db),
         DEMO_MODE=demo_mode,
         MAX_CONTENT_LENGTH=2 * 1024 * 1024,
         SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_NAME="xingyuan_session" if prefix != "/" else "session",
+        SESSION_COOKIE_PATH=prefix,
+        APPLICATION_ROOT=prefix,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=os.environ.get("XINGYUAN_HTTPS", "") == "1",
     )
     app.secret_key = _persistent_secret()
+    if os.environ.get("XINGYUAN_TRUST_PROXY") == "1":
+        # Deployment binds only to loopback; nginx supplies these headers.
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_prefix=1)
 
     from .views import bp
 

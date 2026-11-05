@@ -1,11 +1,11 @@
 @font-face {
   font-family: "MFLiHei";
-  src: url("/assets/fonts/MFLiHei_Noncommercial-Regular.otf") format("opentype");
+  src: url("../assets/fonts/MFLiHei_Noncommercial-Regular.otf") format("opentype");
   font-display: swap;
 }
 @font-face {
   font-family: "Barlow Condensed";
-  src: url("/assets/fonts/BarlowCondensed-Black.ttf") format("truetype");
+  src: url("../assets/fonts/BarlowCondensed-Black.ttf") format("truetype");
   font-weight: 900;
   font-display: swap;
 }
