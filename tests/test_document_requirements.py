@@ -147,19 +147,26 @@ class DocumentRequirementTests(unittest.TestCase):
         other = self.service.create_announcement(title="另一班通知", body="其他内容", class_code=second["code"])
         no = self.sample["student_no"]
         self.service.update_student_by_no(no, class_code=first["code"])
-        self.assertEqual([row["id"] for row in XingyuanService(self.db).list_announcements(no)], [own])
+        ids = [row["id"] for row in XingyuanService(self.db).list_announcements(no)]
+        self.assertIn(own, ids)
+        self.assertNotIn(other, ids)
         self.service.update_student_by_no(no, class_code=second["code"])
-        self.assertEqual([row["id"] for row in self.service.list_announcements(no)], [other])
+        ids = [row["id"] for row in self.service.list_announcements(no)]
+        self.assertIn(other, ids)
+        self.assertNotIn(own, ids)
         self.service.update_student_by_no(no, class_code=None)
         self.assertEqual(self.service.list_announcements(no), [])
         self.assertEqual(self.service.list_announcements("NONEXISTENT"), [])
         self.service.delete_announcement(own)
-        self.assertEqual([row["id"] for row in self.service.list_announcements()], [other])
+        ids = [row["id"] for row in self.service.list_announcements()]
+        self.assertNotIn(own, ids)
+        self.assertIn(other, ids)
 
     def test_student_cli_cannot_read_other_class_announcements_or_write(self):
         initialize_admin("adminpass")
         identity = change_password(self.db, self.student_identity(), "studentpass")
         write_session(identity, self.db)
+        initial_count = len(self.service.list_announcements())
         own = self.service.create_announcement(title="本班通知", body="本班正文", class_code=self.sample["class_code"])
         other_class = next(row for row in self.service.list_classes() if row["code"] != self.sample["class_code"])
         other = self.service.create_announcement(title="另班通知", body="另班正文", class_code=other_class["code"])
@@ -171,7 +178,7 @@ class DocumentRequirementTests(unittest.TestCase):
                      ("stu", "rm", self.sample["student_no"], "-y"), ("data", "seed", "--reset")):
             with self.subTest(args=args), redirect_stdout(StringIO()), redirect_stderr(StringIO()):
                 self.assertEqual(main(["--db", str(self.db), *args]), 1)
-        self.assertEqual(len(self.service.list_announcements()), 2)
+        self.assertEqual(len(self.service.list_announcements()), initial_count + 2)
 
     def test_basic_commands_use_authentication_before_dispatch(self):
         initialize_admin("adminpass")

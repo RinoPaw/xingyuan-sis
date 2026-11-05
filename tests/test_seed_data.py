@@ -11,6 +11,7 @@ from xingyuan_sis.entry import main as cli_main
 from xingyuan_sis.auth import Identity
 from xingyuan_sis.database import connect, initialize_database
 from xingyuan_sis.seed_data import (
+    ANNOUNCEMENTS,
     CLASSES,
     COURSES,
     DEPARTMENTS,
@@ -48,6 +49,13 @@ class SeedDataTests(unittest.TestCase):
         self.assertEqual(result.students, len(STUDENTS))
         self.assertEqual(result.courses, len(COURSES))
         self.assertEqual(result.enrollments, len(ENROLLMENTS))
+
+        announcements = self.service.list_announcements()
+        self.assertEqual(len(announcements), len(ANNOUNCEMENTS))
+        self.assertEqual(
+            {(row["title"], row["body"], row["class_code"]) for row in announcements},
+            set(ANNOUNCEMENTS),
+        )
 
         expected = STUDENTS[0]
         student = self.service.student_by_no(str(expected[0]))

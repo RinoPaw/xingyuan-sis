@@ -45,10 +45,14 @@ class ControllerTests(CampusFixture, unittest.TestCase):
         other = next(r["code"] for r in self.service.list_classes() if r["code"] != own)
         self.service.create_announcement(title="本班", body="正文", class_code=own)
         self.service.create_announcement(title="另班", body="正文", class_code=other)
-        self.assertEqual([r["title"] for r in self.student.rows("announcements")], ["本班"])
+        titles = [r["title"] for r in self.student.rows("announcements")]
+        self.assertIn("本班", titles)
+        self.assertNotIn("另班", titles)
         self.assertEqual(self.student.student_grades("20250001"), [])
         self.service.update_student_by_no("20260001", class_code=other)
-        self.assertEqual([r["title"] for r in self.student.rows("announcements")], ["另班"])
+        titles = [r["title"] for r in self.student.rows("announcements")]
+        self.assertIn("另班", titles)
+        self.assertNotIn("本班", titles)
 
     def test_related_public_codes_are_present_in_edit_drafts(self):
         for key in ("departments", "majors", "classes", "courses", "grades", "students", "announcements"):

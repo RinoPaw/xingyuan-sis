@@ -546,6 +546,7 @@ class Repository:
         enrollments: Iterable[tuple[object, ...]],
         student_password_hash: str,
         reset: bool = False,
+        announcements: Iterable[tuple[object, ...]] = (),
     ) -> None:
         """Seed atomically, recreating the schema only on explicit --reset."""
         with connect(self.db_path) as connection:
@@ -643,6 +644,13 @@ class Repository:
                 )
                 """,
                 enrollments,
+            )
+            connection.executemany(
+                """
+                INSERT INTO announcements(title, body, class_id)
+                VALUES (?, ?, (SELECT id FROM classes WHERE code = ?))
+                """,
+                announcements,
             )
 
 

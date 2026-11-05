@@ -499,6 +499,7 @@ class XingyuanService:
     def seed_demo(self, *, reset: bool = False):
         """Seed the canonical demo campus as one persistence transaction."""
         from .seed_data import (
+            ANNOUNCEMENTS,
             CLASSES,
             COURSES,
             DEPARTMENTS,
@@ -521,6 +522,7 @@ class XingyuanService:
             enrollments=ENROLLMENTS,
             student_password_hash=hash_initial_student_password(),
             reset=reset,
+            announcements=ANNOUNCEMENTS,
         )
         return SeedResult(
             departments=len(DEPARTMENTS),
